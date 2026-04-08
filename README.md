@@ -27,6 +27,7 @@ Per-instance files:
 - `.env`
 - `access.json`
 - `session.json`
+- `runtime-state.json`
 - `runtime.log`
 - `inbox\`
 

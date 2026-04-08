@@ -6,6 +6,7 @@ import { Bridge } from "./runtime/bridge.js";
 import { ProcessCodexAdapter } from "./codex/process-adapter.js";
 import { AccessStore } from "./state/access-store.js";
 import { SessionStore } from "./state/session-store.js";
+import { RuntimeStateStore } from "./state/runtime-state.js";
 import { TelegramApi } from "./telegram/api.js";
 import { handleNormalizedTelegramMessage, type TelegramDeliveryContext } from "./telegram/delivery.js";
 import { normalizeUpdate } from "./telegram/update-normalizer.js";
@@ -148,18 +149,43 @@ export async function createServiceDependenciesForInstance(
 }
 
 const defaultChatQueue = new ChatQueue();
+const runtimeStateStoreCache = new Map<string, RuntimeStateStore>();
 
-function getNextUpdateOffset(update: unknown, fallbackOffset?: number): number | undefined {
+function getRuntimeStateStore(inboxDir: string): RuntimeStateStore {
+  const runtimeStatePath = path.join(path.dirname(inboxDir), "runtime-state.json");
+  const existing = runtimeStateStoreCache.get(runtimeStatePath);
+  if (existing) {
+    return existing;
+  }
+
+  const store = new RuntimeStateStore(runtimeStatePath);
+  runtimeStateStoreCache.set(runtimeStatePath, store);
+  return store;
+}
+
+function getUpdateId(update: unknown): number | undefined {
   if (typeof update !== "object" || update === null || !("update_id" in update)) {
-    return fallbackOffset;
+    return undefined;
   }
 
   const updateId = (update as { update_id?: unknown }).update_id;
   if (typeof updateId !== "number") {
-    return fallbackOffset;
+    return undefined;
   }
 
-  return updateId + 1;
+  return updateId;
+}
+
+function advanceOffset(currentOffset: number | undefined, completedOffset: number | undefined): number | undefined {
+  if (completedOffset === undefined) {
+    return currentOffset;
+  }
+
+  if (currentOffset === undefined) {
+    return completedOffset;
+  }
+
+  return Math.max(currentOffset, completedOffset);
 }
 
 function formatErrorMessage(scope: string, error: unknown): string {
@@ -174,24 +200,34 @@ export async function processTelegramUpdates(
 ): Promise<number | undefined> {
   let nextOffset: number | undefined;
   const chatQueue = context.chatQueue ?? defaultChatQueue;
+  const runtimeStateStore = getRuntimeStateStore(context.inboxDir);
 
   for (const update of updates) {
-    const completedOffset = getNextUpdateOffset(update, nextOffset);
+    const updateId = getUpdateId(update);
+    const completedOffset = updateId === undefined ? undefined : updateId + 1;
 
     try {
+      if (updateId !== undefined) {
+        const claimed = await runtimeStateStore.claimUpdateId(updateId);
+        if (!claimed) {
+          nextOffset = advanceOffset(nextOffset, completedOffset);
+          continue;
+        }
+      }
+
       const normalized = normalizeUpdate(update);
       if (!normalized) {
-        nextOffset = completedOffset;
+        nextOffset = advanceOffset(nextOffset, completedOffset);
         continue;
       }
 
       if (!normalized.text && normalized.attachments.length === 0) {
-        nextOffset = completedOffset;
+        nextOffset = advanceOffset(nextOffset, completedOffset);
         continue;
       }
 
       await chatQueue.enqueue(normalized.chatId, () => handleNormalizedTelegramMessage(normalized, context));
-      nextOffset = completedOffset;
+      nextOffset = advanceOffset(nextOffset, completedOffset);
     } catch (error) {
       logger.error(formatErrorMessage("Failed to handle Telegram update", error));
       break;

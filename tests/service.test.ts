@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   createServiceDependenciesForInstance,
@@ -25,6 +25,11 @@ function createDeferred<T>() {
 
   return { promise, resolve, reject };
 }
+
+afterEach(async () => {
+  await rm(path.join(os.tmpdir(), "ignored"), { recursive: true, force: true });
+  await rm(path.join(os.tmpdir(), "runtime-state.json"), { force: true });
+});
 
 describe("parseServiceInstanceName", () => {
   it("defaults to the default instance", () => {
@@ -95,6 +100,195 @@ describe("createServiceDependenciesForInstance", () => {
 });
 
 describe("polling helpers", () => {
+  it("processes the same Telegram update only once across repeated polls", async () => {
+    const logger = {
+      error: vi.fn(),
+    };
+    const root = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
+    const inboxDir = path.join(root, "inbox");
+    const api = {
+      sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+    };
+    const bridge = {
+      handleAuthorizedMessage: vi.fn().mockResolvedValue({ text: "done" }),
+    };
+
+    try {
+      const update = {
+        update_id: 42,
+        message: {
+          chat: { id: 123 },
+          from: { id: 456 },
+          text: "hello",
+        },
+      };
+
+      await processTelegramUpdates(
+        [update],
+        {
+          api: api as never,
+          bridge: bridge as never,
+          inboxDir,
+        },
+        logger,
+      );
+      await processTelegramUpdates(
+        [update],
+        {
+          api: api as never,
+          bridge: bridge as never,
+          inboxDir,
+        },
+        logger,
+      );
+
+      expect(bridge.handleAuthorizedMessage).toHaveBeenCalledTimes(1);
+      expect(api.sendMessage).toHaveBeenCalledTimes(1);
+      expect(logger.error).not.toHaveBeenCalled();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("skips updates whose update_id is lower than or equal to the last handled update", async () => {
+    const logger = {
+      error: vi.fn(),
+    };
+    const root = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
+    const inboxDir = path.join(root, "inbox");
+    const api = {
+      sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+    };
+    const bridge = {
+      handleAuthorizedMessage: vi.fn().mockResolvedValue({ text: "done" }),
+    };
+
+    try {
+      await processTelegramUpdates(
+        [
+          {
+            update_id: 10,
+            message: {
+              chat: { id: 123 },
+              from: { id: 456 },
+              text: "first",
+            },
+          },
+        ],
+        {
+          api: api as never,
+          bridge: bridge as never,
+          inboxDir,
+        },
+        logger,
+      );
+
+      await processTelegramUpdates(
+        [
+          {
+            update_id: 10,
+            message: {
+              chat: { id: 123 },
+              from: { id: 456 },
+              text: "duplicate",
+            },
+          },
+          {
+            update_id: 9,
+            message: {
+              chat: { id: 123 },
+              from: { id: 456 },
+              text: "older",
+            },
+          },
+        ],
+        {
+          api: api as never,
+          bridge: bridge as never,
+          inboxDir,
+        },
+        logger,
+      );
+
+      expect(bridge.handleAuthorizedMessage).toHaveBeenCalledTimes(1);
+      expect(api.sendMessage).toHaveBeenCalledTimes(1);
+      expect(logger.error).not.toHaveBeenCalled();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps processing increasing update ids", async () => {
+    const logger = {
+      error: vi.fn(),
+    };
+    const root = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
+    const inboxDir = path.join(root, "inbox");
+    const api = {
+      sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+    };
+    const bridge = {
+      handleAuthorizedMessage: vi.fn().mockResolvedValue({ text: "done" }),
+    };
+
+    try {
+      await processTelegramUpdates(
+        [
+          {
+            update_id: 10,
+            message: {
+              chat: { id: 123 },
+              from: { id: 456 },
+              text: "first",
+            },
+          },
+        ],
+        {
+          api: api as never,
+          bridge: bridge as never,
+          inboxDir,
+        },
+        logger,
+      );
+
+      await processTelegramUpdates(
+        [
+          {
+            update_id: 11,
+            message: {
+              chat: { id: 123 },
+              from: { id: 456 },
+              text: "second",
+            },
+          },
+          {
+            update_id: 12,
+            message: {
+              chat: { id: 123 },
+              from: { id: 456 },
+              text: "third",
+            },
+          },
+        ],
+        {
+          api: api as never,
+          bridge: bridge as never,
+          inboxDir,
+        },
+        logger,
+      );
+
+      expect(bridge.handleAuthorizedMessage).toHaveBeenCalledTimes(3);
+      expect(api.sendMessage).toHaveBeenCalledTimes(3);
+      expect(logger.error).not.toHaveBeenCalled();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("does not advance offset beyond a failed update", async () => {
     const logger = {
       error: vi.fn(),
