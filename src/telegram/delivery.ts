@@ -2,6 +2,7 @@ import { mkdir } from "node:fs/promises";
 import path from "node:path";
 
 import { Bridge } from "../runtime/bridge.js";
+import { appendAuditEvent } from "../state/audit-log.js";
 import { chunkTelegramMessage, renderErrorMessage, renderWorkingMessage } from "./message-renderer.js";
 import { TelegramApi } from "./api.js";
 import type { NormalizedTelegramAttachment, NormalizedTelegramMessage } from "./update-normalizer.js";
@@ -10,6 +11,8 @@ export interface TelegramDeliveryContext {
   api: TelegramApi;
   bridge: Bridge;
   inboxDir: string;
+  instanceName?: string;
+  updateId?: number;
 }
 
 function inferExtension(attachment: NormalizedTelegramAttachment, telegramFilePath: string): string {
@@ -109,6 +112,15 @@ export async function handleNormalizedTelegramMessage(
         placeholderMessageId,
         accessDecision.text ?? renderErrorMessage("This chat is not authorized."),
       );
+      await appendAuditEvent(path.dirname(context.inboxDir), {
+        type: "update.reply",
+        instanceName: context.instanceName,
+        chatId: normalized.chatId,
+        userId: normalized.userId,
+        updateId: context.updateId,
+        outcome: "reply",
+        detail: accessDecision.text,
+      });
       return;
     }
 
@@ -124,6 +136,14 @@ export async function handleNormalizedTelegramMessage(
     await deliverTelegramResponse(context.api, normalized.chatId, placeholderMessageId, result.text, () => {
       placeholderShowsResponse = true;
     });
+    await appendAuditEvent(path.dirname(context.inboxDir), {
+      type: "update.handle",
+      instanceName: context.instanceName,
+      chatId: normalized.chatId,
+      userId: normalized.userId,
+      updateId: context.updateId,
+      outcome: "success",
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
 
@@ -134,6 +154,16 @@ export async function handleNormalizedTelegramMessage(
     } else {
       await context.api.sendMessage(normalized.chatId, renderErrorMessage(message));
     }
+
+    await appendAuditEvent(path.dirname(context.inboxDir), {
+      type: "update.handle",
+      instanceName: context.instanceName,
+      chatId: normalized.chatId,
+      userId: normalized.userId,
+      updateId: context.updateId,
+      outcome: "error",
+      detail: message,
+    });
 
     throw error;
   }

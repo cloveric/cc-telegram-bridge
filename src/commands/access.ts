@@ -3,6 +3,7 @@ import path from "node:path";
 
 import { joinStatePath, resolveInstanceStateDir } from "../config.js";
 import { normalizeInstanceName } from "../instance.js";
+import { appendAuditEvent } from "../state/audit-log.js";
 
 export interface InstanceTokenEnv {
   USERPROFILE?: string;
@@ -66,6 +67,11 @@ export async function writeInstanceBotToken(
 
   await mkdir(path.dirname(envPath), { recursive: true });
   await writeFile(envPath, contents, "utf8");
+  await appendAuditEvent(stateDir, {
+    type: "configure.token",
+    instanceName: normalizedInstanceName,
+    outcome: "success",
+  });
 
   return { instanceName: normalizedInstanceName, stateDir, envPath };
 }

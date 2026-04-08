@@ -1,7 +1,8 @@
-import { type EnvSource } from "../config.js";
+import { resolveInstanceStateDir, type EnvSource } from "../config.js";
 import { AccessStore } from "../state/access-store.js";
 import { normalizeInstanceName } from "../instance.js";
 import { resolveInstanceAccessStatePath, type InstanceTokenEnv, writeInstanceBotToken } from "./access.js";
+import { appendAuditEvent } from "../state/audit-log.js";
 import {
   getServiceLogs,
   getServiceStatus,
@@ -80,6 +81,17 @@ function parseChatId(value: string): number {
   return parsed;
 }
 
+function resolveAuditStateDir(
+  env: Pick<EnvSource, "USERPROFILE" | "CODEX_TELEGRAM_STATE_DIR">,
+  instanceName: string,
+): string {
+  return resolveInstanceStateDir({
+    USERPROFILE: env.USERPROFILE,
+    CODEX_TELEGRAM_STATE_DIR: env.CODEX_TELEGRAM_STATE_DIR,
+    CODEX_TELEGRAM_INSTANCE: instanceName,
+  });
+}
+
 function formatAccessStatus(instanceName: string, status: Awaited<ReturnType<AccessStore["getStatus"]>>): string {
   const allowlist = status.allowlist.length > 0 ? status.allowlist.join(", ") : "none";
   const pendingPairs =
@@ -109,6 +121,7 @@ async function runAccessCommand(
 
   const subcommand = argv[1];
   const { instanceName, args } = extractInstanceOption(argv.slice(2));
+  const auditStateDir = resolveAuditStateDir(env, instanceName);
   const store = new AccessStore(resolveInstanceAccessStatePath(env, instanceName));
 
   if (subcommand === "pair") {
@@ -120,9 +133,23 @@ async function runAccessCommand(
     const pairedUser = await store.redeemPairingCode(code, new Date());
 
     if (!pairedUser) {
+    await appendAuditEvent(auditStateDir, {
+      type: "access.pair",
+      instanceName,
+      outcome: "rejected",
+        metadata: { code },
+      });
       throw new Error(`Pairing code "${code}" is invalid or expired.`);
     }
 
+    await appendAuditEvent(auditStateDir, {
+      type: "access.pair",
+      instanceName,
+      chatId: pairedUser.telegramChatId,
+      userId: pairedUser.telegramUserId,
+      outcome: "success",
+      metadata: { code },
+    });
     logger.log(`Redeemed pairing code for instance "${instanceName}" and chat ${pairedUser.telegramChatId}.`);
     return true;
   }
@@ -133,6 +160,12 @@ async function runAccessCommand(
     }
 
     await store.setPolicy(args[0]);
+    await appendAuditEvent(auditStateDir, {
+      type: "access.policy",
+      instanceName,
+      outcome: "success",
+      metadata: { policy: args[0] },
+    });
     logger.log(`Updated access policy for instance "${instanceName}" to "${args[0]}".`);
     return true;
   }
@@ -144,6 +177,12 @@ async function runAccessCommand(
 
     const chatId = parseChatId(args[0]);
     await store.allowChat(chatId);
+    await appendAuditEvent(auditStateDir, {
+      type: "access.allow",
+      instanceName,
+      chatId,
+      outcome: "success",
+    });
     logger.log(`Allowed chat ${chatId} for instance "${instanceName}".`);
     return true;
   }
@@ -155,6 +194,12 @@ async function runAccessCommand(
 
     const chatId = parseChatId(args[0]);
     await store.revokeChat(chatId);
+    await appendAuditEvent(auditStateDir, {
+      type: "access.revoke",
+      instanceName,
+      chatId,
+      outcome: "success",
+    });
     logger.log(`Revoked chat ${chatId} for instance "${instanceName}".`);
     return true;
   }

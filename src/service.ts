@@ -5,6 +5,7 @@ import { resolveConfig, resolveInstanceStateDir, type EnvSource } from "./config
 import { Bridge } from "./runtime/bridge.js";
 import { ProcessCodexAdapter } from "./codex/process-adapter.js";
 import { AccessStore } from "./state/access-store.js";
+import { appendAuditEvent } from "./state/audit-log.js";
 import { SessionStore } from "./state/session-store.js";
 import { RuntimeStateStore } from "./state/runtime-state.js";
 import { TelegramApi } from "./telegram/api.js";
@@ -246,6 +247,12 @@ export async function processTelegramUpdates(
 
     try {
       if (updateId !== undefined && lastHandledUpdateId !== null && updateId <= lastHandledUpdateId) {
+        await appendAuditEvent(path.dirname(context.inboxDir), {
+          type: "update.skip",
+          instanceName: context.instanceName,
+          updateId,
+          outcome: "duplicate",
+        });
         nextOffset = advanceOffset(nextOffset, completedOffset);
         continue;
       }
@@ -256,6 +263,12 @@ export async function processTelegramUpdates(
           await runtimeStateStore.markHandledUpdateId(updateId);
           lastHandledUpdateId = updateId;
         }
+        await appendAuditEvent(path.dirname(context.inboxDir), {
+          type: "update.skip",
+          instanceName: context.instanceName,
+          updateId,
+          outcome: "invalid",
+        });
         nextOffset = advanceOffset(nextOffset, completedOffset);
         continue;
       }
@@ -265,17 +278,37 @@ export async function processTelegramUpdates(
           await runtimeStateStore.markHandledUpdateId(updateId);
           lastHandledUpdateId = updateId;
         }
+        await appendAuditEvent(path.dirname(context.inboxDir), {
+          type: "update.skip",
+          instanceName: context.instanceName,
+          chatId: normalized.chatId,
+          userId: normalized.userId,
+          updateId,
+          outcome: "empty",
+        });
         nextOffset = advanceOffset(nextOffset, completedOffset);
         continue;
       }
 
-      await chatQueue.enqueue(normalized.chatId, () => handleNormalizedTelegramMessage(normalized, context));
+      await chatQueue.enqueue(normalized.chatId, () =>
+        handleNormalizedTelegramMessage(normalized, {
+          ...context,
+          updateId,
+        }),
+      );
       if (updateId !== undefined) {
         await runtimeStateStore.markHandledUpdateId(updateId);
         lastHandledUpdateId = updateId;
       }
       nextOffset = advanceOffset(nextOffset, completedOffset);
     } catch (error) {
+      await appendAuditEvent(path.dirname(context.inboxDir), {
+        type: "update.handle",
+        instanceName: context.instanceName,
+        updateId,
+        outcome: "error",
+        detail: error instanceof Error ? error.message : String(error),
+      });
       logger.error(formatErrorMessage("Failed to handle Telegram update", error));
       break;
     }
