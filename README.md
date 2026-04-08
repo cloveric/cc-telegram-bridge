@@ -43,7 +43,8 @@ This is not a multiplexed “one process hosts many bots” design. The operatin
 Install and build:
 
 ```powershell
-cd C:\Users\hangw\codex-telegram-channel
+git clone https://github.com/cloveric/codex-telegram-channel.git
+cd codex-telegram-channel
 npm install
 npm run build
 ```
@@ -147,10 +148,10 @@ Per-instance files:
 
 ## Repository Layout
 
-- [src](C:/Users/hangw/codex-telegram-channel/src): bridge, state, runtime, Telegram, and Codex integration
-- [tests](C:/Users/hangw/codex-telegram-channel/tests): Vitest suites
-- [site](C:/Users/hangw/codex-telegram-channel/site): static presentation assets
-- [assets](C:/Users/hangw/codex-telegram-channel/assets): repository visual assets
+- `src/`: bridge, state, runtime, Telegram, and Codex integration
+- `tests/`: Vitest suites
+- `site/`: static presentation assets
+- `assets/`: repository visual assets
 
 ## Scripts
 
