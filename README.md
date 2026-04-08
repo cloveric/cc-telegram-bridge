@@ -11,19 +11,154 @@
   <img src="https://img.shields.io/badge/validation-Zod_4-3E67B1?style=flat-square&logo=zod&logoColor=white" alt="Zod">
 </p>
 
-<p align="center">
-  <strong>Run OpenAI Codex through Telegram with isolated bot instances, resumable threads, and operator-grade controls.</strong>
-</p>
+<h3 align="center">
+  Run a fleet of personality-customizable Codex agents on Telegram.<br>
+  Each bot gets its own <code>agent.md</code>, state, threads, and access control.<br>
+  <sub>Think <a href="https://github.com/openclaw">OpenClaw</a>, but for Codex over Telegram.</sub>
+</h3>
 
 <p align="center">
-  <a href="#-quick-start">Quick Start</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#-architecture">Architecture</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#-service-operations">Service Ops</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#-access-control">Access Control</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#-session-visibility">Sessions</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#-audit-trail">Audit</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#-troubleshooting">Troubleshooting</a>
+  <a href="#-multi-bot-setup">Multi-Bot</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#-agent-instructions">agent.md</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#-quick-start">Quick Start</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#-architecture">Architecture</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#-service-operations">Service Ops</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#-access-control">Access Control</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#-audit-trail">Audit</a>
 </p>
 
 ---
 
-## Why This Exists
+## Multi-Bot Setup
 
-Running Codex from your phone should feel like operating a private field console — not babysitting a fragile script. **Codex Telegram Channel** turns each Telegram bot into an isolated Codex runtime with its own state, access model, and thread bindings.
+Run as many Codex bots as you need. Each instance is fully isolated — its own token, personality, threads, access rules, inbox, and audit trail. No shared state, no interference.
+
+```
+                  ┌──────────────────────────────┐
+                  │   codex-telegram-channel      │
+                  └──────────┬───────────────────┘
+          ┌─────────────────┼──────────────────┐
+          ▼                 ▼                   ▼
+   ┌─────────────┐  ┌─────────────┐  ┌──────────────┐
+   │  "default"  │  │   "work"    │  │  "personal"  │
+   │  @mybot     │  │  @work_bot  │  │  @helper_bot │
+   │             │  │             │  │              │
+   │ agent.md:   │  │ agent.md:   │  │ agent.md:    │
+   │ "General    │  │ "Senior     │  │ "Reply in    │
+   │  assistant" │  │  reviewer"  │  │  Chinese"    │
+   │             │  │             │  │              │
+   │ policy:     │  │ policy:     │  │ policy:      │
+   │  pairing    │  │  allowlist  │  │  pairing     │
+   └─────────────┘  └─────────────┘  └──────────────┘
+     PID 4821         PID 5102         PID 5340
+```
+
+### Deploy Multiple Bots in 30 Seconds
+
+```powershell
+# Create three bots from @BotFather, then:
+
+# 1. Configure each instance with its own token
+npm run dev -- telegram configure <token-A>
+npm run dev -- telegram configure --instance work <token-B>
+npm run dev -- telegram configure --instance personal <token-C>
+
+# 2. Start them all (each runs as its own process)
+npm run dev -- telegram service start
+npm run dev -- telegram service start --instance work
+npm run dev -- telegram service start --instance personal
+
+# 3. Check fleet status
+npm run dev -- telegram service status
+npm run dev -- telegram service status --instance work
+npm run dev -- telegram service status --instance personal
+```
+
+Each instance stores state independently:
+
+```
+%USERPROFILE%\.codex\channels\telegram\
+├── default\          ← @mybot
+│   ├── agent.md      ← personality & instructions
+│   ├── .env          ← bot token
+│   ├── access.json
+│   ├── session.json
+│   ├── audit.log.jsonl
+│   └── inbox\
+├── work\             ← @work_bot
+│   ├── agent.md
+│   ├── .env
+│   └── ...
+└── personal\         ← @helper_bot
+    ├── agent.md
+    ├── .env
+    └── ...
+```
+
+---
+
+## Agent Instructions
+
+The killer feature: **each bot can have its own personality and behavior** defined in an `agent.md` file.
+
+The `agent.md` is prepended to every Codex prompt. It's loaded fresh on every message, so you can edit it without restarting the service.
+
+### Examples
+
+**Work bot** — code reviewer:
+
+```markdown
+# agent.md for "work" instance
+
+You are a senior code reviewer. Focus on:
+- Correctness and edge cases
+- Security vulnerabilities
+- Performance implications
+- Naming and readability
+
+Be direct. Flag issues by severity. Don't sugarcoat.
+```
+
+**Personal bot** — friendly assistant:
+
+```markdown
+# agent.md for "personal" instance
+
+You are a friendly coding assistant. Reply in Chinese.
+Keep answers concise. Use code examples when helpful.
+When unsure, say so — don't guess.
+```
+
+**Research bot** — exploration mode:
+
+```markdown
+# agent.md for "research" instance
+
+You are a research assistant. When given a topic:
+1. Explore the problem space thoroughly
+2. List tradeoffs between approaches
+3. Provide citations and references
+4. Suggest next steps
+
+Think step by step. Prefer depth over breadth.
+```
+
+### CLI Commands
+
+```powershell
+# See where the agent.md lives
+npm run dev -- telegram instructions path --instance work
+
+# Import instructions from a file
+npm run dev -- telegram instructions set --instance work ./work-instructions.md
+
+# View current instructions
+npm run dev -- telegram instructions show --instance work
+```
+
+Or just edit the file directly:
+
+```powershell
+notepad %USERPROFILE%\.codex\channels\telegram\work\agent.md
+```
+
+---
+
+## Why This Design
 
 This is **not** a multiplexed "one process hosts many bots" design. The operating model is deliberately simple:
 
@@ -32,6 +167,9 @@ This is **not** a multiplexed "one process hosts many bots" design. The operatin
 | **One bot token per instance** | Each instance owns its token, state directory, and lock file |
 | **One instance per process** | No shared mutable state between bots |
 | **One chat per Codex thread** | Messages resume the exact same thread — no cold starts |
+| **One agent.md per bot** | Each bot has its own personality, role, and behavior rules |
+
+The OpenClaw-style experience: you create multiple specialized bots, each with distinct instructions and access policies, and manage them as a fleet from one CLI.
 
 ---
 
@@ -40,12 +178,12 @@ This is **not** a multiplexed "one process hosts many bots" design. The operatin
 <table>
   <tr>
     <td width="50%">
-      <h3>Instance Isolation</h3>
-      <p>Every instance keeps its own token, access model, lock, inbox, logs, update watermark, and Codex threads. Run three bots? Three isolated processes.</p>
+      <h3>Per-Bot Personality</h3>
+      <p>Each instance loads its own <code>agent.md</code> on every message. Change the file, the behavior changes immediately. No restart needed.</p>
     </td>
     <td width="50%">
-      <h3>Access Control</h3>
-      <p>Pairing codes + allowlist policy gate execution <em>before</em> Codex work or attachment downloads are permitted. No anonymous access by default.</p>
+      <h3>Instance Isolation</h3>
+      <p>Every instance keeps its own token, access model, lock, inbox, logs, update watermark, and Codex threads. Run three bots? Three isolated processes.</p>
     </td>
   </tr>
   <tr>
@@ -54,18 +192,18 @@ This is **not** a multiplexed "one process hosts many bots" design. The operatin
       <p>The first message creates a Codex thread; subsequent messages <code>resume</code> it. Context carries across sessions via <code>codex exec resume --json</code>.</p>
     </td>
     <td>
-      <h3>Service Lifecycle</h3>
-      <p>Start, stop, status, and restart commands with PID tracking, stderr logs, and bot identity verification built in.</p>
+      <h3>Access Control</h3>
+      <p>Pairing codes + allowlist policy gate execution <em>before</em> Codex work or attachment downloads are permitted. Per-bot access rules.</p>
     </td>
   </tr>
   <tr>
     <td>
-      <h3>Attachment Ingestion</h3>
-      <p>Files sent to the bot are downloaded into a per-instance <code>inbox/</code> directory and made available to the Codex session automatically.</p>
+      <h3>Full Audit Trail</h3>
+      <p>Every action (pairing, messages, errors, access changes) is recorded in a per-instance append-only JSONL audit stream with timing metadata.</p>
     </td>
     <td>
-      <h3>Update Deduplication</h3>
-      <p>Persisted watermarks and offset tracking ensure no message is processed twice, even across restarts.</p>
+      <h3>Service Lifecycle</h3>
+      <p>Start, stop, status, restart, logs, and doctor commands with PID tracking, stderr logs, and bot identity verification.</p>
     </td>
   </tr>
 </table>
@@ -89,28 +227,22 @@ npm install
 npm run build
 ```
 
-### Configure & Launch
+### Single Bot (Simplest)
 
 ```powershell
-# Configure the default instance
 npm run dev -- telegram configure <your-bot-token>
-
-# Start the service
 npm run dev -- telegram service start
-
-# Check status
 npm run dev -- telegram service status
 ```
 
-### Named Instances
+### Operator Flow
 
-Run multiple bots by specifying `--instance`:
-
-```powershell
-npm run dev -- telegram configure --instance work <token>
-npm run dev -- telegram service start --instance work
-npm run dev -- telegram service status --instance work
-```
+1. Configure instance token(s)
+2. Write `agent.md` for each bot's personality
+3. Start instance service(s)
+4. Pair your private chat with the generated code
+5. Switch policy to `allowlist` to lock down access
+6. Use `service status` and `service doctor` to monitor
 
 ---
 
@@ -128,8 +260,8 @@ npm run dev -- telegram service status --instance work
 │ update-     │ session-     │   .ts            │ runtime-state.ts    │
 │ normalizer  │ manager.ts   │                  │ instance-lock.ts    │
 │   .ts       │              │                  │ json-store.ts       │
-│ message-    │              │                  │                     │
-│ renderer.ts │              │                  │                     │
+│ message-    │              │  agent.md ──►    │ audit-log.ts        │
+│ renderer.ts │              │  prompt prepend  │                     │
 └─────────────┴──────────────┴──────────────────┴─────────────────────┘
 ```
 
@@ -137,10 +269,9 @@ npm run dev -- telegram service status --instance work
 
 ```
 Telegram Update → Normalize → Access Check → Chat Queue (serialized)
-    → Session Lookup → Codex Exec (new or resume) → Render → Deliver
+    → Load agent.md → Session Lookup → Codex Exec (new or resume)
+    → Render → Deliver → Audit
 ```
-
-Each layer is independently testable. The bridge orchestrates the flow without owning any state directly.
 
 ---
 
@@ -150,26 +281,12 @@ Each layer is independently testable. The bridge orchestrates the flow without o
 |---|---|
 | `telegram service start` | Acquire lock, load state, begin polling |
 | `telegram service stop` | Graceful shutdown with state persistence |
-| `telegram service status` | Running state, PID, session bindings, bot identity, audit health, last update ID |
+| `telegram service status` | Running state, PID, session bindings, bot identity, audit health |
 | `telegram service restart` | Stop + start with clean consumer reset |
-| `telegram service doctor` | Run a health check across build, token, runtime, identity, sessions, audit, and stderr |
+| `telegram service logs` | Tail stdout/stderr logs |
+| `telegram service doctor` | Health check: build, token, runtime, identity, sessions, audit |
 
-### Status Output
-
-```
-Running:       yes
-PID:           4821
-Policy:        allowlist
-Paired users:  2
-Allowlist:     2
-Pending pairs:   0
-Session bindings: 1
-Last update:     948271653
-Audit events:    42
-Last success:    2026-04-08T12:01:00.000Z
-Last failure:    none
-Bot identity:    @cloveric6bot
-```
+All commands accept `--instance <name>` to target a specific bot.
 
 ### PowerShell Helpers
 
@@ -179,114 +296,49 @@ Bot identity:    @cloveric6bot
 .\scripts\stop-instance.ps1 [-Instance work]
 ```
 
-### Logs
-
-```powershell
-npm run dev -- telegram service logs
-npm run dev -- telegram service logs --instance work
-npm run dev -- telegram service logs 20
-```
-
-### Health Check
-
-```powershell
-npm run dev -- telegram service doctor
-npm run dev -- telegram service doctor --instance work
-```
-
 ---
 
 ## Access Control
 
-Access is gated in two layers: **pairing** (initial handshake) and **policy** (ongoing authorization).
+Access is gated per-instance in two layers: **pairing** (initial handshake) and **policy** (ongoing authorization).
 
 ```powershell
-# Generate and redeem a pairing code
 npm run dev -- telegram access pair <code>
-
-# Switch to allowlist-only mode
 npm run dev -- telegram access policy allowlist
-
-# Manage the allowlist
 npm run dev -- telegram access allow <chat-id>
 npm run dev -- telegram access revoke <chat-id>
-
-# View current access state
-npm run dev -- telegram status
+npm run dev -- telegram status [--instance work]
 ```
-
-### Recommended Operator Flow
-
-1. Configure an instance token
-2. Start the instance service
-3. Pair your private chat with the generated code
-4. Switch policy to `allowlist` to lock down access
-5. Use `service status` to verify everything is running
 
 ---
 
 ## Session Visibility
 
-List current chat-to-thread bindings:
-
 ```powershell
-npm run dev -- telegram session list
+npm run dev -- telegram session list [--instance work]
+npm run dev -- telegram session show [--instance work] <chat-id>
 ```
-
-Inspect one chat binding:
-
-```powershell
-npm run dev -- telegram session show <chat-id>
-```
-
-This is useful when you want to verify that a Telegram chat is still bound to the same resumed Codex thread.
 
 ---
 
 ## Audit Trail
 
-Each instance writes an append-only JSONL audit stream with timing and outcome metadata:
-
-```text
-%USERPROFILE%\.codex\channels\telegram\<instance>\audit.log.jsonl
-```
-
-Read the latest audit entries:
+Each instance writes an append-only JSONL audit stream:
 
 ```powershell
-npm run dev -- telegram audit
+npm run dev -- telegram audit [--instance work]
 npm run dev -- telegram audit 50
-npm run dev -- telegram audit --instance work
-```
-
-Typical audit events include:
-
-- token configuration
-- pairing success or rejection
-- allow / revoke / policy changes
-- update success / reply / error events
-- attachment counts, response size, chunking, and request duration
-
-Filter the audit stream directly from the CLI:
-
-```powershell
-npm run dev -- telegram audit
-npm run dev -- telegram audit 50
-npm run dev -- telegram audit --instance work
 npm run dev -- telegram audit --type update.handle --outcome error
-npm run dev -- telegram audit --chat 688567588 --type update.handle
+npm run dev -- telegram audit --chat 688567588
 ```
-
-The default output remains raw JSONL so it stays easy to grep, export, or post-process.
 
 ---
 
 ## State Layout
 
-Each instance persists state under a dedicated directory:
-
 ```
 %USERPROFILE%\.codex\channels\telegram\<instance>\
+├── agent.md                # Bot personality & instructions
 ├── .env                    # Bot token
 ├── access.json             # Pairing + allowlist data
 ├── session.json            # Chat-to-thread bindings
@@ -300,46 +352,14 @@ Each instance persists state under a dedicated directory:
 
 ---
 
-## Project Structure
-
-```
-codex-telegram-channel/
-├── src/
-│   ├── index.ts              # Entry point
-│   ├── config.ts             # Configuration
-│   ├── instance.ts           # Instance definition
-│   ├── service.ts            # Service lifecycle
-│   ├── types.ts              # Shared types
-│   ├── codex/                # Codex integration
-│   ├── commands/             # CLI commands
-│   ├── runtime/              # Bridge, queue, sessions
-│   ├── state/                # Persistence layer
-│   └── telegram/             # Telegram API wrapper
-├── tests/                    # Vitest test suites
-├── scripts/                  # PowerShell helpers
-├── site/                     # Static landing page
-└── assets/                   # Visual assets
-```
-
----
-
 ## Development
 
 ```powershell
-# Run in development mode
-npm run dev -- <command>
-
-# Run tests
-npm test
-
-# Watch mode
-npm run test:watch
-
-# Build for production
-npm run build
-
-# Start production build
-npm start
+npm run dev -- <command>     # Development mode
+npm test                     # Run tests
+npm run test:watch           # Watch mode
+npm run build                # Build for production
+npm start                    # Start production build
 ```
 
 ---
@@ -357,9 +377,16 @@ npm start
 <details>
 <summary><strong>Bot does not reply at all</strong></summary>
 
-1. Run `telegram service logs`
-2. Confirm `Bot token configured: yes`
-3. Confirm `Running: yes`
+1. Run `telegram service doctor` to diagnose
+2. Check `telegram service logs` for errors
+3. Confirm `Bot token configured: yes` in status
+
+</details>
+
+<details>
+<summary><strong>agent.md changes not taking effect</strong></summary>
+
+No restart needed — `agent.md` is loaded fresh on every message. Verify the file path with `telegram instructions path --instance <name>` and check the content with `telegram instructions show`.
 
 </details>
 
@@ -367,7 +394,7 @@ npm start
 <summary><strong>Service won't start</strong></summary>
 
 1. Check if another instance holds the lock
-2. Inspect the stderr log path reported by `service status`
+2. Run `telegram service doctor` for detailed health checks
 3. If you changed bot tokens, rerun `telegram configure` then restart
 
 </details>
@@ -381,5 +408,5 @@ npm start
 ---
 
 <p align="center">
-  <sub>Built with purpose. Operated with control.</sub>
+  <sub>Your Codex. Your bots. Your rules.</sub>
 </p>
