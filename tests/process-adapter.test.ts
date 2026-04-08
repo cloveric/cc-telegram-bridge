@@ -5,11 +5,22 @@ import { describe, expect, it } from "vitest";
 import { ProcessCodexAdapter } from "../src/codex/process-adapter.js";
 
 describe("ProcessCodexAdapter", () => {
-  it("creates telegram-scoped sessions", async () => {
-    const adapter = new ProcessCodexAdapter("codex");
-    const session = await adapter.createSession(12345);
+  it("creates a real codex thread-backed session", async () => {
+    const { spawnCodex, child, calls } = createSpawnHarness();
+    const adapter = new ProcessCodexAdapter("codex", spawnCodex);
+    const promise = adapter.createSession(12345);
 
-    expect(session.sessionId).toBe("telegram-12345");
+    child.stdout.emitData('{"type":"thread.started","thread_id":"thread-123"}\n');
+    child.stdout.emitData('{"type":"item.completed","item":{"type":"agent_message","text":"READY"}}\n');
+    child.close(0);
+
+    await expect(promise).resolves.toEqual({ sessionId: "thread-123" });
+    expect(calls).toEqual([
+      {
+        command: "codex",
+        args: ["exec", "--json", "Reply with exactly READY"],
+      },
+    ]);
   });
 
   it("passes attachments into the generated prompt", async () => {
@@ -25,12 +36,13 @@ describe("ProcessCodexAdapter", () => {
     };
 
     const adapter = new ProcessCodexAdapter("codex", spawnCodex);
-    const promise = adapter.sendUserMessage("telegram-12345", {
+    const promise = adapter.sendUserMessage("thread-123", {
       text: "Hello",
       files: ["a.png", "b.pdf"],
     });
 
-    child.stdout.emitData("ok");
+    child.stdout.emitData('{"type":"thread.started","thread_id":"thread-123"}\n');
+    child.stdout.emitData('{"type":"item.completed","item":{"type":"agent_message","text":"ok"}}\n');
     child.close(0);
 
     await promise;
@@ -38,7 +50,7 @@ describe("ProcessCodexAdapter", () => {
     expect(calls).toEqual([
       {
         command: "codex",
-        args: ["exec", "Hello\nAttachment: a.png\nAttachment: b.pdf"],
+        args: ["exec", "resume", "--json", "thread-123", "Hello\nAttachment: a.png\nAttachment: b.pdf"],
       },
     ]);
   });
@@ -47,12 +59,14 @@ describe("ProcessCodexAdapter", () => {
     const { spawnCodex, child } = createSpawnHarness();
     const adapter = new ProcessCodexAdapter("codex", spawnCodex);
 
-    const promise = adapter.sendUserMessage("telegram-12345", {
+    const promise = adapter.sendUserMessage("thread-123", {
       text: "Hello",
       files: [],
     });
 
-    child.stdout.emitData("  answer from codex  \n");
+    child.stdout.emitData(
+      '{"type":"item.completed","item":{"type":"agent_message","text":"  answer from codex  "}}\n',
+    );
     child.close(0);
 
     await expect(promise).resolves.toEqual({ text: "answer from codex" });
@@ -62,7 +76,7 @@ describe("ProcessCodexAdapter", () => {
     const { spawnCodex, child } = createSpawnHarness();
     const adapter = new ProcessCodexAdapter("codex", spawnCodex);
 
-    const promise = adapter.sendUserMessage("telegram-12345", {
+    const promise = adapter.sendUserMessage("thread-123", {
       text: "Hello",
       files: [],
     });
@@ -70,7 +84,7 @@ describe("ProcessCodexAdapter", () => {
     child.close(0);
 
     await expect(promise).resolves.toEqual({
-      text: "Session telegram-12345 completed.",
+      text: "Session thread-123 completed.",
     });
   });
 
@@ -78,7 +92,7 @@ describe("ProcessCodexAdapter", () => {
     const { spawnCodex, child } = createSpawnHarness();
     const adapter = new ProcessCodexAdapter("codex", spawnCodex);
 
-    const promise = adapter.sendUserMessage("telegram-12345", {
+    const promise = adapter.sendUserMessage("thread-123", {
       text: "Hello",
       files: [],
     });
@@ -107,11 +121,15 @@ class FakeChildProcess extends EventEmitter {
 
 function createSpawnHarness() {
   const child = new FakeChildProcess();
+  const calls: Array<{ command: string; args: string[] }> = [];
   const spawnCodex = (
-    _command: string,
-    _args: string[],
+    command: string,
+    args: string[],
     _options: { stdio: ["ignore", "pipe", "pipe"] },
-  ) => child;
+  ) => {
+    calls.push({ command, args });
+    return child;
+  };
 
-  return { spawnCodex, child };
+  return { spawnCodex, child, calls };
 }
