@@ -92,8 +92,13 @@ describe("ProcessCodexAdapter", () => {
     await promise;
 
     expect(calls[0]?.command.toLowerCase()).toContain("cmd");
-    expect(calls[0]?.args[3]).toContain('"C:\\Users\\hangw\\AppData\\Roaming\\npm\\codex.cmd"');
-    expect(calls[0]?.args[3]).not.toContain('"\\"C:\\Users\\hangw\\AppData\\Roaming\\npm\\codex.cmd\\""');
+    expect(calls[0]?.args.slice(0, 5)).toEqual([
+      "/d",
+      "/s",
+      "/c",
+      "C:\\Users\\hangw\\AppData\\Roaming\\npm\\codex.cmd",
+      "exec",
+    ]);
   });
 
   it("returns trimmed stdout when codex exits successfully", async () => {

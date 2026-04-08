@@ -104,10 +104,9 @@ function buildCommandInvocation(command: string, args: string[]): { command: str
   const normalizedCommand = normalizeExecutableCommand(command);
 
   if (/\.(cmd|bat)$/i.test(normalizedCommand)) {
-    const escaped = [normalizedCommand, ...args].map((part) => `"${part.replace(/"/g, '\\"')}"`).join(" ");
     return {
       command: process.env.ComSpec ?? "cmd.exe",
-      args: ["/d", "/s", "/c", escaped],
+      args: ["/d", "/s", "/c", normalizedCommand, ...args],
     };
   }
 
