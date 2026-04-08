@@ -1,8 +1,23 @@
 import { EventEmitter } from "node:events";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
 import { ProcessCodexAdapter } from "../src/codex/process-adapter.js";
+
+async function waitForSpawn(calls: Array<unknown>): Promise<void> {
+  for (let attempt = 0; attempt < 50; attempt++) {
+    if (calls.length > 0) {
+      return;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+
+  throw new Error("Codex process was not spawned in time");
+}
 
 describe("ProcessCodexAdapter", () => {
   it("creates a logical telegram session placeholder", async () => {
@@ -114,6 +129,74 @@ describe("ProcessCodexAdapter", () => {
     child.close(2);
 
     await expect(promise).rejects.toThrow("codex failed");
+  });
+
+  it("prepends instance instructions from agent.md when present", async () => {
+    const { spawnCodex, child, calls } = createSpawnHarness();
+    const root = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
+    const instructionsPath = path.join(root, "agent.md");
+
+    try {
+      await writeFile(instructionsPath, "You are bot alpha.", "utf8");
+      const adapter = new ProcessCodexAdapter("codex", undefined, spawnCodex, instructionsPath);
+
+      const promise = adapter.sendUserMessage("telegram-12345", {
+        text: "Hello",
+        files: [],
+      });
+      await waitForSpawn(calls);
+
+      child.stdout.emitData('{"type":"thread.started","thread_id":"thread-123"}\n');
+      child.stdout.emitData('{"type":"item.completed","item":{"type":"agent_message","text":"ok"}}\n');
+      child.close(0);
+      await promise;
+
+      expect(calls[0]?.args[2]).toContain("[System Instructions]\nYou are bot alpha.\n[End Instructions]\nHello");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("truncates oversized instructions and degrades safely on read failure", async () => {
+    const { spawnCodex, child, calls } = createSpawnHarness();
+    const root = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
+    const instructionsPath = path.join(root, "agent.md");
+
+    try {
+      await writeFile(instructionsPath, "x".repeat(20_000), "utf8");
+      const adapter = new ProcessCodexAdapter("codex", undefined, spawnCodex, instructionsPath);
+
+      const promise = adapter.sendUserMessage("telegram-12345", {
+        text: "Hello",
+        files: [],
+      });
+      await waitForSpawn(calls);
+
+      child.stdout.emitData('{"type":"thread.started","thread_id":"thread-123"}\n');
+      child.stdout.emitData('{"type":"item.completed","item":{"type":"agent_message","text":"ok"}}\n');
+      child.close(0);
+      await promise;
+
+      expect(calls[0]?.args[2]).toContain("[Instructions truncated at 16000 characters]");
+      expect(calls[0]?.args[2].length).toBeLessThan(17_000);
+
+      const { spawnCodex: secondSpawn, child: secondChild, calls: secondCalls } = createSpawnHarness();
+      const brokenAdapter = new ProcessCodexAdapter("codex", undefined, secondSpawn, path.join(root, "missing.md"));
+      const secondPromise = brokenAdapter.sendUserMessage("telegram-12345", {
+        text: "Hello again",
+        files: [],
+      });
+      await waitForSpawn(secondCalls);
+
+      secondChild.stdout.emitData('{"type":"thread.started","thread_id":"thread-456"}\n');
+      secondChild.stdout.emitData('{"type":"item.completed","item":{"type":"agent_message","text":"ok"}}\n');
+      secondChild.close(0);
+      await secondPromise;
+
+      expect(secondCalls[0]?.args[2]).toBe("Hello again");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 });
 

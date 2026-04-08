@@ -288,4 +288,54 @@ describe("runCli", () => {
       await rm(tempDir, { recursive: true, force: true });
     }
   });
+
+  it("shows, sets, and resolves the instructions path for an instance", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
+    const messages: string[] = [];
+    const sourcePath = path.join(tempDir, "source-agent.md");
+
+    try {
+      await writeFile(sourcePath, "You are bot alpha.", "utf8");
+
+      await runCli(["telegram", "instructions", "set", "--instance", "alpha", sourcePath], {
+        env: { USERPROFILE: tempDir },
+        logger: { log: (message) => messages.push(message) },
+      });
+
+      await runCli(["telegram", "instructions", "path", "--instance", "alpha"], {
+        env: { USERPROFILE: tempDir },
+        logger: { log: (message) => messages.push(message) },
+      });
+
+      await runCli(["telegram", "instructions", "show", "--instance", "alpha"], {
+        env: { USERPROFILE: tempDir },
+        logger: { log: (message) => messages.push(message) },
+      });
+
+      expect(messages[0]).toContain('Wrote instructions for instance "alpha"');
+      expect(messages[1]).toBe(path.join(tempDir, ".codex", "channels", "telegram", "alpha", "agent.md"));
+      expect(messages[2]).toContain('Instance "alpha" instructions:');
+      expect(messages[2]).toContain("You are bot alpha.");
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("reports when instance instructions are missing", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
+    const messages: string[] = [];
+
+    try {
+      const handled = await runCli(["telegram", "instructions", "show", "--instance", "alpha"], {
+        env: { USERPROFILE: tempDir },
+        logger: { log: (message) => messages.push(message) },
+      });
+
+      expect(handled).toBe(true);
+      expect(messages[0]).toBe('Instance "alpha": no instructions configured (agent.md not found).');
+      expect(messages[1]).toContain(path.join(tempDir, ".codex", "channels", "telegram", "alpha", "agent.md"));
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
 });

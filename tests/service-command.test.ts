@@ -60,6 +60,58 @@ describe("telegram service commands", () => {
     }
   });
 
+  it("waits for a fresh lock before reporting a restart as started", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
+    const messages: string[] = [];
+    const stateDir = path.join(tempDir, ".codex", "channels", "telegram", "alpha");
+    const lockPath = resolveInstanceLockPath(stateDir);
+    let sleepCalls = 0;
+
+    try {
+      await mkdir(stateDir, { recursive: true });
+      await writeFile(
+        lockPath,
+        JSON.stringify({
+          pid: 11111,
+          token: "old-token",
+          acquiredAt: new Date().toISOString(),
+        }),
+        "utf8",
+      );
+
+      const handled = await runCli(["telegram", "service", "start", "--instance", "alpha"], {
+        env: { USERPROFILE: tempDir },
+        logger: { log: (message) => messages.push(message) },
+        serviceDeps: {
+          cwd: REPO_ROOT,
+          spawnDetached: async () => {},
+          sleep: async () => {
+            sleepCalls += 1;
+            if (sleepCalls === 2) {
+              await writeFile(
+                lockPath,
+                JSON.stringify({
+                  pid: 22222,
+                  token: "new-token",
+                  acquiredAt: new Date().toISOString(),
+                }),
+                "utf8",
+              );
+            }
+          },
+          isProcessAlive: (pid) => pid === 22222,
+          isExpectedServiceProcess: (pid) => pid === 11111 || pid === 22222,
+        },
+      });
+
+      expect(handled).toBe(true);
+      expect(messages).toEqual(['Started instance "alpha" with pid 22222.']);
+      expect(sleepCalls).toBeGreaterThan(0);
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
   it("reports service status without a configured token", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
     const messages: string[] = [];

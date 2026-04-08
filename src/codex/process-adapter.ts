@@ -26,6 +26,7 @@ type ProcessChildLike = {
 };
 
 type SpawnCodex = (command: string, args: string[], options: SpawnOptions) => ProcessChildLike;
+const MAX_INSTRUCTIONS_CHARS = 16_000;
 
 type CodexJsonEvent =
   | {
@@ -161,12 +162,21 @@ export class ProcessCodexAdapter implements CodexAdapter {
     try {
       const content = await readFile(this.instructionsPath, "utf8");
       const trimmed = content.trim();
-      return trimmed || null;
+      if (!trimmed) {
+        return null;
+      }
+
+      if (trimmed.length <= MAX_INSTRUCTIONS_CHARS) {
+        return trimmed;
+      }
+
+      return `${trimmed.slice(0, MAX_INSTRUCTIONS_CHARS)}\n\n[Instructions truncated at ${MAX_INSTRUCTIONS_CHARS} characters]`;
     } catch (error) {
       if (typeof error === "object" && error !== null && "code" in error && (error as NodeJS.ErrnoException).code === "ENOENT") {
         return null;
       }
-      throw error;
+
+      return null;
     }
   }
 

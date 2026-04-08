@@ -183,6 +183,29 @@ async function readLockRecord(lockPath: string): Promise<InstanceLockRecord | nu
   return null;
 }
 
+function isFreshLockRecord(
+  lock: InstanceLockRecord | null,
+  existingLock: InstanceLockRecord | null,
+  isProcessAlive: (pid: number) => boolean,
+  isExpectedServiceProcess: (pid: number, entryPath: string, instanceName: string) => boolean,
+  entryPath: string,
+  instanceName: string,
+): boolean {
+  if (lock === null) {
+    return false;
+  }
+
+  if (!isProcessAlive(lock.pid) || !isExpectedServiceProcess(lock.pid, entryPath, instanceName)) {
+    return false;
+  }
+
+  if (existingLock === null) {
+    return true;
+  }
+
+  return lock.pid !== existingLock.pid || lock.token !== existingLock.token;
+}
+
 function removeLockIfMatches(lockPath: string, expectedPid: number | null): void {
   if (expectedPid === null) {
     return;
@@ -293,11 +316,7 @@ export async function startServiceInstance(
 
   for (let attempt = 0; attempt < 20; attempt++) {
     const lock = await readLockRecord(paths.lockPath);
-    if (
-      lock !== null &&
-      isProcessAlive(lock.pid) &&
-      isExpectedServiceProcess(lock.pid, paths.entryPath, paths.instanceName)
-    ) {
+    if (lock && isFreshLockRecord(lock, existingLock, isProcessAlive, isExpectedServiceProcess, paths.entryPath, paths.instanceName)) {
       return `Started instance "${paths.instanceName}" with pid ${lock.pid}.`;
     }
 
