@@ -61,6 +61,14 @@ Configure a named instance:
 npm run dev -- telegram configure --instance work <bot-token>
 ```
 
+Recommended operator flow:
+
+1. Configure an instance token
+2. Start the instance service
+3. Pair your private chat
+4. Switch policy to `allowlist` if you want only approved chats to continue
+5. Use `telegram service status` to verify the process, PID, bot identity, and last handled update
+
 ## Service Operations
 
 Start the default instance:
@@ -150,6 +158,30 @@ View current access status:
 ```powershell
 npm run dev -- telegram status
 ```
+
+## Troubleshooting
+
+If the bot replies more than once:
+
+- run `npm run dev -- telegram service status`
+- make sure only one instance is running for that instance name
+- use `npm run dev -- telegram service restart` to reset the local consumer cleanly
+
+If the bot does not reply at all:
+
+- run `npm run dev -- telegram service logs`
+- confirm `Bot token configured: yes`
+- confirm `Running: yes`
+
+If `service status` says the instance is not running:
+
+- run `npm run dev -- telegram service start`
+- if it still fails, inspect the reported stderr log path
+
+If you changed bot tokens:
+
+- rerun `telegram configure`
+- then restart the instance service
 
 ## State Layout
 

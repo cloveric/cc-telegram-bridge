@@ -216,7 +216,7 @@ async function runServiceCommand(
   serviceDeps: ServiceCommandDeps,
 ): Promise<boolean> {
   if (argv.length < 2) {
-    throw new Error("Usage: telegram service <start|stop|status|logs> ...");
+    throw new Error("Usage: telegram service <start|stop|restart|status|logs> ...");
   }
 
   const subcommand = argv[1];
@@ -236,6 +236,12 @@ async function runServiceCommand(
     return true;
   }
 
+  if (subcommand === "restart") {
+    await stopServiceInstance(env, instanceName, serviceDeps);
+    logger.log(await startServiceInstance(env, instanceName, serviceDeps));
+    return true;
+  }
+
   if (subcommand === "status") {
     logger.log(formatServiceStatus(await getServiceStatus(env, instanceName, serviceDeps)));
     return true;
@@ -246,7 +252,7 @@ async function runServiceCommand(
     return true;
   }
 
-  throw new Error("Usage: telegram service <start|stop|status|logs> ...");
+  throw new Error("Usage: telegram service <start|stop|restart|status|logs> ...");
 }
 
 export async function runCli(argv: string[], options: CliOptions = {}): Promise<boolean> {

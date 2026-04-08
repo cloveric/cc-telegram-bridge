@@ -88,8 +88,23 @@ function isLogicalTelegramSessionId(sessionId: string): boolean {
   return sessionId.startsWith("telegram-");
 }
 
-function requiresShell(command: string): boolean {
-  return /\.cmd$/i.test(command) || /\.bat$/i.test(command) || /\.ps1$/i.test(command);
+function buildCommandInvocation(command: string, args: string[]): { command: string; args: string[]; shell?: boolean } {
+  if (/\.(cmd|bat)$/i.test(command)) {
+    const escaped = [command, ...args].map((part) => `"${part.replace(/"/g, '\\"')}"`).join(" ");
+    return {
+      command: process.env.ComSpec ?? "cmd.exe",
+      args: ["/d", "/s", "/c", escaped],
+    };
+  }
+
+  if (/\.ps1$/i.test(command)) {
+    return {
+      command: "pwsh",
+      args: ["-NoProfile", "-File", command, ...args],
+    };
+  }
+
+  return { command, args, shell: false };
 }
 
 export class ProcessCodexAdapter implements CodexAdapter {
@@ -146,9 +161,10 @@ export class ProcessCodexAdapter implements CodexAdapter {
   }
 
   private async runCodexJsonCommand(args: string[]): Promise<{ stdout: string; stderr: string }> {
-    const child = this.spawnCodex(this.codexExecutable, args, {
+    const invocation = buildCommandInvocation(this.codexExecutable, args);
+    const child = this.spawnCodex(invocation.command, invocation.args, {
       stdio: ["ignore", "pipe", "pipe"],
-      shell: requiresShell(this.codexExecutable),
+      shell: invocation.shell,
       env: this.childEnv,
     });
 
