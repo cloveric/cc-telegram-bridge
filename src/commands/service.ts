@@ -52,6 +52,7 @@ export interface ServiceStatus {
     username?: string;
   };
   botIdentityWarning?: string;
+  lastErrorLine?: string;
 }
 
 function defaultIsProcessAlive(pid: number): boolean {
@@ -148,6 +149,29 @@ async function readLockRecord(lockPath: string): Promise<InstanceLockRecord | nu
   }
 
   return null;
+}
+
+async function readLastNonEmptyLine(filePath: string): Promise<string | undefined> {
+  try {
+    const raw = await readFile(filePath, "utf8");
+    const lines = raw
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    return lines.at(-1);
+  } catch (error) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      (error as NodeJS.ErrnoException).code === "ENOENT"
+    ) {
+      return undefined;
+    }
+
+    throw error;
+  }
 }
 
 export function resolveServicePaths(
@@ -287,6 +311,8 @@ export async function getServiceStatus(
     }
   }
 
+  const lastErrorLine = await readLastNonEmptyLine(paths.stderrPath);
+
   return {
     instanceName: paths.instanceName,
     running,
@@ -303,5 +329,6 @@ export async function getServiceStatus(
     botTokenConfigured: botToken !== null,
     botIdentity,
     botIdentityWarning,
+    lastErrorLine,
   };
 }

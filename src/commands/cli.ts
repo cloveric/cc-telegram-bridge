@@ -184,6 +184,7 @@ function formatServiceStatus(status: Awaited<ReturnType<typeof getServiceStatus>
     `Paired users: ${status.pairedUsers}`,
     `Allowlist count: ${status.allowlistCount}`,
     `Pending pair count: ${status.pendingPairs}`,
+    `Last handled update: ${status.lastHandledUpdateId ?? "none"}`,
     `State dir: ${status.stateDir}`,
     `Stdout log: ${status.stdoutPath}`,
     `Stderr log: ${status.stderrPath}`,
@@ -198,6 +199,10 @@ function formatServiceStatus(status: Awaited<ReturnType<typeof getServiceStatus>
           status.botIdentity?.username ? ` (@${status.botIdentity.username})` : ""
         }`,
     );
+  }
+
+  if (status.lastErrorLine) {
+    lines.push(`Last error: ${status.lastErrorLine}`);
   }
 
   return lines.join("\n");
