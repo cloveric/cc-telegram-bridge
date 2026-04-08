@@ -337,18 +337,20 @@ export async function pollTelegramUpdatesOnce(
   logger: Pick<Console, "error"> = console,
   offset?: number,
   signal?: AbortSignal,
-): Promise<{ offset: number | undefined; hadFetchError: boolean }> {
+): Promise<{ offset: number | undefined; hadFetchError: boolean; hadUpdates: boolean }> {
   try {
     const updates = await api.getUpdates(offset, signal);
     return {
       offset: await processTelegramUpdates(updates, { api, bridge, inboxDir }, logger),
       hadFetchError: false,
+      hadUpdates: updates.length > 0,
     };
   } catch (error) {
     logger.error(formatErrorMessage("Failed to fetch Telegram updates", error));
     return {
       offset,
       hadFetchError: true,
+      hadUpdates: false,
     };
   }
 }
@@ -370,13 +372,20 @@ export async function pollTelegramUpdates(
 
     if (result.hadFetchError) {
       backoffMs = Math.min(backoffMs * 2, maxBackoffMs);
+    } else if (result.hadUpdates) {
+      // Got messages — poll again immediately for low latency
+      backoffMs = 0;
     } else {
-      backoffMs = 1000;
+      // No updates — long polling already waited ~30s on Telegram's side,
+      // just a tiny gap before the next long-poll request
+      backoffMs = 100;
     }
 
-    await new Promise<void>((resolve) => {
-      const timer = setTimeout(resolve, backoffMs);
-      signal?.addEventListener("abort", () => { clearTimeout(timer); resolve(); }, { once: true });
-    });
+    if (backoffMs > 0) {
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(resolve, backoffMs);
+        signal?.addEventListener("abort", () => { clearTimeout(timer); resolve(); }, { once: true });
+      });
+    }
   }
 }

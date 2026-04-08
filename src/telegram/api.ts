@@ -201,8 +201,8 @@ export class TelegramApi {
     await writeFile(destinationPath, bytes);
   }
 
-  async getUpdates(offset?: number, signal?: AbortSignal): Promise<unknown[]> {
-    const body: Record<string, unknown> = {};
+  async getUpdates(offset?: number, signal?: AbortSignal, timeoutSeconds = 30): Promise<unknown[]> {
+    const body: Record<string, unknown> = { timeout: timeoutSeconds };
     if (offset !== undefined) {
       body.offset = offset;
     }

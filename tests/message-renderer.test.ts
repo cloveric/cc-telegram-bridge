@@ -231,13 +231,11 @@ describe("TelegramApi", () => {
     const api = new TelegramApi("token");
 
     await expect(api.getUpdates()).resolves.toEqual([{ update_id: 7 }]);
-    expect(fetchMock).toHaveBeenCalledWith("https://api.telegram.org/bottoken/getUpdates", {
+    expect(fetchMock).toHaveBeenCalledWith("https://api.telegram.org/bottoken/getUpdates", expect.objectContaining({
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: "{}",
-    });
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ timeout: 30 }),
+    }));
 
     fetchMock.mockRestore();
   });
@@ -253,13 +251,11 @@ describe("TelegramApi", () => {
     const api = new TelegramApi("token");
 
     await expect(api.getUpdates(42)).resolves.toEqual([]);
-    expect(fetchMock).toHaveBeenCalledWith("https://api.telegram.org/bottoken/getUpdates", {
+    expect(fetchMock).toHaveBeenCalledWith("https://api.telegram.org/bottoken/getUpdates", expect.objectContaining({
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ offset: 42 }),
-    });
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ timeout: 30, offset: 42 }),
+    }));
 
     fetchMock.mockRestore();
   });

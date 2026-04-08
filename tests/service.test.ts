@@ -331,6 +331,7 @@ describe("polling helpers", () => {
     ).resolves.toEqual({
       offset: 11,
       hadFetchError: false,
+      hadUpdates: true,
     });
 
     expect(bridge.handleAuthorizedMessage).toHaveBeenCalledTimes(2);
@@ -398,6 +399,7 @@ describe("polling helpers", () => {
     ).resolves.toEqual({
       offset: 7,
       hadFetchError: true,
+      hadUpdates: false,
     });
     expect(logger.error).toHaveBeenCalledTimes(1);
     expect(bridge.handleAuthorizedMessage).not.toHaveBeenCalled();
