@@ -142,4 +142,48 @@ describe("TelegramApi", () => {
 
     fetchMock.mockRestore();
   });
+
+  it("returns the result array from getUpdates", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      json: async () => ({ ok: true, result: [{ update_id: 7 }] }),
+    } as unknown as Response);
+
+    const api = new TelegramApi("token");
+
+    await expect(api.getUpdates()).resolves.toEqual([{ update_id: 7 }]);
+    expect(fetchMock).toHaveBeenCalledWith("https://api.telegram.org/bottoken/getUpdates", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: "{}",
+    });
+
+    fetchMock.mockRestore();
+  });
+
+  it("passes offset to getUpdates when provided", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      json: async () => ({ ok: true, result: [] }),
+    } as unknown as Response);
+
+    const api = new TelegramApi("token");
+
+    await expect(api.getUpdates(42)).resolves.toEqual([]);
+    expect(fetchMock).toHaveBeenCalledWith("https://api.telegram.org/bottoken/getUpdates", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ offset: 42 }),
+    });
+
+    fetchMock.mockRestore();
+  });
 });

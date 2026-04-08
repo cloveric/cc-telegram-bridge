@@ -70,6 +70,33 @@ export class TelegramApi {
     return payload.result;
   }
 
+  private async requestTelegramResponse<T>(method: string, body: Record<string, unknown>): Promise<TelegramApiResponse<T>> {
+    const response = await fetch(this.buildUrl(method), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Telegram API request failed for ${method}: ${response.status} ${response.statusText}`);
+    }
+
+    let json: unknown;
+    try {
+      json = await response.json();
+    } catch {
+      throw new Error(`Telegram API response was not valid JSON for ${method}`);
+    }
+
+    if (!isTelegramApiResponse<T>(json)) {
+      throw new Error(`Telegram API response had an unexpected shape for ${method}`);
+    }
+
+    return json;
+  }
+
   async sendMessage(chatId: number, text: string): Promise<unknown> {
     return this.postJson("sendMessage", {
       chat_id: chatId,
@@ -83,5 +110,20 @@ export class TelegramApi {
       message_id: messageId,
       text,
     });
+  }
+
+  async getUpdates(offset?: number): Promise<unknown[]> {
+    const body: Record<string, unknown> = {};
+    if (offset !== undefined) {
+      body.offset = offset;
+    }
+
+    const json = await this.requestTelegramResponse<unknown[]>("getUpdates", body);
+
+    if (!json.ok) {
+      throw new Error(`Telegram API request failed for getUpdates: ${json.description ?? "unknown error"}`);
+    }
+
+    return json.result ?? [];
   }
 }
