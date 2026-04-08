@@ -7,14 +7,19 @@ import { resolveInstanceStateDir, type EnvSource } from "../config.js";
 import { normalizeInstanceName } from "../instance.js";
 import { resolveInstanceLockPath } from "../state/instance-lock.js";
 import { AccessStore } from "../state/access-store.js";
+import { TelegramApi } from "../telegram/api.js";
+import { lookupTelegramBotIdentity, readConfiguredBotToken } from "../service.js";
 
-export interface ServiceCommandEnv extends Pick<EnvSource, "USERPROFILE" | "CODEX_TELEGRAM_STATE_DIR"> {}
+export interface ServiceCommandEnv
+  extends Pick<EnvSource, "USERPROFILE" | "CODEX_TELEGRAM_STATE_DIR" | "TELEGRAM_BOT_TOKEN"> {}
 
 export interface ServiceCommandDeps {
   cwd?: string;
   isProcessAlive?: (pid: number) => boolean;
   spawnDetached?: (command: string, args: string[]) => void;
   killProcessTree?: (pid: number) => void;
+  readConfiguredBotToken?: (env: ServiceCommandEnv, instanceName: string) => Promise<string | null>;
+  fetchTelegramBotIdentity?: (botToken: string) => Promise<{ firstName: string; username?: string }>;
 }
 
 export interface ServicePaths {
@@ -30,6 +35,7 @@ export interface ServiceStatus {
   instanceName: string;
   running: boolean;
   pid: number | null;
+  lockPath: string;
   stateDir: string;
   stdoutPath: string;
   stderrPath: string;
@@ -37,6 +43,12 @@ export interface ServiceStatus {
   pairedUsers: number;
   allowlistCount: number;
   pendingPairs: number;
+  botTokenConfigured: boolean;
+  botIdentity?: {
+    firstName: string;
+    username?: string;
+  };
+  botIdentityWarning?: string;
 }
 
 type LockRecord = {
@@ -196,11 +208,31 @@ export async function getServiceStatus(
   const running = pid !== null && isProcessAlive(pid);
   const accessStore = new AccessStore(path.join(paths.stateDir, "access.json"));
   const accessStatus = await accessStore.getStatus();
+  const readToken = deps.readConfiguredBotToken ?? readConfiguredBotToken;
+  const fetchIdentity =
+    deps.fetchTelegramBotIdentity ??
+    (async (botToken: string): Promise<{ firstName: string; username?: string }> => {
+      const api = new TelegramApi(botToken);
+      return lookupTelegramBotIdentity(api);
+    });
+  const botToken = await readToken(env, paths.instanceName);
+  let botIdentity: { firstName: string; username?: string } | undefined;
+  let botIdentityWarning: string | undefined;
+
+  if (botToken) {
+    try {
+      botIdentity = await fetchIdentity(botToken);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      botIdentityWarning = `Bot identity lookup failed: ${message}`;
+    }
+  }
 
   return {
     instanceName: paths.instanceName,
     running,
     pid: running ? pid : null,
+    lockPath: paths.lockPath,
     stateDir: paths.stateDir,
     stdoutPath: paths.stdoutPath,
     stderrPath: paths.stderrPath,
@@ -208,5 +240,8 @@ export async function getServiceStatus(
     pairedUsers: accessStatus.pairedUsers,
     allowlistCount: accessStatus.allowlist.length,
     pendingPairs: accessStatus.pendingPairs.length,
+    botTokenConfigured: botToken !== null,
+    botIdentity,
+    botIdentityWarning,
   };
 }

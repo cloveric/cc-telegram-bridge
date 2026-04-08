@@ -1,3 +1,4 @@
+import { type EnvSource } from "../config.js";
 import { AccessStore } from "../state/access-store.js";
 import { normalizeInstanceName } from "../instance.js";
 import { resolveInstanceAccessStatePath, type InstanceTokenEnv, writeInstanceBotToken } from "./access.js";
@@ -13,7 +14,7 @@ export interface CliLogger {
 }
 
 export interface CliOptions {
-  env?: InstanceTokenEnv;
+  env?: Pick<EnvSource, "USERPROFILE" | "CODEX_TELEGRAM_STATE_DIR" | "TELEGRAM_BOT_TOKEN">;
   logger?: CliLogger;
   serviceDeps?: ServiceCommandDeps;
 }
@@ -175,18 +176,31 @@ async function runStatusCommand(argv: string[], env: InstanceTokenEnv, logger: C
 }
 
 function formatServiceStatus(status: Awaited<ReturnType<typeof getServiceStatus>>): string {
-  return [
+  const lines = [
     `Instance: ${status.instanceName}`,
     `Running: ${status.running ? "yes" : "no"}`,
     `Pid: ${status.pid ?? "none"}`,
     `Policy: ${status.policy}`,
     `Paired users: ${status.pairedUsers}`,
     `Allowlist count: ${status.allowlistCount}`,
-    `Pending pairs: ${status.pendingPairs}`,
+    `Pending pair count: ${status.pendingPairs}`,
     `State dir: ${status.stateDir}`,
     `Stdout log: ${status.stdoutPath}`,
     `Stderr log: ${status.stderrPath}`,
-  ].join("\n");
+    `Lock path: ${status.lockPath}`,
+    `Bot token configured: ${status.botTokenConfigured ? "yes" : "no"}`,
+  ];
+
+  if (status.botTokenConfigured) {
+    lines.push(
+      status.botIdentityWarning ??
+        `Bot identity: ${status.botIdentity?.firstName ?? "unavailable"}${
+          status.botIdentity?.username ? ` (@${status.botIdentity.username})` : ""
+        }`,
+    );
+  }
+
+  return lines.join("\n");
 }
 
 async function runServiceCommand(

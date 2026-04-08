@@ -29,6 +29,11 @@ export interface ResolvedInstanceEnv extends EnvSource {
   TELEGRAM_BOT_TOKEN: string;
 }
 
+export interface ResolvedBotIdentity {
+  firstName: string;
+  username?: string;
+}
+
 export function parseServiceInstanceName(argv: string[]): string {
   for (let index = 0; index < argv.length; index++) {
     const argument = argv[index];
@@ -104,6 +109,21 @@ export async function readInstanceBotTokenFromEnvFile(env: Pick<EnvSource, "USER
   return null;
 }
 
+export async function readConfiguredBotToken(
+  env: Pick<EnvSource, "USERPROFILE" | "CODEX_TELEGRAM_INSTANCE" | "CODEX_TELEGRAM_STATE_DIR" | "TELEGRAM_BOT_TOKEN">,
+  instanceName: string,
+): Promise<string | null> {
+  if (env.TELEGRAM_BOT_TOKEN) {
+    return env.TELEGRAM_BOT_TOKEN;
+  }
+
+  return readInstanceBotTokenFromEnvFile({
+    USERPROFILE: env.USERPROFILE,
+    CODEX_TELEGRAM_INSTANCE: normalizeInstanceName(instanceName),
+    CODEX_TELEGRAM_STATE_DIR: env.CODEX_TELEGRAM_STATE_DIR,
+  });
+}
+
 export async function resolveServiceEnvForInstance(env: EnvSource, instanceName: string): Promise<ResolvedInstanceEnv> {
   const normalizedInstanceName = normalizeInstanceName(instanceName);
   const baseEnv: {
@@ -118,7 +138,15 @@ export async function resolveServiceEnvForInstance(env: EnvSource, instanceName:
     CODEX_EXECUTABLE: env.CODEX_EXECUTABLE,
   };
 
-  const telegramBotToken = env.TELEGRAM_BOT_TOKEN ?? (await readInstanceBotTokenFromEnvFile(baseEnv));
+  const telegramBotToken = await readConfiguredBotToken(
+    {
+      USERPROFILE: env.USERPROFILE,
+      CODEX_TELEGRAM_INSTANCE: normalizedInstanceName,
+      CODEX_TELEGRAM_STATE_DIR: env.CODEX_TELEGRAM_STATE_DIR,
+      TELEGRAM_BOT_TOKEN: env.TELEGRAM_BOT_TOKEN,
+    },
+    normalizedInstanceName,
+  );
   if (!telegramBotToken) {
     throw new Error("TELEGRAM_BOT_TOKEN is required");
   }
@@ -146,6 +174,14 @@ export async function createServiceDependenciesForInstance(
   instanceName: string,
 ): Promise<{ config: ReturnType<typeof resolveConfig>; api: TelegramApi; bridge: Bridge }> {
   return createServiceDependencies(await resolveServiceEnvForInstance(env, instanceName));
+}
+
+export async function lookupTelegramBotIdentity(api: TelegramApi): Promise<ResolvedBotIdentity> {
+  const identity = await api.getMe();
+  return {
+    firstName: identity.first_name,
+    username: identity.username,
+  };
 }
 
 const defaultChatQueue = new ChatQueue();

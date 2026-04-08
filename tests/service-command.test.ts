@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -33,24 +33,21 @@ describe("telegram service commands", () => {
     }
   });
 
-  it("reports a running instance in service status", async () => {
+  it("reports service status without a configured token", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
     const messages: string[] = [];
     const stateDir = path.join(tempDir, ".codex", "channels", "telegram", "alpha");
     const lockPath = resolveInstanceLockPath(stateDir);
 
     try {
-      await import("node:fs/promises").then((fs) =>
-        fs.mkdir(stateDir, { recursive: true }).then(() =>
-          fs.writeFile(
-            lockPath,
-            JSON.stringify({
-              pid: 12345,
-              token: "token",
-              acquiredAt: new Date().toISOString(),
-            }),
-          ),
-        ),
+      await mkdir(stateDir, { recursive: true });
+      await writeFile(
+        lockPath,
+        JSON.stringify({
+          pid: 12345,
+          token: "token",
+          acquiredAt: new Date().toISOString(),
+        }),
       );
 
       const handled = await runCli(["telegram", "service", "status", "--instance", "alpha"], {
@@ -66,6 +63,68 @@ describe("telegram service commands", () => {
       expect(messages[0]).toContain("Instance: alpha");
       expect(messages[0]).toContain("Running: yes");
       expect(messages[0]).toContain("Pid: 12345");
+      expect(messages[0]).toContain("Allowlist count: 0");
+      expect(messages[0]).toContain("Pending pair count: 0");
+      expect(messages[0]).toContain("Lock path:");
+      expect(messages[0]).toContain("Bot token configured: no");
+      expect(messages[0]).not.toContain("Bot identity:");
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("reports a configured token and bot identity when lookup succeeds", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
+    const messages: string[] = [];
+    const stateDir = path.join(tempDir, ".codex", "channels", "telegram", "alpha");
+    const envPath = path.join(stateDir, ".env");
+
+    try {
+      await mkdir(stateDir, { recursive: true });
+      await writeFile(envPath, 'TELEGRAM_BOT_TOKEN="secret-token"\n', "utf8");
+
+      const handled = await runCli(["telegram", "service", "status", "--instance", "alpha"], {
+        env: { USERPROFILE: tempDir },
+        logger: { log: (message) => messages.push(message) },
+        serviceDeps: {
+          cwd: tempDir,
+          fetchTelegramBotIdentity: async () => ({ firstName: "Channel Bot", username: "channel_bot" }),
+        },
+      });
+
+      expect(handled).toBe(true);
+      expect(messages[0]).toContain("Bot token configured: yes");
+      expect(messages[0]).toContain("Bot identity: Channel Bot (@channel_bot)");
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps status usable when bot identity lookup fails", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
+    const messages: string[] = [];
+    const stateDir = path.join(tempDir, ".codex", "channels", "telegram", "alpha");
+    const envPath = path.join(stateDir, ".env");
+
+    try {
+      await mkdir(stateDir, { recursive: true });
+      await writeFile(envPath, 'TELEGRAM_BOT_TOKEN="secret-token"\n', "utf8");
+
+      const handled = await runCli(["telegram", "service", "status", "--instance", "alpha"], {
+        env: { USERPROFILE: tempDir },
+        logger: { log: (message) => messages.push(message) },
+        serviceDeps: {
+          cwd: tempDir,
+          fetchTelegramBotIdentity: async () => {
+            throw new Error("temporary Telegram failure");
+          },
+        },
+      });
+
+      expect(handled).toBe(true);
+      expect(messages[0]).toContain("Bot token configured: yes");
+      expect(messages[0]).toContain("Bot identity lookup failed: temporary Telegram failure");
+      expect(messages[0]).toContain("State dir:");
     } finally {
       await rm(tempDir, { recursive: true, force: true });
     }

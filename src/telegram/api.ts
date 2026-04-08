@@ -43,12 +43,27 @@ export interface TelegramFile {
   file_path: string;
 }
 
+export interface TelegramBotIdentity {
+  first_name: string;
+  username?: string;
+}
+
 function isTelegramMessage(value: unknown): value is TelegramMessage {
   return typeof value === "object" && value !== null && "message_id" in value && typeof value.message_id === "number";
 }
 
 function isTelegramFile(value: unknown): value is TelegramFile {
   return typeof value === "object" && value !== null && "file_path" in value && typeof value.file_path === "string";
+}
+
+function isTelegramBotIdentity(value: unknown): value is TelegramBotIdentity {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "first_name" in value &&
+    typeof value.first_name === "string" &&
+    (!("username" in value) || typeof value.username === "string")
+  );
 }
 
 function isTelegramUpdateArray(value: unknown): value is unknown[] {
@@ -147,5 +162,9 @@ export class TelegramApi {
     }
 
     return this.postJson("getUpdates", body, isTelegramUpdateArray);
+  }
+
+  async getMe(): Promise<TelegramBotIdentity> {
+    return this.postJson("getMe", {}, isTelegramBotIdentity);
   }
 }
