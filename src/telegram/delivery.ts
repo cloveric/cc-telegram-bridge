@@ -99,6 +99,7 @@ export async function handleNormalizedTelegramMessage(
   try {
     const placeholder = await context.api.sendMessage(normalized.chatId, renderWorkingMessage());
     placeholderMessageId = placeholder.message_id;
+    await context.api.editMessage(normalized.chatId, placeholderMessageId, "Checking access...");
 
     const accessDecision = await context.bridge.checkAccess({
       chatId: normalized.chatId,
@@ -124,7 +125,16 @@ export async function handleNormalizedTelegramMessage(
       return;
     }
 
+    if (normalized.attachments.length > 0) {
+      await context.api.editMessage(
+        normalized.chatId,
+        placeholderMessageId,
+        `Downloading ${normalized.attachments.length} attachment${normalized.attachments.length === 1 ? "" : "s"}...`,
+      );
+    }
+
     const files = await downloadAttachments(context.api, context.inboxDir, normalized.attachments);
+    await context.api.editMessage(normalized.chatId, placeholderMessageId, "Running Codex...");
     const result = await context.bridge.handleAuthorizedMessage({
       chatId: normalized.chatId,
       userId: normalized.userId,

@@ -507,6 +507,9 @@ describe("polling helpers", () => {
 
       expect(api.getFile).toHaveBeenCalledTimes(2);
       expect(api.downloadFile).toHaveBeenCalledTimes(2);
+      expect(api.editMessage).toHaveBeenNthCalledWith(1, 123, 11, "Checking access...");
+      expect(api.editMessage).toHaveBeenNthCalledWith(2, 123, 11, "Downloading 2 attachments...");
+      expect(api.editMessage).toHaveBeenNthCalledWith(3, 123, 11, "Running Codex...");
       expect(bridge.handleAuthorizedMessage).toHaveBeenCalledWith({
         chatId: 123,
         userId: 456,
@@ -552,7 +555,9 @@ describe("polling helpers", () => {
     );
 
     expect(api.sendMessage).toHaveBeenCalledWith(123, renderWorkingMessage());
-    expect(api.editMessage).toHaveBeenCalledWith(123, 11, "final response");
+    expect(api.editMessage).toHaveBeenNthCalledWith(1, 123, 11, "Checking access...");
+    expect(api.editMessage).toHaveBeenNthCalledWith(2, 123, 11, "Running Codex...");
+    expect(api.editMessage).toHaveBeenNthCalledWith(3, 123, 11, "final response");
   });
 
   it("edits the placeholder to an error message when the bridge throws", async () => {
@@ -651,8 +656,10 @@ describe("polling helpers", () => {
       ),
     ).rejects.toThrow("send failed");
 
-    expect(api.editMessage).toHaveBeenCalledTimes(1);
-    expect(api.editMessage).toHaveBeenCalledWith(123, 11, "a".repeat(4000));
+    expect(api.editMessage).toHaveBeenCalledTimes(3);
+    expect(api.editMessage).toHaveBeenNthCalledWith(1, 123, 11, "Checking access...");
+    expect(api.editMessage).toHaveBeenNthCalledWith(2, 123, 11, "Running Codex...");
+    expect(api.editMessage).toHaveBeenNthCalledWith(3, 123, 11, "a".repeat(4000));
     expect(api.sendMessage).toHaveBeenNthCalledWith(2, 123, "a".repeat(500));
     expect(api.sendMessage).toHaveBeenNthCalledWith(3, 123, renderErrorMessage("send failed"));
   });
