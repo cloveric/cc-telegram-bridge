@@ -21,7 +21,7 @@ export class JsonStore<T> {
     await mkdir(path.dirname(this.filePath), { recursive: true });
 
     const tmpPath = `${this.filePath}.tmp`;
-    await writeFile(tmpPath, JSON.stringify(value), "utf8");
+    await writeFile(tmpPath, JSON.stringify(value, null, 2), "utf8");
     await rename(tmpPath, this.filePath);
   }
 }

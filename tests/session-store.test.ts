@@ -26,7 +26,7 @@ describe("JsonStore", () => {
       await store.write(value);
 
       const onDisk = await readFile(filePath, "utf8");
-      expect(onDisk).toBe(JSON.stringify(value));
+      expect(onDisk).toBe(JSON.stringify(value, null, 2));
       await expect(stat(`${filePath}.tmp`)).rejects.toMatchObject({ code: "ENOENT" });
 
       const readBack = await store.read({ chats: [] });
