@@ -3,14 +3,13 @@
     "target": "ES2022",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
-    "strict": true,
-    "rootDir": ".",
     "outDir": "dist",
-    "types": ["node"],
+    "rootDir": ".",
+    "strict": true,
+    "esModuleInterop": true,
     "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
-    "noEmitOnError": true
+    "resolveJsonModule": true,
+    "types": ["node", "vitest/globals"]
   },
-  "include": ["src/**/*.ts", "tests/**/*.ts"],
-  "exclude": ["dist", "node_modules"]
+  "include": ["src/**/*.ts", "tests/**/*.ts"]
 }
