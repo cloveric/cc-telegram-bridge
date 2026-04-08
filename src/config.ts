@@ -9,6 +9,14 @@ export interface EnvSource {
   CODEX_EXECUTABLE?: string;
 }
 
+function joinStatePath(base: string, segment: string): string {
+  if (base.includes("/") && !base.includes("\\")) {
+    return path.posix.join(base, segment);
+  }
+
+  return path.win32.join(base, segment);
+}
+
 export function resolveConfig(env: EnvSource = process.env): AppConfig {
   const userProfile = env.USERPROFILE;
   if (!userProfile) {
@@ -27,10 +35,10 @@ export function resolveConfig(env: EnvSource = process.env): AppConfig {
   return {
     telegramBotToken,
     stateDir,
-    inboxDir: path.win32.join(stateDir, "inbox"),
-    accessStatePath: path.win32.join(stateDir, "access.json"),
-    sessionStatePath: path.win32.join(stateDir, "session.json"),
-    runtimeLogPath: path.win32.join(stateDir, "runtime.log"),
+    inboxDir: joinStatePath(stateDir, "inbox"),
+    accessStatePath: joinStatePath(stateDir, "access.json"),
+    sessionStatePath: joinStatePath(stateDir, "session.json"),
+    runtimeLogPath: joinStatePath(stateDir, "runtime.log"),
     codexExecutable: env.CODEX_EXECUTABLE ?? "codex",
   };
 }
