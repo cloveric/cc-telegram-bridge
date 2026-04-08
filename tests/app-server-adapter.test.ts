@@ -164,6 +164,10 @@ describe("CodexAppServerAdapter", () => {
       expect(calls[0]?.options.env?.CODEX_HOME).toBe(engineHomePath);
 
       child.stdout.emitData('{"method":"turn/completed","params":{"threadId":"thread-123","turn":{"id":"turn-1","items":[],"status":"completed","error":null}}}\n');
+      await waitFor(() => child.stdin.lines.length >= 4);
+      const threadRead = JSON.parse(child.stdin.lines[3] ?? "{}");
+      expect(threadRead.method).toBe("thread/read");
+      child.stdout.emitData('{"id":4,"result":{"thread":{"turns":[{"id":"turn-1","items":[{"type":"agentMessage","text":"READY isolated"}]}]}}}\n');
       await promise;
     } finally {
       await rm(root, { recursive: true, force: true });
@@ -234,6 +238,33 @@ describe("CodexAppServerAdapter", () => {
 
     await expect(second).resolves.toEqual({
       text: "done-2",
+    });
+  });
+
+  it("falls back to thread/read when turn completion arrives before agent text events", async () => {
+    const { child, spawnFn } = createSpawnHarness();
+    const adapter = new CodexAppServerAdapter("codex", process.cwd(), spawnFn);
+
+    const promise = adapter.sendUserMessage("telegram-12345", {
+      text: "Hello",
+      files: [],
+    });
+
+    await waitFor(() => child.stdin.lines.length >= 1);
+    child.stdout.emitData('{"id":1,"result":{"platformOs":"windows"}}\n');
+    await waitFor(() => child.stdin.lines.length >= 2);
+    child.stdout.emitData('{"id":2,"result":{"thread":{"id":"thread-123"}}}\n');
+    await waitFor(() => child.stdin.lines.length >= 3);
+
+    child.stdout.emitData('{"method":"turn/completed","params":{"threadId":"thread-123","turn":{"id":"turn-1","items":[],"status":"completed","error":null}}}\n');
+    await waitFor(() => child.stdin.lines.length >= 4);
+    const threadRead = JSON.parse(child.stdin.lines[3] ?? "{}");
+    expect(threadRead.method).toBe("thread/read");
+    child.stdout.emitData('{"id":4,"result":{"thread":{"turns":[{"id":"turn-1","items":[{"type":"agentMessage","text":"READY via thread read"}]}]}}}\n');
+
+    await expect(promise).resolves.toEqual({
+      text: "READY via thread read",
+      sessionId: "thread-123",
     });
   });
 });

@@ -54,6 +54,7 @@ type PendingRequest = {
 type PendingTurn = {
   chunks: string[];
   finalText?: string;
+  turnId?: string;
   resolve: (text: string) => void;
   reject: (error: Error) => void;
 };
@@ -296,6 +297,13 @@ export class CodexAppServerAdapter implements CodexAdapter {
 
     if (parsed.method === "turn/completed") {
       const threadId = this.readString(parsed.params?.threadId);
+      const turnId =
+        typeof parsed.params?.turn === "object" &&
+        parsed.params?.turn !== null &&
+        "id" in parsed.params.turn &&
+        typeof (parsed.params.turn as { id?: unknown }).id === "string"
+          ? (parsed.params.turn as { id: string }).id
+          : undefined;
       if (!threadId) {
         return;
       }
@@ -306,8 +314,7 @@ export class CodexAppServerAdapter implements CodexAdapter {
       }
 
       this.pendingTurns.delete(threadId);
-      const text = pending.finalText ?? pending.chunks.join("");
-      pending.resolve(text);
+      void this.completeTurn(threadId, turnId, pending);
       return;
     }
   }
@@ -402,6 +409,48 @@ export class CodexAppServerAdapter implements CodexAdapter {
     });
 
     return pending;
+  }
+
+  private async completeTurn(threadId: string, turnId: string | undefined, pending: PendingTurn): Promise<void> {
+    let text = pending.finalText ?? pending.chunks.join("");
+
+    if (!text) {
+      text = await this.readTurnText(threadId, turnId);
+    }
+
+    pending.resolve(text);
+  }
+
+  private async readTurnText(threadId: string, turnId: string | undefined): Promise<string> {
+    const result = (await this.request("thread/read", {
+      threadId,
+      includeTurns: true,
+    })) as {
+      thread?: {
+        turns?: Array<{
+          id?: string;
+          items?: Array<{
+            type?: string;
+            text?: string;
+          }>;
+        }>;
+      };
+    };
+
+    const turns = result.thread?.turns ?? [];
+    const targetTurn =
+      (turnId ? turns.find((turn) => turn.id === turnId) : undefined) ??
+      turns.at(-1);
+
+    const items = targetTurn?.items ?? [];
+    for (let index = items.length - 1; index >= 0; index--) {
+      const item = items[index];
+      if (item?.type === "agentMessage" && typeof item.text === "string" && item.text.trim()) {
+        return item.text;
+      }
+    }
+
+    return "";
   }
 
   private failAllPending(error: Error): void {
