@@ -7,6 +7,7 @@ import { Bridge } from "./runtime/bridge.js";
 import { ProcessCodexAdapter } from "./codex/process-adapter.js";
 import { ProcessClaudeAdapter } from "./codex/claude-adapter.js";
 import { CodexAppServerAdapter } from "./codex/app-server-adapter.js";
+import { ClaudeStreamAdapter } from "./codex/claude-stream-adapter.js";
 import type { CodexAdapter } from "./codex/adapter.js";
 import { AccessStore } from "./state/access-store.js";
 import { appendAuditEvent } from "./state/audit-log.js";
@@ -245,7 +246,7 @@ async function createAdapter(
 
   if (engine === "claude") {
     await mkdir(workspacePath, { recursive: true });
-    return new ProcessClaudeAdapter(resolveClaudeExecutable(env), {
+    return new ClaudeStreamAdapter(resolveClaudeExecutable(env), {
       instructionsPath,
       configPath,
       workspacePath,

@@ -17,7 +17,7 @@ import { handleNormalizedTelegramMessage } from "../src/telegram/delivery.js";
 import { renderErrorMessage, renderWorkingMessage } from "../src/telegram/message-renderer.js";
 import { CodexAppServerAdapter } from "../src/codex/app-server-adapter.js";
 import { ProcessCodexAdapter } from "../src/codex/process-adapter.js";
-import { ProcessClaudeAdapter } from "../src/codex/claude-adapter.js";
+import { ClaudeStreamAdapter } from "../src/codex/claude-stream-adapter.js";
 
 function createDeferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
@@ -168,7 +168,7 @@ describe("createServiceDependenciesForInstance", () => {
         "alpha",
       );
 
-      expect((result.bridge as any).adapter).toBeInstanceOf(ProcessClaudeAdapter);
+      expect((result.bridge as any).adapter).toBeInstanceOf(ClaudeStreamAdapter);
     } finally {
       await rm(root, { recursive: true, force: true });
     }

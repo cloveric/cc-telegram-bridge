@@ -1,0 +1,352 @@
+import { spawn } from "node:child_process";
+import { readFile } from "node:fs/promises";
+
+import type {
+  CodexAdapter,
+  CodexAdapterResponse,
+  CodexSessionHandle,
+  CodexUserMessageInput,
+} from "./adapter.js";
+import type { ApprovalMode } from "./process-adapter.js";
+
+type SpawnOptions = {
+  stdio: ["pipe", "pipe", "pipe"];
+  shell?: boolean;
+  env?: NodeJS.ProcessEnv;
+  cwd?: string;
+  windowsHide?: boolean;
+};
+
+type ProcessStreamLike = {
+  on(event: "data", listener: (chunk: { toString(): string } | string) => void): void;
+};
+
+type Writable = {
+  write(chunk: string, callback?: (error?: Error | null) => void): boolean;
+};
+
+type ClaudeChildProcess = {
+  stdin?: Writable;
+  stdout?: ProcessStreamLike;
+  stderr?: ProcessStreamLike;
+  kill?: () => void;
+  once(event: "error", listener: (error: Error) => void): void;
+  once(event: "close", listener: (code: number | null) => void): void;
+};
+
+type SpawnClaude = (command: string, args: string[], options: SpawnOptions) => ClaudeChildProcess;
+
+type ClaudeStreamEvent = {
+  type?: string;
+  subtype?: string;
+  session_id?: string;
+  result?: string;
+  is_error?: boolean;
+  message?: {
+    content?: Array<{
+      type?: string;
+      text?: string;
+    }>;
+  };
+};
+
+type PendingTurn = {
+  assistantText: string;
+  resolve: (value: CodexAdapterResponse) => void;
+  reject: (error: Error) => void;
+};
+
+type ClaudeWorker = {
+  child: ClaudeChildProcess;
+  lineBuffer: string;
+  currentSessionId: string | null;
+  pendingTurn: PendingTurn | null;
+};
+
+const MAX_INSTRUCTIONS_CHARS = 16_000;
+
+function isLogicalTelegramSessionId(sessionId: string): boolean {
+  return sessionId.startsWith("telegram-");
+}
+
+function normalizeExecutableCommand(command: string): string {
+  const trimmed = command.trim();
+
+  if (trimmed.length >= 2 && trimmed.startsWith("\"") && trimmed.endsWith("\"")) {
+    return trimmed.slice(1, -1);
+  }
+
+  return trimmed;
+}
+
+function buildCommandInvocation(command: string, args: string[]): { command: string; args: string[]; shell?: boolean } {
+  const normalizedCommand = normalizeExecutableCommand(command);
+
+  if (/\.(cmd|bat)$/i.test(normalizedCommand)) {
+    return {
+      command: process.env.ComSpec ?? "cmd.exe",
+      args: ["/d", "/s", "/c", normalizedCommand, ...args],
+    };
+  }
+
+  if (/\.ps1$/i.test(normalizedCommand)) {
+    return {
+      command: "pwsh",
+      args: ["-NoProfile", "-File", normalizedCommand, ...args],
+    };
+  }
+
+  return { command: normalizedCommand, args, shell: false };
+}
+
+export class ClaudeStreamAdapter implements CodexAdapter {
+  private readonly childEnv: NodeJS.ProcessEnv;
+  private readonly spawnClaude: SpawnClaude;
+  private readonly instructionsPath: string | undefined;
+  private readonly configPath: string | undefined;
+  private readonly workspacePath: string | undefined;
+  private readonly workers = new Map<string, ClaudeWorker>();
+
+  constructor(
+    private readonly claudeExecutable: string,
+    options?: {
+      childEnv?: NodeJS.ProcessEnv;
+      spawnFn?: SpawnClaude;
+      instructionsPath?: string;
+      configPath?: string;
+      workspacePath?: string;
+    },
+  ) {
+    this.childEnv = options?.childEnv ?? (() => {
+      const env = { ...process.env };
+      delete env.TELEGRAM_BOT_TOKEN;
+      return env;
+    })();
+
+    this.spawnClaude = options?.spawnFn ?? (spawn as unknown as SpawnClaude);
+    this.instructionsPath = options?.instructionsPath;
+    this.configPath = options?.configPath;
+    this.workspacePath = options?.workspacePath;
+  }
+
+  async createSession(chatId: number): Promise<CodexSessionHandle> {
+    return { sessionId: `telegram-${chatId}` };
+  }
+
+  private async loadInstructions(): Promise<string | null> {
+    if (!this.instructionsPath) {
+      return null;
+    }
+
+    try {
+      const content = await readFile(this.instructionsPath, "utf8");
+      const trimmed = content.trim();
+      if (!trimmed) {
+        return null;
+      }
+
+      if (trimmed.length <= MAX_INSTRUCTIONS_CHARS) {
+        return trimmed;
+      }
+
+      return `${trimmed.slice(0, MAX_INSTRUCTIONS_CHARS)}\n\n[Instructions truncated at ${MAX_INSTRUCTIONS_CHARS} characters]`;
+    } catch {
+      return null;
+    }
+  }
+
+  private async loadApprovalMode(): Promise<ApprovalMode> {
+    if (!this.configPath) {
+      return "normal";
+    }
+
+    try {
+      const raw = await readFile(this.configPath, "utf8");
+      const parsed = JSON.parse(raw) as { approvalMode?: string };
+      const mode = parsed.approvalMode;
+      if (mode === "full-auto" || mode === "bypass") {
+        return mode;
+      }
+      return "normal";
+    } catch {
+      return "normal";
+    }
+  }
+
+  async sendUserMessage(sessionId: string, input: CodexUserMessageInput): Promise<CodexAdapterResponse> {
+    const instructions = input.instructions ?? (this.instructionsPath ? await this.loadInstructions() : null);
+    const approvalMode = this.configPath ? await this.loadApprovalMode() : "normal";
+    const prompt = this.buildPrompt(input, instructions);
+    const worker = this.getOrCreateWorker(sessionId, instructions, approvalMode);
+
+    const response = await this.sendTurn(worker, prompt);
+    const nextSessionId = response.sessionId;
+    if (nextSessionId && nextSessionId !== sessionId) {
+      this.workers.delete(sessionId);
+      this.workers.set(nextSessionId, worker);
+    }
+
+    return {
+      text: response.text,
+      sessionId: nextSessionId && nextSessionId !== sessionId ? nextSessionId : undefined,
+    };
+  }
+
+  private buildPrompt(input: CodexUserMessageInput, instructions: string | null): string {
+    const parts: string[] = [];
+    if (instructions) {
+      parts.push(`[System Instructions]\n${instructions}\n[End Instructions]`);
+    }
+    parts.push(input.text);
+    parts.push(...input.files.map((file) => `Attachment: ${file}`));
+    return parts.join("\n");
+  }
+
+  private getOrCreateWorker(sessionId: string, instructions: string | null, approvalMode: ApprovalMode): ClaudeWorker {
+    const existing = this.workers.get(sessionId);
+    if (existing) {
+      return existing;
+    }
+
+    const args = ["-p", "--verbose", "--input-format", "stream-json", "--output-format", "stream-json"];
+    if (instructions) {
+      args.push("--system-prompt", instructions);
+    }
+    if (!isLogicalTelegramSessionId(sessionId)) {
+      args.push("-r", sessionId);
+    }
+    if (approvalMode === "bypass") {
+      args.push("--dangerously-skip-permissions");
+    } else if (approvalMode === "full-auto") {
+      args.push("--permission-mode", "bypassPermissions");
+    }
+    if (this.workspacePath) {
+      args.push("--add-dir", this.workspacePath);
+    }
+
+    const invocation = buildCommandInvocation(this.claudeExecutable, args);
+    const child = this.spawnClaude(invocation.command, invocation.args, {
+      stdio: ["pipe", "pipe", "pipe"],
+      shell: invocation.shell,
+      env: this.childEnv,
+      cwd: this.workspacePath,
+      windowsHide: true,
+    });
+
+    const worker: ClaudeWorker = {
+      child,
+      lineBuffer: "",
+      currentSessionId: isLogicalTelegramSessionId(sessionId) ? null : sessionId,
+      pendingTurn: null,
+    };
+
+    child.stdout?.on("data", (chunk) => {
+      this.handleStdout(worker, chunk.toString());
+    });
+
+    child.stderr?.on("data", () => {
+      // Claude stream-json emits structured events on stdout; stderr is only used on hard failure.
+    });
+
+    child.once("error", (error) => {
+      this.failWorker(worker, error);
+    });
+
+    child.once("close", (code) => {
+      this.failWorker(worker, new Error(`claude stream session exited with code ${code}`));
+      if (worker.currentSessionId) {
+        this.workers.delete(worker.currentSessionId);
+      }
+    });
+
+    this.workers.set(sessionId, worker);
+    return worker;
+  }
+
+  private handleStdout(worker: ClaudeWorker, chunk: string): void {
+    worker.lineBuffer += chunk;
+    const lines = worker.lineBuffer.split(/\r?\n/);
+    worker.lineBuffer = lines.pop() ?? "";
+
+    for (const line of lines.map((value) => value.trim()).filter(Boolean)) {
+      this.handleMessage(worker, line);
+    }
+  }
+
+  private handleMessage(worker: ClaudeWorker, line: string): void {
+    let parsed: ClaudeStreamEvent;
+    try {
+      parsed = JSON.parse(line) as ClaudeStreamEvent;
+    } catch {
+      return;
+    }
+
+    if (parsed.session_id) {
+      worker.currentSessionId = parsed.session_id;
+    }
+
+    if (parsed.type === "assistant" && worker.pendingTurn) {
+      const text =
+        parsed.message?.content
+          ?.filter((item) => item.type === "text" && typeof item.text === "string")
+          .map((item) => item.text ?? "")
+          .join("") ?? "";
+      if (text) {
+        worker.pendingTurn.assistantText = text;
+      }
+      return;
+    }
+
+    if (parsed.type === "result" && worker.pendingTurn) {
+      const pending = worker.pendingTurn;
+      worker.pendingTurn = null;
+      pending.resolve({
+        text: (parsed.result ?? pending.assistantText ?? "").trim() || "Claude completed the request.",
+        sessionId: worker.currentSessionId ?? undefined,
+      });
+    }
+  }
+
+  private async sendTurn(worker: ClaudeWorker, prompt: string): Promise<CodexAdapterResponse> {
+    if (worker.pendingTurn) {
+      throw new Error("Claude session already has an in-flight turn");
+    }
+
+    return await new Promise<CodexAdapterResponse>((resolve, reject) => {
+      worker.pendingTurn = {
+        assistantText: "",
+        resolve,
+        reject,
+      };
+
+      worker.child.stdin?.write(
+        JSON.stringify({
+          type: "user",
+          message: {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: prompt,
+              },
+            ],
+          },
+        }) + "\n",
+        (error) => {
+          if (error) {
+            worker.pendingTurn = null;
+            reject(error);
+          }
+        },
+      );
+    });
+  }
+
+  private failWorker(worker: ClaudeWorker, error: Error): void {
+    if (worker.pendingTurn) {
+      const pending = worker.pendingTurn;
+      worker.pendingTurn = null;
+      pending.reject(error);
+    }
+  }
+}
