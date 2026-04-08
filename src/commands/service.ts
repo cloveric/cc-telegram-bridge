@@ -20,6 +20,7 @@ export interface ServiceCommandDeps {
   spawnDetached?: (command: string, args: string[], options: { cwd: string; stdoutPath: string; stderrPath: string }) => void;
   sleep?: (ms: number) => Promise<void>;
   killProcessTree?: (pid: number) => void;
+  readTextFile?: (filePath: string) => Promise<string>;
   readConfiguredBotToken?: (env: ServiceCommandEnv, instanceName: string) => Promise<string | null>;
   fetchTelegramBotIdentity?: (botToken: string) => Promise<{ firstName: string; username?: string }>;
 }
@@ -212,6 +213,11 @@ async function readLastNonEmptyLine(filePath: string): Promise<string | undefine
   }
 }
 
+function tailLines(text: string, maxLines = 40): string {
+  const lines = text.split(/\r?\n/).filter((line) => line.length > 0);
+  return lines.slice(-maxLines).join("\n");
+}
+
 export function resolveServicePaths(
   env: ServiceCommandEnv,
   instanceName: string,
@@ -381,4 +387,51 @@ export async function getServiceStatus(
     botIdentityWarning,
     lastErrorLine,
   };
+}
+
+export async function getServiceLogs(
+  env: ServiceCommandEnv,
+  instanceName: string,
+  deps: ServiceCommandDeps = {},
+): Promise<string> {
+  const cwd = deps.cwd ?? process.cwd();
+  const paths = resolveServicePaths(env, instanceName, cwd);
+  const readTextFile = deps.readTextFile ?? ((filePath: string) => readFile(filePath, "utf8"));
+
+  let stdout = "";
+  let stderr = "";
+
+  try {
+    stdout = await readTextFile(paths.stdoutPath);
+  } catch (error) {
+    if (
+      typeof error !== "object" ||
+      error === null ||
+      !("code" in error) ||
+      (error as NodeJS.ErrnoException).code !== "ENOENT"
+    ) {
+      throw error;
+    }
+  }
+
+  try {
+    stderr = await readTextFile(paths.stderrPath);
+  } catch (error) {
+    if (
+      typeof error !== "object" ||
+      error === null ||
+      !("code" in error) ||
+      (error as NodeJS.ErrnoException).code !== "ENOENT"
+    ) {
+      throw error;
+    }
+  }
+
+  return [
+    `Instance: ${normalizeInstanceName(instanceName)}`,
+    "--- stdout ---",
+    tailLines(stdout) || "(empty)",
+    "--- stderr ---",
+    tailLines(stderr) || "(empty)",
+  ].join("\n");
 }

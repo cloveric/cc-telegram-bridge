@@ -158,6 +158,34 @@ describe("telegram service commands", () => {
     }
   });
 
+  it("returns tailed service logs", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
+    const messages: string[] = [];
+
+    try {
+      const handled = await runCli(["telegram", "service", "logs", "--instance", "alpha"], {
+        env: { USERPROFILE: tempDir },
+        logger: { log: (message) => messages.push(message) },
+        serviceDeps: {
+          cwd: tempDir,
+          readTextFile: async (filePath: string) =>
+            filePath.endsWith("stdout.log")
+              ? "line-1\nline-2\nline-3\n"
+              : "err-1\nerr-2\n",
+        },
+      });
+
+      expect(handled).toBe(true);
+      expect(messages[0]).toContain("Instance: alpha");
+      expect(messages[0]).toContain("--- stdout ---");
+      expect(messages[0]).toContain("line-3");
+      expect(messages[0]).toContain("--- stderr ---");
+      expect(messages[0]).toContain("err-2");
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
   it("stops a running instance through the CLI", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
     const messages: string[] = [];

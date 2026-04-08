@@ -3,6 +3,7 @@ import { AccessStore } from "../state/access-store.js";
 import { normalizeInstanceName } from "../instance.js";
 import { resolveInstanceAccessStatePath, type InstanceTokenEnv, writeInstanceBotToken } from "./access.js";
 import {
+  getServiceLogs,
   getServiceStatus,
   startServiceInstance,
   stopServiceInstance,
@@ -215,7 +216,7 @@ async function runServiceCommand(
   serviceDeps: ServiceCommandDeps,
 ): Promise<boolean> {
   if (argv.length < 2) {
-    throw new Error("Usage: telegram service <start|stop|status> ...");
+    throw new Error("Usage: telegram service <start|stop|status|logs> ...");
   }
 
   const subcommand = argv[1];
@@ -240,7 +241,12 @@ async function runServiceCommand(
     return true;
   }
 
-  throw new Error("Usage: telegram service <start|stop|status> ...");
+  if (subcommand === "logs") {
+    logger.log(await getServiceLogs(env, instanceName, serviceDeps));
+    return true;
+  }
+
+  throw new Error("Usage: telegram service <start|stop|status|logs> ...");
 }
 
 export async function runCli(argv: string[], options: CliOptions = {}): Promise<boolean> {
