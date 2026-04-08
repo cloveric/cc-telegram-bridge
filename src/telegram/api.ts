@@ -5,34 +5,38 @@ export class TelegramApi {
     return `https://api.telegram.org/bot${this.botToken}/${method}`;
   }
 
-  async sendMessage(chatId: number, text: string): Promise<unknown> {
-    const response = await fetch(this.buildUrl("sendMessage"), {
+  private async postJson(method: string, body: Record<string, unknown>): Promise<unknown> {
+    const response = await fetch(this.buildUrl(method), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        chat_id: chatId,
-        text,
-      }),
+      body: JSON.stringify(body),
     });
 
-    return response.json();
+    if (!response.ok) {
+      throw new Error(`Telegram API request failed for ${method}: ${response.status} ${response.statusText}`);
+    }
+
+    try {
+      return await response.json();
+    } catch {
+      throw new Error(`Telegram API response was not valid JSON for ${method}`);
+    }
+  }
+
+  async sendMessage(chatId: number, text: string): Promise<unknown> {
+    return this.postJson("sendMessage", {
+      chat_id: chatId,
+      text,
+    });
   }
 
   async editMessage(chatId: number, messageId: number, text: string): Promise<unknown> {
-    const response = await fetch(this.buildUrl("editMessageText"), {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        chat_id: chatId,
-        message_id: messageId,
-        text,
-      }),
+    return this.postJson("editMessageText", {
+      chat_id: chatId,
+      message_id: messageId,
+      text,
     });
-
-    return response.json();
   }
 }
