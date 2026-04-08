@@ -8,54 +8,41 @@ import { SessionManager } from "../src/runtime/session-manager.js";
 import { SessionStore } from "../src/state/session-store.js";
 import type { CodexAdapter } from "../src/codex/adapter.js";
 
-function createDeferred<T>() {
-  let resolve!: (value: T | PromiseLike<T>) => void;
-  let reject!: (reason?: unknown) => void;
-  const promise = new Promise<T>((res, rej) => {
-    resolve = res;
-    reject = rej;
-  });
-
-  return { promise, resolve, reject };
-}
-
-async function waitForCalls<T>(assertion: () => T, timeoutMs = 1000): Promise<T> {
-  const start = Date.now();
-  while (true) {
-    try {
-      return assertion();
-    } catch (error) {
-      if (Date.now() - start >= timeoutMs) {
-        throw error;
-      }
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    }
-  }
-}
-
 describe("SessionManager", () => {
-  it("reuses a pending first session creation for the same chat", async () => {
+  it("returns a logical placeholder before a real thread is bound", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
     const sessionStore = new SessionStore(path.join(tempDir, "session.json"));
-    const creation = createDeferred<{ sessionId: string }>();
     const adapter: CodexAdapter = {
-      createSession: vi.fn().mockReturnValue(creation.promise),
+      createSession: vi.fn(),
       sendUserMessage: vi.fn(),
     };
     const manager = new SessionManager(sessionStore, adapter);
 
     try {
-      const first = manager.getOrCreateSession(84);
-      const second = manager.getOrCreateSession(84);
-
-      await waitForCalls(() => {
-        expect(adapter.createSession).toHaveBeenCalledTimes(1);
+      await expect(manager.getOrCreateSession(84)).resolves.toEqual({
+        sessionId: "telegram-84",
       });
+      expect(adapter.createSession).not.toHaveBeenCalled();
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
 
-      creation.resolve({ sessionId: "telegram-84" });
+  it("returns a bound thread id after the chat is persisted", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
+    const sessionStore = new SessionStore(path.join(tempDir, "session.json"));
+    const adapter: CodexAdapter = {
+      createSession: vi.fn(),
+      sendUserMessage: vi.fn(),
+    };
+    const manager = new SessionManager(sessionStore, adapter);
 
-      await expect(first).resolves.toEqual({ sessionId: "telegram-84" });
-      await expect(second).resolves.toEqual({ sessionId: "telegram-84" });
+    try {
+      await manager.bindSession(84, "thread-123");
+
+      await expect(manager.getOrCreateSession(84)).resolves.toEqual({
+        sessionId: "thread-123",
+      });
     } finally {
       await rm(tempDir, { recursive: true, force: true });
     }

@@ -4,6 +4,7 @@ export interface CodexSessionHandle {
 
 export interface CodexAdapterResponse {
   text: string;
+  sessionId?: string;
 }
 
 export interface CodexUserMessageInput {

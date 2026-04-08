@@ -21,6 +21,7 @@ describe("Bridge", () => {
     };
     const sessionManager: SessionManagerLike = {
       getOrCreateSession: vi.fn().mockResolvedValue({ sessionId: "telegram-84" }),
+      bindSession: vi.fn(),
     };
     const adapter: CodexAdapter = {
       sendUserMessage: vi.fn().mockResolvedValue({ text: "done" }),
@@ -42,6 +43,7 @@ describe("Bridge", () => {
       files: [],
     });
     expect(result.text).toBe("done");
+    expect(sessionManager.bindSession).not.toHaveBeenCalled();
   });
 
   it("rejects a message when the chat is not on the allowlist", async () => {
@@ -56,6 +58,7 @@ describe("Bridge", () => {
     };
     const sessionManager: SessionManagerLike = {
       getOrCreateSession: vi.fn(),
+      bindSession: vi.fn(),
     };
     const adapter: CodexAdapter = {
       sendUserMessage: vi.fn(),
@@ -90,6 +93,7 @@ describe("Bridge", () => {
     };
     const sessionManager: SessionManagerLike = {
       getOrCreateSession: vi.fn(),
+      bindSession: vi.fn(),
     };
     const adapter: CodexAdapter = {
       sendUserMessage: vi.fn(),
@@ -134,6 +138,7 @@ describe("Bridge", () => {
     };
     const sessionManager: SessionManagerLike = {
       getOrCreateSession: vi.fn().mockResolvedValue({ sessionId: "telegram-84" }),
+      bindSession: vi.fn(),
     };
     const adapter: CodexAdapter = {
       sendUserMessage: vi.fn().mockResolvedValue({ text: "done" }),
@@ -169,6 +174,7 @@ describe("Bridge", () => {
 
       const sessionManager: SessionManagerLike = {
         getOrCreateSession: vi.fn(),
+        bindSession: vi.fn(),
       };
       const adapter: CodexAdapter = {
         sendUserMessage: vi.fn(),
@@ -189,5 +195,36 @@ describe("Bridge", () => {
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
+  });
+
+  it("persists a newly established codex thread id after the first message", async () => {
+    const accessStore: AccessStoreLike = {
+      load: vi.fn().mockResolvedValue({
+        policy: "pairing",
+        pairedUsers: [{ telegramChatId: 84 }],
+        allowlist: [],
+        pendingPairs: [],
+      }),
+      issuePairingCode: vi.fn(),
+    };
+    const sessionManager: SessionManagerLike = {
+      getOrCreateSession: vi.fn().mockResolvedValue({ sessionId: "telegram-84" }),
+      bindSession: vi.fn().mockResolvedValue(undefined),
+    };
+    const adapter: CodexAdapter = {
+      sendUserMessage: vi.fn().mockResolvedValue({ text: "done", sessionId: "thread-123" }),
+      createSession: vi.fn(),
+    };
+
+    const bridge = new Bridge(accessStore, sessionManager, adapter);
+    const result = await bridge.handleAuthorizedMessage({
+      chatId: 84,
+      userId: 42,
+      text: "hello",
+      files: [],
+    });
+
+    expect(result).toEqual({ text: "done", sessionId: "thread-123" });
+    expect(sessionManager.bindSession).toHaveBeenCalledWith(84, "thread-123");
   });
 });

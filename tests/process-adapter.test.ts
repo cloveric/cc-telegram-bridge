@@ -5,22 +5,11 @@ import { describe, expect, it } from "vitest";
 import { ProcessCodexAdapter } from "../src/codex/process-adapter.js";
 
 describe("ProcessCodexAdapter", () => {
-  it("creates a real codex thread-backed session", async () => {
-    const { spawnCodex, child, calls } = createSpawnHarness();
-    const adapter = new ProcessCodexAdapter("codex", spawnCodex);
-    const promise = adapter.createSession(12345);
-
-    child.stdout.emitData('{"type":"thread.started","thread_id":"thread-123"}\n');
-    child.stdout.emitData('{"type":"item.completed","item":{"type":"agent_message","text":"READY"}}\n');
-    child.close(0);
-
-    await expect(promise).resolves.toEqual({ sessionId: "thread-123" });
-    expect(calls).toEqual([
-      {
-        command: "codex",
-        args: ["exec", "--json", "Reply with exactly READY"],
-      },
-    ]);
+  it("creates a logical telegram session placeholder", async () => {
+    const adapter = new ProcessCodexAdapter("codex");
+    await expect(adapter.createSession(12345)).resolves.toEqual({
+      sessionId: "telegram-12345",
+    });
   });
 
   it("passes attachments into the generated prompt", async () => {
@@ -36,7 +25,7 @@ describe("ProcessCodexAdapter", () => {
     };
 
     const adapter = new ProcessCodexAdapter("codex", spawnCodex);
-    const promise = adapter.sendUserMessage("thread-123", {
+    const promise = adapter.sendUserMessage("telegram-12345", {
       text: "Hello",
       files: ["a.png", "b.pdf"],
     });
@@ -50,7 +39,7 @@ describe("ProcessCodexAdapter", () => {
     expect(calls).toEqual([
       {
         command: "codex",
-        args: ["exec", "resume", "--json", "thread-123", "Hello\nAttachment: a.png\nAttachment: b.pdf"],
+        args: ["exec", "--json", "Hello\nAttachment: a.png\nAttachment: b.pdf"],
       },
     ]);
   });
@@ -85,6 +74,25 @@ describe("ProcessCodexAdapter", () => {
 
     await expect(promise).resolves.toEqual({
       text: "Session thread-123 completed.",
+    });
+  });
+
+  it("returns a newly created thread id on the first real user message", async () => {
+    const { spawnCodex, child } = createSpawnHarness();
+    const adapter = new ProcessCodexAdapter("codex", spawnCodex);
+
+    const promise = adapter.sendUserMessage("telegram-12345", {
+      text: "Hello",
+      files: [],
+    });
+
+    child.stdout.emitData('{"type":"thread.started","thread_id":"thread-123"}\n');
+    child.stdout.emitData('{"type":"item.completed","item":{"type":"agent_message","text":"Hello back"}}\n');
+    child.close(0);
+
+    await expect(promise).resolves.toEqual({
+      text: "Hello back",
+      sessionId: "thread-123",
     });
   });
 

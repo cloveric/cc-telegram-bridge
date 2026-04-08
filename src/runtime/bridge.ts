@@ -20,6 +20,7 @@ export interface AccessStoreLike {
 
 export interface SessionManagerLike {
   getOrCreateSession(chatId: number): Promise<{ sessionId: string }>;
+  bindSession(chatId: number, sessionId: string): Promise<void>;
 }
 
 export class Bridge {
@@ -57,9 +58,15 @@ export class Bridge {
     }
 
     const session = await this.sessionManager.getOrCreateSession(input.chatId);
-    return this.adapter.sendUserMessage(session.sessionId, {
+    const response = await this.adapter.sendUserMessage(session.sessionId, {
       text: input.text,
       files: input.files,
     });
+
+    if (response.sessionId && response.sessionId !== session.sessionId) {
+      await this.sessionManager.bindSession(input.chatId, response.sessionId);
+    }
+
+    return response;
   }
 }

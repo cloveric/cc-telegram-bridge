@@ -37,8 +37,6 @@ type CodexJsonEvent =
       };
     };
 
-const INITIAL_SESSION_PROMPT = "Reply with exactly READY";
-
 function parseJsonEvents(stdout: string): CodexJsonEvent[] {
   const events: CodexJsonEvent[] = [];
 
@@ -100,14 +98,7 @@ export class ProcessCodexAdapter implements CodexAdapter {
   ) {}
 
   async createSession(chatId: number): Promise<CodexSessionHandle> {
-    const result = await this.runCodexJsonCommand(["exec", "--json", INITIAL_SESSION_PROMPT]);
-    const threadId = extractThreadId(parseJsonEvents(result.stdout));
-
-    if (!threadId) {
-      throw new Error(`Failed to initialize Codex session for chat ${chatId}`);
-    }
-
-    return { sessionId: threadId };
+    return { sessionId: `telegram-${chatId}` };
   }
 
   async sendUserMessage(sessionId: string, input: CodexUserMessageInput): Promise<CodexAdapterResponse> {
@@ -118,9 +109,11 @@ export class ProcessCodexAdapter implements CodexAdapter {
     const result = await this.runCodexJsonCommand(args);
     const events = parseJsonEvents(result.stdout);
     const lastAgentMessage = extractLastAgentMessage(events);
+    const threadId = extractThreadId(events);
 
     return {
       text: lastAgentMessage?.trim() || `Session ${sessionId} completed.`,
+      sessionId: threadId ?? undefined,
     };
   }
 
