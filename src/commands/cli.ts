@@ -27,7 +27,7 @@ export interface CliLogger {
 }
 
 export interface CliOptions {
-  env?: Pick<EnvSource, "USERPROFILE" | "CODEX_TELEGRAM_STATE_DIR" | "TELEGRAM_BOT_TOKEN">;
+  env?: Pick<EnvSource, "HOME" | "USERPROFILE" | "CODEX_TELEGRAM_STATE_DIR" | "TELEGRAM_BOT_TOKEN">;
   logger?: CliLogger;
   serviceDeps?: ServiceCommandDeps;
 }
@@ -120,10 +120,11 @@ function formatSessionList(
 }
 
 function resolveAuditStateDir(
-  env: Pick<EnvSource, "USERPROFILE" | "CODEX_TELEGRAM_STATE_DIR">,
+  env: Pick<EnvSource, "HOME" | "USERPROFILE" | "CODEX_TELEGRAM_STATE_DIR">,
   instanceName: string,
 ): string {
   return resolveInstanceStateDir({
+    HOME: env.HOME,
     USERPROFILE: env.USERPROFILE,
     CODEX_TELEGRAM_STATE_DIR: env.CODEX_TELEGRAM_STATE_DIR,
     CODEX_TELEGRAM_INSTANCE: instanceName,
@@ -469,10 +470,11 @@ async function runServiceCommand(
 }
 
 function resolveAgentMdPath(
-  env: Pick<EnvSource, "USERPROFILE" | "CODEX_TELEGRAM_STATE_DIR">,
+  env: Pick<EnvSource, "HOME" | "USERPROFILE" | "CODEX_TELEGRAM_STATE_DIR">,
   instanceName: string,
 ): string {
   const stateDir = resolveInstanceStateDir({
+    HOME: env.HOME,
     USERPROFILE: env.USERPROFILE,
     CODEX_TELEGRAM_STATE_DIR: env.CODEX_TELEGRAM_STATE_DIR,
     CODEX_TELEGRAM_INSTANCE: instanceName,
@@ -535,10 +537,11 @@ async function runInstructionsCommand(
 }
 
 function resolveConfigJsonPath(
-  env: Pick<EnvSource, "USERPROFILE" | "CODEX_TELEGRAM_STATE_DIR">,
+  env: Pick<EnvSource, "HOME" | "USERPROFILE" | "CODEX_TELEGRAM_STATE_DIR">,
   instanceName: string,
 ): string {
   const stateDir = resolveInstanceStateDir({
+    HOME: env.HOME,
     USERPROFILE: env.USERPROFILE,
     CODEX_TELEGRAM_STATE_DIR: env.CODEX_TELEGRAM_STATE_DIR,
     CODEX_TELEGRAM_INSTANCE: instanceName,

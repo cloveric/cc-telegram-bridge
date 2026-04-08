@@ -5,6 +5,7 @@ import { normalizeInstanceName } from "./instance.js";
 import type { AppConfig } from "./types.js";
 
 export interface EnvSource {
+  HOME?: string;
   APPDATA?: string;
   USERPROFILE?: string;
   TELEGRAM_BOT_TOKEN?: string;
@@ -12,6 +13,12 @@ export interface EnvSource {
   CODEX_TELEGRAM_STATE_DIR?: string;
   CODEX_EXECUTABLE?: string;
 }
+
+function resolveHomeDir(env: Pick<EnvSource, "HOME" | "USERPROFILE">): string | undefined {
+  return env.HOME ?? env.USERPROFILE;
+}
+
+const isWindows = process.platform === "win32";
 
 function normalizeExecutablePath(value: string): string {
   const trimmed = value.trim();
@@ -28,19 +35,21 @@ function resolveDefaultCodexExecutable(env: EnvSource): string {
     return normalizeExecutablePath(env.CODEX_EXECUTABLE);
   }
 
-  const appData =
-    env.APPDATA ??
-    (env.USERPROFILE ? path.win32.join(env.USERPROFILE, "AppData", "Roaming") : undefined);
+  if (isWindows) {
+    const appData =
+      env.APPDATA ??
+      (env.USERPROFILE ? path.join(env.USERPROFILE, "AppData", "Roaming") : undefined);
 
-  if (appData) {
-    const windowsCodexCmd = path.win32.join(appData, "npm", "codex.cmd");
-    if (existsSync(windowsCodexCmd)) {
-      return windowsCodexCmd;
-    }
+    if (appData) {
+      const windowsCodexCmd = path.join(appData, "npm", "codex.cmd");
+      if (existsSync(windowsCodexCmd)) {
+        return windowsCodexCmd;
+      }
 
-    const windowsCodexShim = path.win32.join(appData, "npm", "codex.ps1");
-    if (existsSync(windowsCodexShim)) {
-      return windowsCodexShim;
+      const windowsCodexShim = path.join(appData, "npm", "codex.ps1");
+      if (existsSync(windowsCodexShim)) {
+        return windowsCodexShim;
+      }
     }
   }
 
@@ -48,15 +57,11 @@ function resolveDefaultCodexExecutable(env: EnvSource): string {
 }
 
 export function joinStatePath(base: string, segment: string): string {
-  if (base.includes("/") && !base.includes("\\")) {
-    return path.posix.join(base, segment);
-  }
-
-  return path.win32.join(base, segment);
+  return path.join(base, segment);
 }
 
 export function resolveInstanceStateDir(
-  env: Pick<EnvSource, "USERPROFILE" | "CODEX_TELEGRAM_INSTANCE" | "CODEX_TELEGRAM_STATE_DIR"> = process.env,
+  env: Pick<EnvSource, "HOME" | "USERPROFILE" | "CODEX_TELEGRAM_INSTANCE" | "CODEX_TELEGRAM_STATE_DIR"> = process.env,
 ): string {
   const instanceName = normalizeInstanceName(env.CODEX_TELEGRAM_INSTANCE);
 
@@ -64,12 +69,12 @@ export function resolveInstanceStateDir(
     return env.CODEX_TELEGRAM_STATE_DIR;
   }
 
-  const userProfile = env.USERPROFILE;
-  if (!userProfile) {
-    throw new Error("USERPROFILE is required");
+  const homeDir = resolveHomeDir(env);
+  if (!homeDir) {
+    throw new Error("HOME or USERPROFILE is required");
   }
 
-  return path.win32.join(userProfile, ".codex", "channels", "telegram", instanceName);
+  return path.join(homeDir, ".codex", "channels", "telegram", instanceName);
 }
 
 export function resolveConfig(env: EnvSource = process.env): AppConfig {

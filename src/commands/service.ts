@@ -13,7 +13,7 @@ import { getLastHandledUpdateId, lookupTelegramBotIdentity, readConfiguredBotTok
 import { listSessions } from "./session.js";
 
 export interface ServiceCommandEnv
-  extends Pick<EnvSource, "USERPROFILE" | "CODEX_TELEGRAM_STATE_DIR" | "TELEGRAM_BOT_TOKEN"> {}
+  extends Pick<EnvSource, "HOME" | "USERPROFILE" | "CODEX_TELEGRAM_STATE_DIR" | "TELEGRAM_BOT_TOKEN"> {}
 
 export interface ServiceCommandDeps {
   cwd?: string;
@@ -93,18 +93,37 @@ function defaultIsProcessAlive(pid: number): boolean {
 }
 
 function defaultIsExpectedServiceProcess(pid: number, entryPath: string, instanceName: string): boolean {
-  const relativeEntryPath = path.win32.relative(process.cwd(), entryPath).replace(/\\/g, "/");
-  const encoded = Buffer.from(
-    `
-      $proc = Get-CimInstance Win32_Process -Filter "ProcessId = ${pid}";
-      if ($null -eq $proc) { exit 1 }
-      $proc.CommandLine
-    `,
-    "utf16le",
-  ).toString("base64");
+  if (process.platform === "win32") {
+    const relativeEntryPath = path.relative(process.cwd(), entryPath).replace(/\\/g, "/");
+    const encoded = Buffer.from(
+      `
+        $proc = Get-CimInstance Win32_Process -Filter "ProcessId = ${pid}";
+        if ($null -eq $proc) { exit 1 }
+        $proc.CommandLine
+      `,
+      "utf16le",
+    ).toString("base64");
 
-  const result = spawnSync("pwsh", ["-NoProfile", "-EncodedCommand", encoded], {
-    windowsHide: true,
+    const result = spawnSync("pwsh", ["-NoProfile", "-EncodedCommand", encoded], {
+      windowsHide: true,
+      encoding: "utf8",
+    });
+
+    if (result.status !== 0 || !result.stdout) {
+      return false;
+    }
+
+    const commandLine = result.stdout.trim().toLowerCase();
+    return (
+      (commandLine.includes(entryPath.toLowerCase()) ||
+        commandLine.includes(relativeEntryPath.toLowerCase()) ||
+        commandLine.includes("dist/src/index.js")) &&
+      commandLine.includes(`--instance ${instanceName.toLowerCase()}`)
+    );
+  }
+
+  // macOS / Linux: read /proc or use ps
+  const result = spawnSync("ps", ["-p", String(pid), "-o", "args="], {
     encoding: "utf8",
   });
 
@@ -114,10 +133,9 @@ function defaultIsExpectedServiceProcess(pid: number, entryPath: string, instanc
 
   const commandLine = result.stdout.trim().toLowerCase();
   return (
-    (commandLine.includes(entryPath.toLowerCase()) ||
-      commandLine.includes(relativeEntryPath.toLowerCase()) ||
-      commandLine.includes("dist/src/index.js")) &&
-    commandLine.includes(`--instance ${instanceName.toLowerCase()}`)
+    commandLine.includes("dist/src/index.js") &&
+    commandLine.includes(`--instance`) &&
+    commandLine.includes(instanceName.toLowerCase())
   );
 }
 
@@ -132,7 +150,7 @@ function defaultSpawnDetached(
     cwd: options.cwd,
     detached: true,
     stdio: ["ignore", stdoutFd, stderrFd],
-    windowsHide: true,
+    ...(process.platform === "win32" ? { windowsHide: true } : {}),
   });
   child.unref();
   closeSync(stdoutFd);
@@ -144,13 +162,29 @@ function defaultSleep(ms: number): Promise<void> {
 }
 
 function defaultKillProcessTree(pid: number): void {
-  const result = spawnSync("taskkill", ["/PID", String(pid), "/T", "/F"], {
-    windowsHide: true,
-    encoding: "utf8",
-  });
+  if (process.platform === "win32") {
+    const result = spawnSync("taskkill", ["/PID", String(pid), "/T", "/F"], {
+      windowsHide: true,
+      encoding: "utf8",
+    });
 
-  if (result.status !== 0) {
-    throw new Error((result.stderr || result.stdout || `Failed to stop pid ${pid}`).trim());
+    if (result.status !== 0) {
+      throw new Error((result.stderr || result.stdout || `Failed to stop pid ${pid}`).trim());
+    }
+
+    return;
+  }
+
+  // macOS / Linux: kill process group
+  try {
+    process.kill(-pid, "SIGTERM");
+  } catch {
+    // Fallback: kill just the process
+    try {
+      process.kill(pid, "SIGTERM");
+    } catch (error) {
+      throw new Error(`Failed to stop pid ${pid}: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 }
 
@@ -264,6 +298,7 @@ export function resolveServicePaths(
 ): ServicePaths {
   const normalizedInstanceName = normalizeInstanceName(instanceName);
   const stateDir = resolveInstanceStateDir({
+    HOME: env.HOME,
     USERPROFILE: env.USERPROFILE,
     CODEX_TELEGRAM_STATE_DIR: env.CODEX_TELEGRAM_STATE_DIR,
     CODEX_TELEGRAM_INSTANCE: normalizedInstanceName,

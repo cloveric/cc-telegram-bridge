@@ -4,10 +4,11 @@ import { resolveInstanceStateDir, type EnvSource } from "../config.js";
 import { normalizeInstanceName } from "../instance.js";
 import { SessionStore } from "../state/session-store.js";
 
-export interface SessionCommandEnv extends Pick<EnvSource, "USERPROFILE" | "CODEX_TELEGRAM_STATE_DIR"> {}
+export interface SessionCommandEnv extends Pick<EnvSource, "HOME" | "USERPROFILE" | "CODEX_TELEGRAM_STATE_DIR"> {}
 
 function resolveSessionStatePath(env: SessionCommandEnv, instanceName: string): string {
   const stateDir = resolveInstanceStateDir({
+    HOME: env.HOME,
     USERPROFILE: env.USERPROFILE,
     CODEX_TELEGRAM_STATE_DIR: env.CODEX_TELEGRAM_STATE_DIR,
     CODEX_TELEGRAM_INSTANCE: normalizeInstanceName(instanceName),

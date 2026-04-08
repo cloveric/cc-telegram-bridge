@@ -6,7 +6,7 @@
   <a href="https://github.com/cloveric/codex-telegram-channel/blob/main/LICENSE"><img src="https://img.shields.io/github/license/cloveric/codex-telegram-channel?style=flat-square&color=818cf8" alt="License"></a>
   <img src="https://img.shields.io/badge/TypeScript-5.9-3178c6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript">
   <img src="https://img.shields.io/badge/Node.js-%3E%3D20-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node.js">
-  <img src="https://img.shields.io/badge/platform-Windows-0078D4?style=flat-square&logo=windows&logoColor=white" alt="Windows">
+  <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-0078D4?style=flat-square&logo=node.js&logoColor=white" alt="Windows | macOS | Linux">
   <img src="https://img.shields.io/badge/tests-Vitest-6E9F18?style=flat-square&logo=vitest&logoColor=white" alt="Vitest">
   <img src="https://img.shields.io/badge/validation-Zod_4-3E67B1?style=flat-square&logo=zod&logoColor=white" alt="Zod">
 </p>
@@ -153,7 +153,11 @@ npm run dev -- telegram instructions show --instance work
 Or just edit the file directly:
 
 ```powershell
+# Windows
 notepad %USERPROFILE%\.codex\channels\telegram\work\agent.md
+
+# macOS
+open -e ~/.codex/channels/telegram/work/agent.md
 ```
 
 ---
@@ -326,12 +330,22 @@ Telegram Update → Normalize → Access Check → Chat Queue (serialized)
 
 All commands accept `--instance <name>` to target a specific bot.
 
-### PowerShell Helpers
+### Shell Helpers
+
+**Windows (PowerShell):**
 
 ```powershell
 .\scripts\start-instance.ps1 [-Instance work]
 .\scripts\status-instance.ps1 [-Instance work]
 .\scripts\stop-instance.ps1 [-Instance work]
+```
+
+**macOS / Linux (bash):**
+
+```bash
+./scripts/start-instance.sh [work]
+./scripts/status-instance.sh [work]
+./scripts/stop-instance.sh [work]
 ```
 
 ---
@@ -375,7 +389,10 @@ npm run dev -- telegram audit --chat 688567588
 ## State Layout
 
 ```
-%USERPROFILE%\.codex\channels\telegram\<instance>\
+# Windows: %USERPROFILE%\.codex\channels\telegram\<instance>\
+# macOS/Linux: ~/.codex/channels/telegram/<instance>/
+
+<instance>/
 ├── agent.md                # Bot personality & instructions
 ├── config.json             # Instance config (YOLO mode, etc.)
 ├── .env                    # Bot token

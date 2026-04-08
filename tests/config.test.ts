@@ -1,3 +1,4 @@
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { resolveConfig } from "../src/config.js";
 
@@ -39,10 +40,10 @@ describe("resolveConfig", () => {
 
     expect(config.instanceName).toBe("default");
     expect(config.stateDir).toBe("C:/custom/state");
-    expect(config.inboxDir).toBe("C:/custom/state/inbox");
-    expect(config.accessStatePath).toBe("C:/custom/state/access.json");
-    expect(config.sessionStatePath).toBe("C:/custom/state/session.json");
-    expect(config.runtimeLogPath).toBe("C:/custom/state/runtime.log");
+    expect(path.posix.normalize(config.inboxDir.replace(/\\/g, "/"))).toBe("C:/custom/state/inbox");
+    expect(path.posix.normalize(config.accessStatePath.replace(/\\/g, "/"))).toBe("C:/custom/state/access.json");
+    expect(path.posix.normalize(config.sessionStatePath.replace(/\\/g, "/"))).toBe("C:/custom/state/session.json");
+    expect(path.posix.normalize(config.runtimeLogPath.replace(/\\/g, "/"))).toBe("C:/custom/state/runtime.log");
     expect(config.codexExecutable).toBe("codex.exe");
   });
 

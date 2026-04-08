@@ -25,6 +25,7 @@ export interface TelegramServiceContext extends TelegramDeliveryContext {
 }
 
 export interface ResolvedInstanceEnv extends EnvSource {
+  HOME?: string;
   USERPROFILE?: string;
   CODEX_TELEGRAM_INSTANCE: string;
   TELEGRAM_BOT_TOKEN: string;
@@ -88,7 +89,7 @@ function parseDotEnvValue(rawLine: string): string | null {
   return rawValue;
 }
 
-export async function readInstanceBotTokenFromEnvFile(env: Pick<EnvSource, "USERPROFILE" | "CODEX_TELEGRAM_INSTANCE" | "CODEX_TELEGRAM_STATE_DIR">): Promise<string | null> {
+export async function readInstanceBotTokenFromEnvFile(env: Pick<EnvSource, "HOME" | "USERPROFILE" | "CODEX_TELEGRAM_INSTANCE" | "CODEX_TELEGRAM_STATE_DIR">): Promise<string | null> {
   const stateDir = resolveInstanceStateDir(env);
   const envPath = path.join(stateDir, ".env");
 
@@ -111,7 +112,7 @@ export async function readInstanceBotTokenFromEnvFile(env: Pick<EnvSource, "USER
 }
 
 export async function readConfiguredBotToken(
-  env: Pick<EnvSource, "USERPROFILE" | "CODEX_TELEGRAM_INSTANCE" | "CODEX_TELEGRAM_STATE_DIR" | "TELEGRAM_BOT_TOKEN">,
+  env: Pick<EnvSource, "HOME" | "USERPROFILE" | "CODEX_TELEGRAM_INSTANCE" | "CODEX_TELEGRAM_STATE_DIR" | "TELEGRAM_BOT_TOKEN">,
   instanceName: string,
 ): Promise<string | null> {
   if (env.TELEGRAM_BOT_TOKEN) {
@@ -119,6 +120,7 @@ export async function readConfiguredBotToken(
   }
 
   return readInstanceBotTokenFromEnvFile({
+    HOME: env.HOME,
     USERPROFILE: env.USERPROFILE,
     CODEX_TELEGRAM_INSTANCE: normalizeInstanceName(instanceName),
     CODEX_TELEGRAM_STATE_DIR: env.CODEX_TELEGRAM_STATE_DIR,
@@ -128,11 +130,13 @@ export async function readConfiguredBotToken(
 export async function resolveServiceEnvForInstance(env: EnvSource, instanceName: string): Promise<ResolvedInstanceEnv> {
   const normalizedInstanceName = normalizeInstanceName(instanceName);
   const baseEnv: {
+    HOME?: string;
     USERPROFILE?: string;
     CODEX_TELEGRAM_INSTANCE: string;
     CODEX_TELEGRAM_STATE_DIR?: string;
     CODEX_EXECUTABLE?: string;
   } = {
+    HOME: env.HOME,
     USERPROFILE: env.USERPROFILE,
     CODEX_TELEGRAM_INSTANCE: normalizedInstanceName,
     CODEX_TELEGRAM_STATE_DIR: env.CODEX_TELEGRAM_STATE_DIR,
@@ -141,6 +145,7 @@ export async function resolveServiceEnvForInstance(env: EnvSource, instanceName:
 
   const telegramBotToken = await readConfiguredBotToken(
     {
+      HOME: env.HOME,
       USERPROFILE: env.USERPROFILE,
       CODEX_TELEGRAM_INSTANCE: normalizedInstanceName,
       CODEX_TELEGRAM_STATE_DIR: env.CODEX_TELEGRAM_STATE_DIR,

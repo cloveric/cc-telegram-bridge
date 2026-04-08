@@ -6,6 +6,7 @@ import { normalizeInstanceName } from "../instance.js";
 import { appendAuditEvent } from "../state/audit-log.js";
 
 export interface InstanceTokenEnv {
+  HOME?: string;
   USERPROFILE?: string;
   CODEX_TELEGRAM_STATE_DIR?: string;
 }
@@ -17,11 +18,12 @@ export interface PersistedInstanceToken {
 }
 
 export function resolveInstanceAccessStatePath(
-  env: Pick<InstanceTokenEnv, "USERPROFILE" | "CODEX_TELEGRAM_STATE_DIR">,
+  env: Pick<InstanceTokenEnv, "HOME" | "USERPROFILE" | "CODEX_TELEGRAM_STATE_DIR">,
   instanceName: string,
 ): string {
   const normalizedInstanceName = normalizeInstanceName(instanceName);
   const stateDir = resolveInstanceStateDir({
+    HOME: env.HOME,
     USERPROFILE: env.USERPROFILE,
     CODEX_TELEGRAM_STATE_DIR: env.CODEX_TELEGRAM_STATE_DIR,
     CODEX_TELEGRAM_INSTANCE: normalizedInstanceName,
@@ -37,6 +39,7 @@ export async function writeInstanceBotToken(
 ): Promise<PersistedInstanceToken> {
   const normalizedInstanceName = normalizeInstanceName(instanceName);
   const stateDir = resolveInstanceStateDir({
+    HOME: env.HOME,
     USERPROFILE: env.USERPROFILE,
     CODEX_TELEGRAM_STATE_DIR: env.CODEX_TELEGRAM_STATE_DIR,
     CODEX_TELEGRAM_INSTANCE: normalizedInstanceName,
