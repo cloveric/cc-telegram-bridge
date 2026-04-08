@@ -26,6 +26,15 @@ function generateCode(): string {
   return code;
 }
 
+function isIsoTimestamp(value: unknown): value is string {
+  if (typeof value !== "string") {
+    return false;
+  }
+
+  const parsed = new Date(value);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString() === value;
+}
+
 function isPairedUser(value: unknown): value is PairedUser {
   if (typeof value !== "object" || value === null) {
     return false;
@@ -35,7 +44,7 @@ function isPairedUser(value: unknown): value is PairedUser {
   return (
     typeof candidate.telegramUserId === "number" &&
     typeof candidate.telegramChatId === "number" &&
-    typeof candidate.pairedAt === "string"
+    isIsoTimestamp(candidate.pairedAt)
   );
 }
 
@@ -49,7 +58,7 @@ function isPendingPair(value: unknown): value is PendingPair {
     typeof candidate.code === "string" &&
     typeof candidate.telegramUserId === "number" &&
     typeof candidate.telegramChatId === "number" &&
-    typeof candidate.expiresAt === "string"
+    isIsoTimestamp(candidate.expiresAt)
   );
 }
 
