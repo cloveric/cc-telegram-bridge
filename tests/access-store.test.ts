@@ -174,7 +174,7 @@ describe("AccessStore", () => {
     }
   });
 
-  it("rejects corrupt timestamp strings in persisted access state", async () => {
+  it("rejects a corrupt pairedAt timestamp string in persisted access state", async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
     try {
       const filePath = path.join(dir, "access.json");
@@ -190,6 +190,32 @@ describe("AccessStore", () => {
                 pairedAt: "not-a-timestamp",
               },
             ],
+            allowlist: [],
+            pendingPairs: [],
+          },
+          null,
+          2,
+        ),
+        "utf8",
+      );
+
+      const store = new AccessStore(filePath);
+      await expect(store.load()).rejects.toThrow("invalid access state");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects a corrupt expiresAt timestamp string in persisted access state", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
+    try {
+      const filePath = path.join(dir, "access.json");
+      await writeFile(
+        filePath,
+        JSON.stringify(
+          {
+            policy: "pairing",
+            pairedUsers: [],
             allowlist: [],
             pendingPairs: [
               {
