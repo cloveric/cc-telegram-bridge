@@ -150,8 +150,9 @@ Each layer is independently testable. The bridge orchestrates the flow without o
 |---|---|
 | `telegram service start` | Acquire lock, load state, begin polling |
 | `telegram service stop` | Graceful shutdown with state persistence |
-| `telegram service status` | Running state, PID, policy, bot identity, last update ID |
+| `telegram service status` | Running state, PID, session bindings, bot identity, audit health, last update ID |
 | `telegram service restart` | Stop + start with clean consumer reset |
+| `telegram service doctor` | Run a health check across build, token, runtime, identity, sessions, audit, and stderr |
 
 ### Status Output
 
@@ -161,9 +162,13 @@ PID:           4821
 Policy:        allowlist
 Paired users:  2
 Allowlist:     2
-Pending pairs: 0
-Last update:   948271653
-Bot identity:  @cloveric6bot
+Pending pairs:   0
+Session bindings: 1
+Last update:     948271653
+Audit events:    42
+Last success:    2026-04-08T12:01:00.000Z
+Last failure:    none
+Bot identity:    @cloveric6bot
 ```
 
 ### PowerShell Helpers
@@ -179,6 +184,14 @@ Bot identity:  @cloveric6bot
 ```powershell
 npm run dev -- telegram service logs
 npm run dev -- telegram service logs --instance work
+npm run dev -- telegram service logs 20
+```
+
+### Health Check
+
+```powershell
+npm run dev -- telegram service doctor
+npm run dev -- telegram service doctor --instance work
 ```
 
 ---
@@ -232,7 +245,7 @@ This is useful when you want to verify that a Telegram chat is still bound to th
 
 ## Audit Trail
 
-Each instance writes an append-only JSONL audit stream:
+Each instance writes an append-only JSONL audit stream with timing and outcome metadata:
 
 ```text
 %USERPROFILE%\.codex\channels\telegram\<instance>\audit.log.jsonl
@@ -252,6 +265,19 @@ Typical audit events include:
 - pairing success or rejection
 - allow / revoke / policy changes
 - update success / reply / error events
+- attachment counts, response size, chunking, and request duration
+
+Filter the audit stream directly from the CLI:
+
+```powershell
+npm run dev -- telegram audit
+npm run dev -- telegram audit 50
+npm run dev -- telegram audit --instance work
+npm run dev -- telegram audit --type update.handle --outcome error
+npm run dev -- telegram audit --chat 688567588 --type update.handle
+```
+
+The default output remains raw JSONL so it stays easy to grep, export, or post-process.
 
 ---
 

@@ -6,8 +6,17 @@ import { describe, expect, it, vi } from "vitest";
 
 import { TelegramApi } from "../src/telegram/api.js";
 import { normalizeUpdate } from "../src/telegram/update-normalizer.js";
-import { chunkTelegramMessage } from "../src/telegram/message-renderer.js";
-import { renderErrorMessage, renderWorkingMessage } from "../src/telegram/message-renderer.js";
+import {
+  chunkTelegramMessage,
+  renderAccessCheckMessage,
+  renderAttachmentDownloadMessage,
+  renderErrorMessage,
+  renderExecutionMessage,
+  renderPairingMessage,
+  renderPrivateChatRequiredMessage,
+  renderUnauthorizedMessage,
+  renderWorkingMessage,
+} from "../src/telegram/message-renderer.js";
 
 describe("chunkTelegramMessage", () => {
   it("splits long messages into fixed-size chunks", () => {
@@ -33,11 +42,21 @@ describe("chunkTelegramMessage", () => {
 
 describe("message rendering", () => {
   it("renders the working message", () => {
-    expect(renderWorkingMessage()).toBe("Working...");
+    expect(renderWorkingMessage()).toBe("Received. Starting your Codex session...");
   });
 
   it("renders error messages", () => {
     expect(renderErrorMessage("boom")).toBe("Error: boom");
+  });
+
+  it("renders progress and access messages", () => {
+    expect(renderAccessCheckMessage()).toBe("Checking access policy...");
+    expect(renderAttachmentDownloadMessage(1)).toBe("Downloading 1 attachment...");
+    expect(renderAttachmentDownloadMessage(2)).toBe("Downloading 2 attachments...");
+    expect(renderExecutionMessage()).toBe("Running Codex on your request...");
+    expect(renderUnauthorizedMessage()).toBe("This chat is not authorized for this instance.");
+    expect(renderPrivateChatRequiredMessage()).toBe("This bot only accepts private chats.");
+    expect(renderPairingMessage("ABC123")).toBe("Pair this private chat with code ABC123");
   });
 });
 
