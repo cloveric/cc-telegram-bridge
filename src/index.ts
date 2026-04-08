@@ -29,8 +29,8 @@ async function main(): Promise<void> {
       process.env.TELEGRAM_BOT_TOKEN = resolvedEnv.TELEGRAM_BOT_TOKEN;
     }
 
-    const { api, bridge } = await createServiceDependencies(resolvedEnv);
-    await pollTelegramUpdates(api, bridge);
+    const { api, bridge, config } = await createServiceDependencies(resolvedEnv);
+    await pollTelegramUpdates(api, bridge, config.inboxDir);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error(message);

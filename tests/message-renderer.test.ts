@@ -1,3 +1,7 @@
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+
 import { describe, expect, it, vi } from "vitest";
 
 import { TelegramApi } from "../src/telegram/api.js";
@@ -47,7 +51,59 @@ describe("normalizeUpdate", () => {
           text: "hello",
         },
       }),
-    ).toEqual({ chatId: 123, userId: 456, text: "hello" });
+    ).toEqual({ chatId: 123, userId: 456, text: "hello", attachments: [] });
+  });
+
+  it("extracts a document attachment", () => {
+    expect(
+      normalizeUpdate({
+        message: {
+          chat: { id: 123 },
+          from: { id: 456 },
+          text: "hello",
+          document: {
+            file_id: "doc-file",
+            file_name: "report.pdf",
+          },
+        },
+      }),
+    ).toEqual({
+      chatId: 123,
+      userId: 456,
+      text: "hello",
+      attachments: [
+        {
+          fileId: "doc-file",
+          fileName: "report.pdf",
+          kind: "document",
+        },
+      ],
+    });
+  });
+
+  it("extracts the highest-resolution photo attachment", () => {
+    expect(
+      normalizeUpdate({
+        message: {
+          chat: { id: 123 },
+          from: { id: 456 },
+          photo: [
+            { file_id: "small" },
+            { file_id: "large" },
+          ],
+        },
+      }),
+    ).toEqual({
+      chatId: 123,
+      userId: 456,
+      text: "",
+      attachments: [
+        {
+          fileId: "large",
+          kind: "photo",
+        },
+      ],
+    });
   });
 
   it("returns null when required fields are missing", () => {
@@ -185,5 +241,74 @@ describe("TelegramApi", () => {
     });
 
     fetchMock.mockRestore();
+  });
+
+  it("returns typed message results from sendMessage and editMessage", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch");
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        json: async () => ({ ok: true, result: { message_id: 9, text: "working" } }),
+      } as unknown as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        json: async () => ({ ok: true, result: { message_id: 9, text: "done" } }),
+      } as unknown as Response);
+
+    const api = new TelegramApi("token");
+
+    await expect(api.sendMessage(1, "working")).resolves.toEqual({ message_id: 9, text: "working" });
+    await expect(api.editMessage(1, 9, "done")).resolves.toEqual({ message_id: 9, text: "done" });
+
+    fetchMock.mockRestore();
+  });
+
+  it("resolves getFile metadata", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      json: async () => ({ ok: true, result: { file_id: "abc", file_path: "documents/file.pdf" } }),
+    } as unknown as Response);
+
+    const api = new TelegramApi("token");
+
+    await expect(api.getFile("abc")).resolves.toEqual({ file_id: "abc", file_path: "documents/file.pdf" });
+    expect(fetchMock).toHaveBeenCalledWith("https://api.telegram.org/bottoken/getFile", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ file_id: "abc" }),
+    });
+
+    fetchMock.mockRestore();
+  });
+
+  it("downloads a file to disk", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      arrayBuffer: async () => new TextEncoder().encode("file-bytes").buffer,
+    } as unknown as Response);
+
+    const api = new TelegramApi("token");
+    const root = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-download-"));
+    const destinationPath = path.join(root, "nested", "file.bin");
+
+    try {
+      await api.downloadFile("documents/file.bin", destinationPath);
+
+      await expect(readFile(destinationPath, "utf8")).resolves.toBe("file-bytes");
+      expect(fetchMock).toHaveBeenCalledWith("https://api.telegram.org/file/bottoken/documents/file.bin");
+    } finally {
+      fetchMock.mockRestore();
+      await rm(root, { recursive: true, force: true });
+    }
   });
 });

@@ -1,3 +1,6 @@
+import { mkdir, writeFile } from "node:fs/promises";
+import path from "node:path";
+
 type TelegramOkResponse<T> = {
   ok: true;
   result: T;
@@ -30,11 +33,25 @@ function isTelegramApiResponse<T>(value: unknown): value is TelegramApiResponse<
   return true;
 }
 
+export interface TelegramMessage {
+  message_id: number;
+  text?: string;
+}
+
+export interface TelegramFile {
+  file_id?: string;
+  file_path: string;
+}
+
 export class TelegramApi {
   constructor(private readonly botToken: string) {}
 
   private buildUrl(method: string): string {
     return `https://api.telegram.org/bot${this.botToken}/${method}`;
+  }
+
+  private buildFileUrl(filePath: string): string {
+    return `https://api.telegram.org/file/bot${this.botToken}/${filePath}`;
   }
 
   private async postJson<T>(method: string, body: Record<string, unknown>): Promise<T> {
@@ -97,19 +114,37 @@ export class TelegramApi {
     return json;
   }
 
-  async sendMessage(chatId: number, text: string): Promise<unknown> {
+  async sendMessage(chatId: number, text: string): Promise<TelegramMessage> {
     return this.postJson("sendMessage", {
       chat_id: chatId,
       text,
     });
   }
 
-  async editMessage(chatId: number, messageId: number, text: string): Promise<unknown> {
+  async editMessage(chatId: number, messageId: number, text: string): Promise<TelegramMessage> {
     return this.postJson("editMessageText", {
       chat_id: chatId,
       message_id: messageId,
       text,
     });
+  }
+
+  async getFile(fileId: string): Promise<TelegramFile> {
+    return this.postJson("getFile", {
+      file_id: fileId,
+    });
+  }
+
+  async downloadFile(filePath: string, destinationPath: string): Promise<void> {
+    const response = await fetch(this.buildFileUrl(filePath));
+
+    if (!response.ok) {
+      throw new Error(`Telegram API request failed for downloadFile: ${response.status} ${response.statusText}`);
+    }
+
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    await mkdir(path.dirname(destinationPath), { recursive: true });
+    await writeFile(destinationPath, bytes);
   }
 
   async getUpdates(offset?: number): Promise<unknown[]> {
