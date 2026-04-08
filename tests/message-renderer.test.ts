@@ -108,4 +108,21 @@ describe("TelegramApi", () => {
 
     fetchMock.mockRestore();
   });
+
+  it("throws a stable error for parsed payloads with the wrong shape", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      json: async () => null,
+    } as unknown as Response);
+
+    const api = new TelegramApi("token");
+
+    await expect(api.sendMessage(1, "hello")).rejects.toThrow(
+      "Telegram API response had an unexpected shape for sendMessage",
+    );
+
+    fetchMock.mockRestore();
+  });
 });

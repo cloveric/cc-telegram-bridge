@@ -10,6 +10,22 @@ type TelegramErrorResponse = {
 
 type TelegramApiResponse<T> = TelegramOkResponse<T> | TelegramErrorResponse;
 
+function isTelegramApiResponse<T>(value: unknown): value is TelegramApiResponse<T> {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  if (!("ok" in value) || typeof value.ok !== "boolean") {
+    return false;
+  }
+
+  if (value.ok) {
+    return "result" in value;
+  }
+
+  return true;
+}
+
 export class TelegramApi {
   constructor(private readonly botToken: string) {}
 
@@ -30,13 +46,18 @@ export class TelegramApi {
       throw new Error(`Telegram API request failed for ${method}: ${response.status} ${response.statusText}`);
     }
 
-    let payload: TelegramApiResponse<T>;
-
+    let json: unknown;
     try {
-      payload = (await response.json()) as TelegramApiResponse<T>;
+      json = await response.json();
     } catch {
       throw new Error(`Telegram API response was not valid JSON for ${method}`);
     }
+
+    if (!isTelegramApiResponse<T>(json)) {
+      throw new Error(`Telegram API response had an unexpected shape for ${method}`);
+    }
+
+    const payload = json;
 
     if (!payload.ok) {
       throw new Error(`Telegram API request failed for ${method}: ${payload.description ?? "unknown error"}`);
