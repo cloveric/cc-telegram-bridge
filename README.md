@@ -1,44 +1,42 @@
-# Codex Telegram Channel
+<p align="center">
+  <img src="./assets/github-banner.svg" alt="Codex Telegram Channel banner" width="100%" />
+</p>
 
-Turn Codex into a Telegram-native coding operator.
+<p align="center">
+  <strong>Run Codex through Telegram with isolated bot instances, resumable threads, attachment ingestion, and operator-friendly controls.</strong>
+</p>
 
-`codex-telegram-channel` is a Windows-first bridge that binds one Telegram bot to one isolated Codex instance. Each instance keeps its own token, pairing state, access policy, inbox, update watermark, and Codex thread bindings.
+<p align="center">
+  <a href="https://github.com/cloveric/codex-telegram-channel">Repository</a>
+  ·
+  <a href="#quick-start">Quick Start</a>
+  ·
+  <a href="#service-operations">Service Operations</a>
+  ·
+  <a href="#access-control">Access Control</a>
+</p>
 
-## What It Does
+## Overview
 
-- Runs one Telegram bot per instance
-- Supports `pairing` and `allowlist` access control
-- Stores per-chat Codex thread bindings and resumes them on later messages
-- Sends a `Working...` placeholder, then edits it into the final answer
-- Downloads incoming documents and photos into the instance inbox
-- Serializes work per chat to avoid overlapping Codex runs
-- Protects against duplicate local instance startup with an instance lock
-- Includes CLI commands for configure, access control, service lifecycle, and status
+`codex-telegram-channel` is a Windows-first Telegram bridge for Codex. It treats each bot as a distinct runtime instance with its own token, state, lock, logs, inbox, update watermark, and chat-to-thread bindings.
 
-## Repository Layout
+This is not a multiplexed “one process hosts many bots” design. The operating model is simple:
 
-- [src](C:/Users/hangw/codex-telegram-channel/src) contains the bridge, state, runtime, Telegram, and Codex integration code
-- [tests](C:/Users/hangw/codex-telegram-channel/tests) contains the Vitest suites
-- [site](C:/Users/hangw/codex-telegram-channel/site) contains the static landing page
+- one bot token per instance
+- one instance per running process
+- one Telegram chat bound to one persisted Codex thread
 
-## State Model
+## Core Capabilities
 
-Per instance, state is stored under:
-
-```text
-%USERPROFILE%\.codex\channels\telegram\<instance>\
-```
-
-That directory contains:
-
-- `.env`
-- `access.json`
-- `session.json`
-- `runtime-state.json`
-- `instance.lock.json`
-- `service.stdout.log`
-- `service.stderr.log`
-- `inbox\`
+- Instance-scoped bot tokens and state directories
+- Pairing and allowlist access control
+- Service lifecycle commands: start, stop, status
+- Per-chat serialized execution
+- Attachment download into the instance inbox
+- Placeholder message plus edited final response
+- Resumable Codex threads using `codex exec --json` and `codex exec resume --json`
+- Local duplicate-instance protection with an instance lock
+- Update de-duplication and persisted runtime state
 
 ## Quick Start
 
@@ -50,7 +48,7 @@ npm install
 npm run build
 ```
 
-Configure a bot:
+Configure the default bot instance:
 
 ```powershell
 npm run dev -- telegram configure <bot-token>
@@ -61,6 +59,8 @@ Configure a named instance:
 ```powershell
 npm run dev -- telegram configure --instance work <bot-token>
 ```
+
+## Service Operations
 
 Start the default instance:
 
@@ -74,18 +74,30 @@ Start a named instance:
 npm run dev -- telegram service start --instance work
 ```
 
-Check status:
+Check service status:
 
 ```powershell
 npm run dev -- telegram service status
-npm run dev -- telegram status
+npm run dev -- telegram service status --instance work
 ```
 
 Stop an instance:
 
 ```powershell
 npm run dev -- telegram service stop
+npm run dev -- telegram service stop --instance work
 ```
+
+`telegram service status` reports:
+
+- whether the instance is running
+- PID
+- access policy
+- paired user count
+- allowlist count
+- pending pair count
+- last handled Telegram update id
+- bot identity when token lookup succeeds
 
 ## Access Control
 
@@ -108,6 +120,38 @@ npm run dev -- telegram access allow <chat-id>
 npm run dev -- telegram access revoke <chat-id>
 ```
 
+View current access status:
+
+```powershell
+npm run dev -- telegram status
+```
+
+## State Layout
+
+Each instance stores state under:
+
+```text
+%USERPROFILE%\.codex\channels\telegram\<instance>\
+```
+
+Per-instance files:
+
+- `.env`
+- `access.json`
+- `session.json`
+- `runtime-state.json`
+- `instance.lock.json`
+- `service.stdout.log`
+- `service.stderr.log`
+- `inbox\`
+
+## Repository Layout
+
+- [src](C:/Users/hangw/codex-telegram-channel/src): bridge, state, runtime, Telegram, and Codex integration
+- [tests](C:/Users/hangw/codex-telegram-channel/tests): Vitest suites
+- [site](C:/Users/hangw/codex-telegram-channel/site): static presentation assets
+- [assets](C:/Users/hangw/codex-telegram-channel/assets): repository visual assets
+
 ## Scripts
 
 - `npm run build`
@@ -115,16 +159,3 @@ npm run dev -- telegram access revoke <chat-id>
 - `npm start`
 - `npm test`
 - `npm run test:watch`
-
-## Landing Page
-
-Open the static page at:
-
-- [site/index.html](C:/Users/hangw/codex-telegram-channel/site/index.html)
-
-You can preview it locally with any static server. For example:
-
-```powershell
-cd C:\Users\hangw\codex-telegram-channel\site
-python -m http.server 4173
-```

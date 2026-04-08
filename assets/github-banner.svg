@@ -1,0 +1,59 @@
+<svg width="1280" height="640" viewBox="0 0 1280 640" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="80" y1="40" x2="1180" y2="600" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0F172A"/>
+      <stop offset="0.45" stop-color="#111827"/>
+      <stop offset="1" stop-color="#1F2937"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="220" y1="120" x2="1020" y2="540" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#22C55E"/>
+      <stop offset="0.5" stop-color="#06B6D4"/>
+      <stop offset="1" stop-color="#F97316"/>
+    </linearGradient>
+    <filter id="blur" x="640" y="98" width="460" height="444" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feFlood flood-opacity="0" result="BackgroundImageFix"/>
+      <feBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape"/>
+      <feGaussianBlur stdDeviation="30" result="effect1_foregroundBlur_1_1"/>
+    </filter>
+  </defs>
+
+  <rect width="1280" height="640" rx="32" fill="url(#bg)"/>
+  <circle cx="1080" cy="96" r="164" fill="#10B981" fill-opacity="0.12"/>
+  <circle cx="924" cy="546" r="220" fill="#06B6D4" fill-opacity="0.12"/>
+  <circle cx="236" cy="82" r="120" fill="#F97316" fill-opacity="0.12"/>
+
+  <rect x="64" y="64" width="1152" height="512" rx="28" stroke="rgba(255,255,255,0.12)" stroke-width="2"/>
+
+  <g opacity="0.96">
+    <rect x="112" y="110" width="452" height="54" rx="27" fill="rgba(255,255,255,0.08)"/>
+    <text x="139" y="145" fill="#93C5FD" font-family="Segoe UI, Arial, sans-serif" font-size="20" font-weight="700" letter-spacing="3">CODEX TELEGRAM CHANNEL</text>
+
+    <text x="112" y="248" fill="#F8FAFC" font-family="Segoe UI, Arial, sans-serif" font-size="78" font-weight="800">Run Codex</text>
+    <text x="112" y="332" fill="#F8FAFC" font-family="Segoe UI, Arial, sans-serif" font-size="78" font-weight="800">through Telegram</text>
+
+    <text x="112" y="402" fill="#CBD5E1" font-family="Segoe UI, Arial, sans-serif" font-size="28" font-weight="500">
+      one bot per instance, access-controlled, resumable,
+    </text>
+    <text x="112" y="442" fill="#CBD5E1" font-family="Segoe UI, Arial, sans-serif" font-size="28" font-weight="500">
+      attachment-aware, and designed for real operator workflows
+    </text>
+
+    <rect x="112" y="490" width="264" height="54" rx="27" fill="url(#accent)"/>
+    <text x="150" y="525" fill="#0B1220" font-family="Segoe UI, Arial, sans-serif" font-size="22" font-weight="800">PRIVATE CHAT TOOLS</text>
+  </g>
+
+  <g filter="url(#blur)">
+    <rect x="730" y="158" width="304" height="324" rx="28" fill="rgba(15,23,42,0.72)" stroke="rgba(255,255,255,0.14)" stroke-width="2"/>
+    <rect x="756" y="194" width="252" height="48" rx="16" fill="rgba(255,255,255,0.08)"/>
+    <text x="780" y="224" fill="#F8FAFC" font-family="Segoe UI, Arial, sans-serif" font-size="21" font-weight="700">instance: default</text>
+
+    <rect x="756" y="264" width="204" height="52" rx="22" fill="rgba(34,197,94,0.18)"/>
+    <text x="780" y="298" fill="#86EFAC" font-family="Consolas, monospace" font-size="21" font-weight="700">Working...</text>
+
+    <rect x="820" y="338" width="188" height="66" rx="22" fill="rgba(249,115,22,0.2)"/>
+    <text x="844" y="378" fill="#FED7AA" font-family="Consolas, monospace" font-size="18" font-weight="700">/pair 2S93QL</text>
+
+    <rect x="756" y="426" width="252" height="36" rx="18" fill="rgba(6,182,212,0.18)"/>
+    <text x="778" y="450" fill="#A5F3FC" font-family="Consolas, monospace" font-size="17" font-weight="700">thread resume enabled</text>
+  </g>
+</svg>
