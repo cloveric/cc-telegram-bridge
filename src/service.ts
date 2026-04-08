@@ -16,6 +16,12 @@ export interface ServiceDependencies {
   bridge: Bridge;
 }
 
+export interface ResolvedInstanceEnv extends EnvSource {
+  USERPROFILE?: string;
+  CODEX_TELEGRAM_INSTANCE: string;
+  TELEGRAM_BOT_TOKEN: string;
+}
+
 export function parseServiceInstanceName(argv: string[]): string {
   for (let index = 0; index < argv.length; index++) {
     const argument = argv[index];
@@ -91,6 +97,31 @@ export async function readInstanceBotTokenFromEnvFile(env: Pick<EnvSource, "USER
   return null;
 }
 
+export async function resolveServiceEnvForInstance(env: EnvSource, instanceName: string): Promise<ResolvedInstanceEnv> {
+  const normalizedInstanceName = normalizeInstanceName(instanceName);
+  const baseEnv: {
+    USERPROFILE?: string;
+    CODEX_TELEGRAM_INSTANCE: string;
+    CODEX_TELEGRAM_STATE_DIR?: string;
+    CODEX_EXECUTABLE?: string;
+  } = {
+    USERPROFILE: env.USERPROFILE,
+    CODEX_TELEGRAM_INSTANCE: normalizedInstanceName,
+    CODEX_TELEGRAM_STATE_DIR: env.CODEX_TELEGRAM_STATE_DIR,
+    CODEX_EXECUTABLE: env.CODEX_EXECUTABLE,
+  };
+
+  const telegramBotToken = env.TELEGRAM_BOT_TOKEN ?? (await readInstanceBotTokenFromEnvFile(baseEnv));
+  if (!telegramBotToken) {
+    throw new Error("TELEGRAM_BOT_TOKEN is required");
+  }
+
+  return {
+    ...baseEnv,
+    TELEGRAM_BOT_TOKEN: telegramBotToken,
+  };
+}
+
 export async function createServiceDependencies(env: EnvSource): Promise<{ config: ReturnType<typeof resolveConfig>; api: TelegramApi; bridge: Bridge }> {
   const config = resolveConfig(env);
   const api = new TelegramApi(config.telegramBotToken);
@@ -107,37 +138,39 @@ export async function createServiceDependenciesForInstance(
   env: EnvSource,
   instanceName: string,
 ): Promise<{ config: ReturnType<typeof resolveConfig>; api: TelegramApi; bridge: Bridge }> {
-  const normalizedInstanceName = normalizeInstanceName(instanceName);
-  const baseEnv: EnvSource = {
-    USERPROFILE: env.USERPROFILE,
-    CODEX_TELEGRAM_INSTANCE: normalizedInstanceName,
-    CODEX_TELEGRAM_STATE_DIR: env.CODEX_TELEGRAM_STATE_DIR,
-    CODEX_EXECUTABLE: env.CODEX_EXECUTABLE,
-    TELEGRAM_BOT_TOKEN: env.TELEGRAM_BOT_TOKEN,
-  };
-
-  const telegramBotToken = baseEnv.TELEGRAM_BOT_TOKEN ?? (await readInstanceBotTokenFromEnvFile(baseEnv));
-  if (!telegramBotToken) {
-    throw new Error("TELEGRAM_BOT_TOKEN is required");
-  }
-
-  if (!process.env.TELEGRAM_BOT_TOKEN) {
-    process.env.TELEGRAM_BOT_TOKEN = telegramBotToken;
-  }
-
-  return createServiceDependencies({
-    ...baseEnv,
-    TELEGRAM_BOT_TOKEN: telegramBotToken,
-  });
+  return createServiceDependencies(await resolveServiceEnvForInstance(env, instanceName));
 }
 
-export async function pollTelegramUpdates(api: TelegramApi, bridge: Bridge): Promise<void> {
-  let offset: number | undefined;
+function getLastUpdateOffset(updates: unknown[], fallbackOffset?: number): number | undefined {
+  if (updates.length === 0) {
+    return fallbackOffset;
+  }
 
-  for (;;) {
-    const updates = await api.getUpdates(offset);
+  const lastUpdate = updates[updates.length - 1];
+  if (typeof lastUpdate !== "object" || lastUpdate === null || !("update_id" in lastUpdate)) {
+    return fallbackOffset;
+  }
 
-    for (const update of updates) {
+  const updateId = (lastUpdate as { update_id?: unknown }).update_id;
+  if (typeof updateId !== "number") {
+    return fallbackOffset;
+  }
+
+  return updateId + 1;
+}
+
+function formatErrorMessage(scope: string, error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  return `${scope}: ${message}`;
+}
+
+export async function processTelegramUpdates(
+  updates: unknown[],
+  bridge: Bridge,
+  logger: Pick<Console, "error"> = console,
+): Promise<void> {
+  for (const update of updates) {
+    try {
       const normalized = normalizeUpdate(update);
       if (!normalized || !normalized.text) {
         continue;
@@ -149,19 +182,33 @@ export async function pollTelegramUpdates(api: TelegramApi, bridge: Bridge): Pro
         text: normalized.text,
         files: [],
       });
-
-      if (typeof update === "object" && update !== null && "update_id" in update && typeof (update as { update_id?: unknown }).update_id === "number") {
-        offset = (update as { update_id: number }).update_id + 1;
-      }
+    } catch (error) {
+      logger.error(formatErrorMessage("Failed to handle Telegram update", error));
     }
+  }
+}
 
-    if (updates.length > 0) {
-      const lastUpdate = updates[updates.length - 1];
-      if (typeof lastUpdate === "object" && lastUpdate !== null && "update_id" in lastUpdate && typeof (lastUpdate as { update_id?: unknown }).update_id === "number") {
-        offset = (lastUpdate as { update_id: number }).update_id + 1;
-      }
-    }
+export async function pollTelegramUpdatesOnce(
+  api: TelegramApi,
+  bridge: Bridge,
+  logger: Pick<Console, "error"> = console,
+  offset?: number,
+): Promise<number | undefined> {
+  try {
+    const updates = await api.getUpdates(offset);
+    await processTelegramUpdates(updates, bridge, logger);
+    return getLastUpdateOffset(updates, offset);
+  } catch (error) {
+    logger.error(formatErrorMessage("Failed to fetch Telegram updates", error));
+    return offset;
+  }
+}
 
+export async function pollTelegramUpdates(api: TelegramApi, bridge: Bridge, logger: Pick<Console, "error"> = console): Promise<void> {
+  let offset: number | undefined;
+
+  for (;;) {
+    offset = await pollTelegramUpdatesOnce(api, bridge, logger, offset);
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }
 }

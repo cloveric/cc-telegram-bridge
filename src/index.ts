@@ -1,5 +1,10 @@
 import { runCli } from "./commands/cli.js";
-import { createServiceDependenciesForInstance, parseServiceInstanceName, pollTelegramUpdates } from "./service.js";
+import {
+  createServiceDependencies,
+  parseServiceInstanceName,
+  pollTelegramUpdates,
+  resolveServiceEnvForInstance,
+} from "./service.js";
 
 async function main(): Promise<void> {
   try {
@@ -10,7 +15,7 @@ async function main(): Promise<void> {
     }
 
     const instanceName = parseServiceInstanceName(argv);
-    const { api, bridge } = await createServiceDependenciesForInstance(
+    const resolvedEnv = await resolveServiceEnvForInstance(
       {
         USERPROFILE: process.env.USERPROFILE,
         CODEX_TELEGRAM_STATE_DIR: process.env.CODEX_TELEGRAM_STATE_DIR,
@@ -20,6 +25,11 @@ async function main(): Promise<void> {
       instanceName,
     );
 
+    if (!process.env.TELEGRAM_BOT_TOKEN) {
+      process.env.TELEGRAM_BOT_TOKEN = resolvedEnv.TELEGRAM_BOT_TOKEN;
+    }
+
+    const { api, bridge } = await createServiceDependencies(resolvedEnv);
     await pollTelegramUpdates(api, bridge);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
