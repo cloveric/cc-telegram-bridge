@@ -312,12 +312,7 @@ export async function processTelegramUpdates(
         detail: error instanceof Error ? error.message : String(error),
       });
       logger.error(formatErrorMessage("Failed to handle Telegram update", error));
-      if (updateId !== undefined) {
-        await runtimeStateStore.markHandledUpdateId(updateId);
-        lastHandledUpdateId = updateId;
-      }
-      nextOffset = advanceOffset(nextOffset, completedOffset);
-      continue;
+      break;
     }
   }
 
@@ -336,13 +331,20 @@ export async function pollTelegramUpdatesOnce(
   inboxDir: string,
   logger: Pick<Console, "error"> = console,
   offset?: number,
-): Promise<number | undefined> {
+  signal?: AbortSignal,
+): Promise<{ offset: number | undefined; hadFetchError: boolean }> {
   try {
-    const updates = await api.getUpdates(offset);
-    return processTelegramUpdates(updates, { api, bridge, inboxDir }, logger);
+    const updates = await api.getUpdates(offset, signal);
+    return {
+      offset: await processTelegramUpdates(updates, { api, bridge, inboxDir }, logger),
+      hadFetchError: false,
+    };
   } catch (error) {
     logger.error(formatErrorMessage("Failed to fetch Telegram updates", error));
-    return offset;
+    return {
+      offset,
+      hadFetchError: true,
+    };
   }
 }
 
@@ -358,13 +360,13 @@ export async function pollTelegramUpdates(
   const maxBackoffMs = 60000;
 
   while (!signal?.aborted) {
-    const previousOffset = offset;
-    offset = await pollTelegramUpdatesOnce(api, bridge, inboxDir, logger, offset);
+    const result = await pollTelegramUpdatesOnce(api, bridge, inboxDir, logger, offset, signal);
+    offset = result.offset;
 
-    if (offset !== previousOffset) {
-      backoffMs = 1000;
-    } else {
+    if (result.hadFetchError) {
       backoffMs = Math.min(backoffMs * 2, maxBackoffMs);
+    } else {
+      backoffMs = 1000;
     }
 
     await new Promise<void>((resolve) => {

@@ -13,6 +13,26 @@ type TelegramErrorResponse = {
 
 type TelegramApiResponse<T> = TelegramOkResponse<T> | TelegramErrorResponse;
 
+async function delay(ms: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) {
+    throw new Error("Telegram API request aborted");
+  }
+
+  await new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(new Error("Telegram API request aborted"));
+    };
+
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
 function isTelegramApiResponse<T>(value: unknown): value is TelegramApiResponse<T> {
   if (typeof value !== "object" || value === null) {
     return false;
@@ -85,8 +105,9 @@ export class TelegramApi {
     method: string,
     body: Record<string, unknown>,
     validateResult?: (value: unknown) => value is T,
+    signal?: AbortSignal,
   ): Promise<T> {
-    return this.postJsonOnce(method, body, validateResult, true);
+    return this.postJsonOnce(method, body, validateResult, true, signal);
   }
 
   private async postJsonOnce<T>(
@@ -94,6 +115,7 @@ export class TelegramApi {
     body: Record<string, unknown>,
     validateResult: ((value: unknown) => value is T) | undefined,
     allowRetry: boolean,
+    signal?: AbortSignal,
   ): Promise<T> {
     const response = await fetch(this.buildUrl(method), {
       method: "POST",
@@ -101,6 +123,7 @@ export class TelegramApi {
         "Content-Type": "application/json",
       },
       body: JSON.stringify(body),
+      signal,
     });
 
     if (response.status === 429 && allowRetry) {
@@ -113,8 +136,8 @@ export class TelegramApi {
       } catch {
         // Use default retry_after
       }
-      await new Promise((resolve) => setTimeout(resolve, retryAfterSeconds * 1000));
-      return this.postJsonOnce(method, body, validateResult, false);
+      await delay(retryAfterSeconds * 1000, signal);
+      return this.postJsonOnce(method, body, validateResult, false, signal);
     }
 
     if (!response.ok) {
@@ -178,13 +201,13 @@ export class TelegramApi {
     await writeFile(destinationPath, bytes);
   }
 
-  async getUpdates(offset?: number): Promise<unknown[]> {
+  async getUpdates(offset?: number, signal?: AbortSignal): Promise<unknown[]> {
     const body: Record<string, unknown> = {};
     if (offset !== undefined) {
       body.offset = offset;
     }
 
-    return this.postJson("getUpdates", body, isTelegramUpdateArray);
+    return this.postJson("getUpdates", body, isTelegramUpdateArray, signal);
   }
 
   async getMe(): Promise<TelegramBotIdentity> {

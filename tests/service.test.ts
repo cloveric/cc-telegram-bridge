@@ -326,13 +326,18 @@ describe("polling helpers", () => {
         .mockRejectedValueOnce(new Error("boom")),
     };
 
-    await expect(pollTelegramUpdatesOnce(api as never, bridge as never, path.join(os.tmpdir(), "ignored"), logger, 7)).resolves.toBe(12);
+    await expect(
+      pollTelegramUpdatesOnce(api as never, bridge as never, path.join(os.tmpdir(), "ignored"), logger, 7),
+    ).resolves.toEqual({
+      offset: 11,
+      hadFetchError: false,
+    });
 
     expect(bridge.handleAuthorizedMessage).toHaveBeenCalledTimes(2);
     expect(logger.error).toHaveBeenCalledTimes(1);
   });
 
-  it("continues processing later updates after a failed update", async () => {
+  it("stops processing later updates after a failed update", async () => {
     const logger = {
       error: vi.fn(),
     };
@@ -372,7 +377,7 @@ describe("polling helpers", () => {
       logger,
     );
 
-    expect(bridge.handleAuthorizedMessage).toHaveBeenCalledTimes(2);
+    expect(bridge.handleAuthorizedMessage).toHaveBeenCalledTimes(1);
     expect(logger.error).toHaveBeenCalledTimes(1);
   });
 
@@ -388,7 +393,12 @@ describe("polling helpers", () => {
       handleAuthorizedMessage: vi.fn(),
     };
 
-    await expect(pollTelegramUpdatesOnce(api as never, bridge as never, path.join(os.tmpdir(), "ignored"), logger, 7)).resolves.toBe(7);
+    await expect(
+      pollTelegramUpdatesOnce(api as never, bridge as never, path.join(os.tmpdir(), "ignored"), logger, 7),
+    ).resolves.toEqual({
+      offset: 7,
+      hadFetchError: true,
+    });
     expect(logger.error).toHaveBeenCalledTimes(1);
     expect(bridge.handleAuthorizedMessage).not.toHaveBeenCalled();
   });

@@ -7,4 +7,4 @@ $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent $PSScriptRoot
 Set-Location $repoRoot
 
-npm start -- telegram service stop --instance $Instance
+node .\dist\src\index.js telegram service stop --instance $Instance
