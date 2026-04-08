@@ -91,6 +91,34 @@ describe("SessionStore", () => {
     }
   });
 
+  it("upsert keeps concurrent writes from losing records", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
+    const filePath = path.join(tempDir, "session.json");
+    const store = new SessionStore(filePath);
+
+    try {
+      const writes = [
+        store.upsert(createRecord({ telegramChatId: 101, codexSessionId: "session-101" })),
+        store.upsert(createRecord({ telegramChatId: 102, codexSessionId: "session-102" })),
+        store.upsert(createRecord({ telegramChatId: 103, codexSessionId: "session-103" })),
+      ];
+
+      await Promise.all(writes);
+
+      await expect(store.findByChatId(101)).resolves.toEqual(
+        createRecord({ telegramChatId: 101, codexSessionId: "session-101" }),
+      );
+      await expect(store.findByChatId(102)).resolves.toEqual(
+        createRecord({ telegramChatId: 102, codexSessionId: "session-102" }),
+      );
+      await expect(store.findByChatId(103)).resolves.toEqual(
+        createRecord({ telegramChatId: 103, codexSessionId: "session-103" }),
+      );
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
   it("returns fresh default state when the file is missing", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
     const filePath = path.join(tempDir, "session.json");
