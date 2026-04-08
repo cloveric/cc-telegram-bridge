@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 
 import { AccessStore } from "../src/state/access-store.js";
 import { runCli } from "../src/commands/cli.js";
+import { SessionStore } from "../src/state/session-store.js";
 
 describe("runCli", () => {
   it("configures the default instance", async () => {
@@ -194,6 +195,39 @@ describe("runCli", () => {
       expect(messages[4]).toMatch(
         /^Instance: alpha\nPolicy: allowlist\nPaired users: 0\nAllowlist: 123\nPending pairs: [A-Z2-9]{6} chat 84 expires 2026-04-08T00:05:00\.000Z$/,
       );
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("lists and shows session bindings", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
+    const messages: string[] = [];
+
+    try {
+      const sessionPath = path.join(tempDir, ".codex", "channels", "telegram", "default", "session.json");
+      const store = new SessionStore(sessionPath);
+      await store.upsert({
+        telegramChatId: 84,
+        codexSessionId: "thread-abc",
+        status: "idle",
+        updatedAt: "2026-04-08T12:00:00.000Z",
+      });
+
+      await runCli(["telegram", "session", "list"], {
+        env: { USERPROFILE: tempDir },
+        logger: { log: (message) => messages.push(message) },
+      });
+
+      await runCli(["telegram", "session", "show", "84"], {
+        env: { USERPROFILE: tempDir },
+        logger: { log: (message) => messages.push(message) },
+      });
+
+      expect(messages[0]).toContain("Session bindings: 1");
+      expect(messages[0]).toContain("chat 84 -> thread-abc");
+      expect(messages[1]).toContain("Thread: thread-abc");
+      expect(messages[1]).toContain("Status: idle");
     } finally {
       await rm(tempDir, { recursive: true, force: true });
     }

@@ -3,6 +3,7 @@ import { AccessStore } from "../state/access-store.js";
 import { normalizeInstanceName } from "../instance.js";
 import { resolveInstanceAccessStatePath, type InstanceTokenEnv, writeInstanceBotToken } from "./access.js";
 import { appendAuditEvent } from "../state/audit-log.js";
+import { getSessionForChat, listSessions } from "./session.js";
 import {
   getServiceLogs,
   getServiceStatus,
@@ -79,6 +80,24 @@ function parseChatId(value: string): number {
   }
 
   return parsed;
+}
+
+function formatSessionList(
+  instanceName: string,
+  sessions: Awaited<ReturnType<typeof listSessions>>,
+): string {
+  const lines = [`Instance: ${instanceName}`, `Session bindings: ${sessions.length}`];
+
+  if (sessions.length === 0) {
+    lines.push("Sessions: none");
+    return lines.join("\n");
+  }
+
+  for (const session of sessions) {
+    lines.push(`- chat ${session.chatId} -> ${session.threadId} [${session.status}] @ ${session.updatedAt}`);
+  }
+
+  return lines.join("\n");
 }
 
 function resolveAuditStateDir(
@@ -221,6 +240,50 @@ async function runStatusCommand(argv: string[], env: InstanceTokenEnv, logger: C
   return true;
 }
 
+async function runSessionCommand(argv: string[], env: InstanceTokenEnv, logger: CliLogger): Promise<boolean> {
+  if (argv.length < 2) {
+    throw new Error("Usage: telegram session <list|show> ...");
+  }
+
+  const subcommand = argv[1];
+  const { instanceName, args } = extractInstanceOption(argv.slice(2));
+
+  if (subcommand === "list") {
+    if (args.length !== 0) {
+      throw new Error("Usage: telegram session list [--instance <name>]");
+    }
+
+    logger.log(formatSessionList(instanceName, await listSessions(env, instanceName)));
+    return true;
+  }
+
+  if (subcommand === "show") {
+    if (args.length !== 1) {
+      throw new Error("Usage: telegram session show [--instance <name>] <chat-id>");
+    }
+
+    const chatId = parseChatId(args[0]);
+    const session = await getSessionForChat(env, instanceName, chatId);
+    if (!session) {
+      logger.log(`No session binding found for chat ${chatId} in instance "${instanceName}".`);
+      return true;
+    }
+
+    logger.log(
+      [
+        `Instance: ${instanceName}`,
+        `Chat: ${session.chatId}`,
+        `Thread: ${session.threadId}`,
+        `Status: ${session.status}`,
+        `Updated: ${session.updatedAt}`,
+      ].join("\n"),
+    );
+    return true;
+  }
+
+  throw new Error("Usage: telegram session <list|show> ...");
+}
+
 function formatServiceStatus(status: Awaited<ReturnType<typeof getServiceStatus>>): string {
   const lines = [
     `Instance: ${status.instanceName}`,
@@ -323,6 +386,10 @@ export async function runCli(argv: string[], options: CliOptions = {}): Promise<
 
   if (normalized[0] === "service") {
     return runServiceCommand(normalized, env, logger, options.serviceDeps ?? {});
+  }
+
+  if (normalized[0] === "session") {
+    return runSessionCommand(normalized, env, logger);
   }
 
   return false;
