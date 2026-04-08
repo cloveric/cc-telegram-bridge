@@ -21,6 +21,7 @@ export interface AccessState {
 }
 
 export interface AppConfig {
+  instanceName: string;
   telegramBotToken: string;
   stateDir: string;
   inboxDir: string;

@@ -8,8 +8,9 @@ describe("resolveConfig", () => {
       TELEGRAM_BOT_TOKEN: "abc123",
     });
 
-    expect(config.stateDir).toBe("C:\\Users\\hangw\\.codex\\channels\\telegram");
-    expect(config.inboxDir).toBe("C:\\Users\\hangw\\.codex\\channels\\telegram\\inbox");
+    expect(config.instanceName).toBe("default");
+    expect(config.stateDir).toBe("C:\\Users\\hangw\\.codex\\channels\\telegram\\default");
+    expect(config.inboxDir).toBe("C:\\Users\\hangw\\.codex\\channels\\telegram\\default\\inbox");
     expect(config.telegramBotToken).toBe("abc123");
   });
 
@@ -31,18 +32,30 @@ describe("resolveConfig", () => {
 
   it("respects the state directory and executable overrides", () => {
     const config = resolveConfig({
-      USERPROFILE: "C:\\Users\\hangw",
       TELEGRAM_BOT_TOKEN: "abc123",
       CODEX_TELEGRAM_STATE_DIR: "C:/custom/state",
       CODEX_EXECUTABLE: "codex.exe",
     });
 
+    expect(config.instanceName).toBe("default");
     expect(config.stateDir).toBe("C:/custom/state");
     expect(config.inboxDir).toBe("C:/custom/state/inbox");
     expect(config.accessStatePath).toBe("C:/custom/state/access.json");
     expect(config.sessionStatePath).toBe("C:/custom/state/session.json");
     expect(config.runtimeLogPath).toBe("C:/custom/state/runtime.log");
     expect(config.codexExecutable).toBe("codex.exe");
+  });
+
+  it("uses the named instance directory when CODEX_TELEGRAM_INSTANCE is set", () => {
+    const config = resolveConfig({
+      USERPROFILE: "C:\\Users\\hangw",
+      TELEGRAM_BOT_TOKEN: "abc123",
+      CODEX_TELEGRAM_INSTANCE: "alpha",
+    });
+
+    expect(config.instanceName).toBe("alpha");
+    expect(config.stateDir).toBe("C:\\Users\\hangw\\.codex\\channels\\telegram\\alpha");
+    expect(config.accessStatePath).toBe("C:\\Users\\hangw\\.codex\\channels\\telegram\\alpha\\access.json");
   });
 
   it("defaults the codex executable to codex", () => {

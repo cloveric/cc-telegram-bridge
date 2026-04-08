@@ -5,11 +5,12 @@ import type { AppConfig } from "./types.js";
 export interface EnvSource {
   USERPROFILE?: string;
   TELEGRAM_BOT_TOKEN?: string;
+  CODEX_TELEGRAM_INSTANCE?: string;
   CODEX_TELEGRAM_STATE_DIR?: string;
   CODEX_EXECUTABLE?: string;
 }
 
-function joinStatePath(base: string, segment: string): string {
+export function joinStatePath(base: string, segment: string): string {
   if (base.includes("/") && !base.includes("\\")) {
     return path.posix.join(base, segment);
   }
@@ -17,22 +18,33 @@ function joinStatePath(base: string, segment: string): string {
   return path.win32.join(base, segment);
 }
 
-export function resolveConfig(env: EnvSource = process.env): AppConfig {
+export function resolveInstanceStateDir(
+  env: Pick<EnvSource, "USERPROFILE" | "CODEX_TELEGRAM_INSTANCE" | "CODEX_TELEGRAM_STATE_DIR"> = process.env,
+): string {
+  if (env.CODEX_TELEGRAM_STATE_DIR) {
+    return env.CODEX_TELEGRAM_STATE_DIR;
+  }
+
   const userProfile = env.USERPROFILE;
   if (!userProfile) {
     throw new Error("USERPROFILE is required");
   }
 
+  const instanceName = env.CODEX_TELEGRAM_INSTANCE ?? "default";
+  return path.win32.join(userProfile, ".codex", "channels", "telegram", instanceName);
+}
+
+export function resolveConfig(env: EnvSource = process.env): AppConfig {
   const telegramBotToken = env.TELEGRAM_BOT_TOKEN;
   if (!telegramBotToken) {
     throw new Error("TELEGRAM_BOT_TOKEN is required");
   }
 
-  const stateDir =
-    env.CODEX_TELEGRAM_STATE_DIR ??
-    path.win32.join(userProfile, ".codex", "channels", "telegram");
+  const instanceName = env.CODEX_TELEGRAM_INSTANCE ?? "default";
+  const stateDir = resolveInstanceStateDir(env);
 
   return {
+    instanceName,
     telegramBotToken,
     stateDir,
     inboxDir: joinStatePath(stateDir, "inbox"),
