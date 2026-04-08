@@ -1,9 +1,9 @@
 <p align="center">
-  <img src="./assets/github-banner.svg" alt="Codex Telegram Channel" width="100%" />
+  <img src="./assets/github-banner.svg" alt="CC Telegram Bridge" width="100%" />
 </p>
 
 <p align="center">
-  <a href="https://github.com/cloveric/codex-telegram-channel/blob/main/LICENSE"><img src="https://img.shields.io/github/license/cloveric/codex-telegram-channel?style=flat-square&color=818cf8" alt="License"></a>
+  <a href="https://github.com/cloveric/cc-telegram-bridge/blob/main/LICENSE"><img src="https://img.shields.io/github/license/cloveric/cc-telegram-bridge?style=flat-square&color=818cf8" alt="License"></a>
   <img src="https://img.shields.io/badge/TypeScript-5.9-3178c6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript">
   <img src="https://img.shields.io/badge/Node.js-%3E%3D20-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node.js">
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-0078D4?style=flat-square&logo=node.js&logoColor=white" alt="Windows | macOS | Linux">
@@ -71,7 +71,7 @@ Run as many bots as you need. Each instance is fully isolated — its own engine
 
 ```
           ┌─────────────────────────────────────────────┐
-          │          codex-telegram-channel              │
+          │          cc-telegram-bridge              │
           └────────────┬──────────────┬─────────────────┘
                        │              │
         ┌──────────────┼──────────────┼──────────────┐
@@ -163,8 +163,8 @@ npm run dev -- telegram yolo --instance work          # Check status
 ### Install
 
 ```bash
-git clone https://github.com/cloveric/codex-telegram-channel.git
-cd codex-telegram-channel
+git clone https://github.com/cloveric/cc-telegram-bridge.git
+cd cc-telegram-bridge
 npm install
 npm run build
 ```
@@ -190,7 +190,7 @@ npm run dev -- telegram service start --instance claude-bot
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                        codex-telegram-channel                       │
+│                        cc-telegram-bridge                       │
 ├─────────────┬──────────────┬──────────────────┬─────────────────────┤
 │  Telegram   │   Runtime    │     AI Engine    │      State          │
 │  Layer      │   Layer      │     Layer        │      Layer          │

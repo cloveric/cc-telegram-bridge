@@ -54,8 +54,8 @@
     <text x="493" y="124" fill="#FDBA74" font-family="'SF Mono', 'Cascadia Code', Consolas, monospace" font-size="13" font-weight="600" letter-spacing="1.5">CODEX + CLAUDE</text>
 
     <!-- Title -->
-    <text x="80" y="200" fill="#F1F5F9" font-family="'Inter', 'SF Pro Display', 'Segoe UI', system-ui, sans-serif" font-size="52" font-weight="800" letter-spacing="-1.5">Codex Telegram</text>
-    <text x="80" y="268" fill="#F1F5F9" font-family="'Inter', 'SF Pro Display', 'Segoe UI', system-ui, sans-serif" font-size="52" font-weight="800" letter-spacing="-1.5">Channel</text>
+    <text x="80" y="200" fill="#F1F5F9" font-family="'Inter', 'SF Pro Display', 'Segoe UI', system-ui, sans-serif" font-size="52" font-weight="800" letter-spacing="-1.5">CC Telegram</text>
+    <text x="80" y="268" fill="#F1F5F9" font-family="'Inter', 'SF Pro Display', 'Segoe UI', system-ui, sans-serif" font-size="52" font-weight="800" letter-spacing="-1.5">Bridge</text>
 
     <!-- Accent line -->
     <rect x="80" y="288" width="120" height="3" rx="1.5" fill="url(#accentGrad)"/>

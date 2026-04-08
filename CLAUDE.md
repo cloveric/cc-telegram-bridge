@@ -1,4 +1,4 @@
-# Codex Telegram Channel Instructions
+# CC Telegram Bridge Instructions
 
 ## Mission
 
