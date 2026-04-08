@@ -18,6 +18,7 @@ export interface ServiceCommandDeps {
   isProcessAlive?: (pid: number) => boolean;
   isExpectedServiceProcess?: (pid: number, entryPath: string, instanceName: string) => boolean;
   spawnDetached?: (command: string, args: string[]) => void;
+  sleep?: (ms: number) => Promise<void>;
   killProcessTree?: (pid: number) => void;
   readConfiguredBotToken?: (env: ServiceCommandEnv, instanceName: string) => Promise<string | null>;
   fetchTelegramBotIdentity?: (botToken: string) => Promise<{ firstName: string; username?: string }>;
@@ -105,6 +106,10 @@ function defaultSpawnDetached(command: string, args: string[]): void {
   child.unref();
 }
 
+function defaultSleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function defaultKillProcessTree(pid: number): void {
   const result = spawnSync("taskkill", ["/PID", String(pid), "/T", "/F"], {
     windowsHide: true,
@@ -177,6 +182,7 @@ export async function startServiceInstance(
   const isProcessAlive = deps.isProcessAlive ?? defaultIsProcessAlive;
   const isExpectedServiceProcess = deps.isExpectedServiceProcess ?? defaultIsExpectedServiceProcess;
   const spawnDetachedProcess = deps.spawnDetached ?? defaultSpawnDetached;
+  const sleep = deps.sleep ?? defaultSleep;
 
   if (!existsSync(paths.entryPath)) {
     throw new Error(`Built entrypoint not found: ${paths.entryPath}`);
@@ -202,7 +208,21 @@ export async function startServiceInstance(
   ].join("; ");
 
   spawnDetachedProcess(command, ["-NoProfile", "-Command", script]);
-  return `Started instance "${paths.instanceName}".`;
+
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const lock = await readLockRecord(paths.lockPath);
+    if (
+      lock !== null &&
+      isProcessAlive(lock.pid) &&
+      isExpectedServiceProcess(lock.pid, paths.entryPath, paths.instanceName)
+    ) {
+      return `Started instance "${paths.instanceName}" with pid ${lock.pid}.`;
+    }
+
+    await sleep(250);
+  }
+
+  throw new Error(`Instance "${paths.instanceName}" did not reach a running state.`);
 }
 
 export async function stopServiceInstance(

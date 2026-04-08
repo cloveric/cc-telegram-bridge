@@ -14,6 +14,8 @@ describe("telegram service commands", () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
     const messages: string[] = [];
     const spawnDetached = vi.fn();
+    const stateDir = path.join(tempDir, ".codex", "channels", "telegram", "alpha");
+    const lockPath = resolveInstanceLockPath(stateDir);
 
     try {
       const handled = await runCli(["telegram", "service", "start", "--instance", "alpha"], {
@@ -21,12 +23,28 @@ describe("telegram service commands", () => {
         logger: { log: (message) => messages.push(message) },
         serviceDeps: {
           cwd: REPO_ROOT,
-          spawnDetached,
+          spawnDetached: (command, args) => {
+            mkdir(stateDir, { recursive: true }).then(() =>
+              writeFile(
+                lockPath,
+                JSON.stringify({
+                  pid: 12345,
+                  token: "token",
+                  acquiredAt: new Date().toISOString(),
+                }),
+                "utf8",
+              ),
+            );
+            spawnDetached(command, args);
+          },
+          sleep: async () => {},
+          isProcessAlive: (pid) => pid === 12345,
+          isExpectedServiceProcess: (pid) => pid === 12345,
         },
       });
 
       expect(handled).toBe(true);
-      expect(messages).toEqual(['Started instance "alpha".']);
+      expect(messages).toEqual(['Started instance "alpha" with pid 12345.']);
       expect(spawnDetached).toHaveBeenCalledTimes(1);
     } finally {
       await rm(tempDir, { recursive: true, force: true });
