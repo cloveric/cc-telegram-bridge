@@ -6,6 +6,7 @@ import { resolveConfig, resolveInstanceStateDir, type EnvSource } from "./config
 import { Bridge } from "./runtime/bridge.js";
 import { ProcessCodexAdapter } from "./codex/process-adapter.js";
 import { ProcessClaudeAdapter } from "./codex/claude-adapter.js";
+import { CodexAppServerAdapter } from "./codex/app-server-adapter.js";
 import type { CodexAdapter } from "./codex/adapter.js";
 import { AccessStore } from "./state/access-store.js";
 import { appendAuditEvent } from "./state/audit-log.js";
@@ -169,6 +170,7 @@ export async function resolveServiceEnvForInstance(env: EnvSource, instanceName:
 }
 
 export type EngineType = "codex" | "claude";
+type ApprovalMode = "normal" | "full-auto" | "bypass";
 
 async function readInstanceEngine(configPath: string): Promise<EngineType> {
   try {
@@ -180,6 +182,20 @@ async function readInstanceEngine(configPath: string): Promise<EngineType> {
     return "codex";
   } catch {
     return "codex";
+  }
+}
+
+async function readApprovalMode(configPath: string): Promise<ApprovalMode> {
+  try {
+    const raw = await readFile(configPath, "utf8");
+    const parsed = JSON.parse(raw) as { approvalMode?: string };
+    if (parsed.approvalMode === "full-auto" || parsed.approvalMode === "bypass") {
+      return parsed.approvalMode;
+    }
+
+    return "normal";
+  } catch {
+    return "normal";
   }
 }
 
@@ -217,6 +233,7 @@ async function createAdapter(
 ): Promise<CodexAdapter> {
   const engine = await readInstanceEngine(configPath);
   const workspacePath = path.join(config.stateDir, "workspace");
+  const approvalMode = await readApprovalMode(configPath);
 
   if (engine === "claude") {
     await mkdir(workspacePath, { recursive: true });
@@ -225,6 +242,10 @@ async function createAdapter(
       configPath,
       workspacePath,
     });
+  }
+
+  if (approvalMode === "normal") {
+    return new CodexAppServerAdapter(config.codexExecutable, process.cwd());
   }
 
   return new ProcessCodexAdapter(config.codexExecutable, undefined, undefined, instructionsPath, configPath);

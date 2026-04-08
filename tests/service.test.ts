@@ -15,6 +15,9 @@ import {
 import { ChatQueue } from "../src/runtime/chat-queue.js";
 import { handleNormalizedTelegramMessage } from "../src/telegram/delivery.js";
 import { renderErrorMessage, renderWorkingMessage } from "../src/telegram/message-renderer.js";
+import { CodexAppServerAdapter } from "../src/codex/app-server-adapter.js";
+import { ProcessCodexAdapter } from "../src/codex/process-adapter.js";
+import { ProcessClaudeAdapter } from "../src/codex/claude-adapter.js";
 
 function createDeferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
@@ -95,6 +98,78 @@ describe("createServiceDependenciesForInstance", () => {
         process.env.TELEGRAM_BOT_TOKEN = originalToken;
       }
 
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("uses the persistent Codex app-server adapter by default", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
+    const envPath = path.join(root, ".codex", "channels", "telegram", "alpha", ".env");
+
+    try {
+      await mkdir(path.dirname(envPath), { recursive: true });
+      await writeFile(envPath, 'TELEGRAM_BOT_TOKEN="secret-token"\n', "utf8");
+
+      const result = await createServiceDependenciesForInstance(
+        {
+          USERPROFILE: root,
+          CODEX_EXECUTABLE: "codex",
+        },
+        "alpha",
+      );
+
+      expect((result.bridge as any).adapter).toBeInstanceOf(CodexAppServerAdapter);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("falls back to the process adapter when codex yolo mode is enabled", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
+    const stateDir = path.join(root, ".codex", "channels", "telegram", "alpha");
+    const envPath = path.join(stateDir, ".env");
+    const configPath = path.join(stateDir, "config.json");
+
+    try {
+      await mkdir(stateDir, { recursive: true });
+      await writeFile(envPath, 'TELEGRAM_BOT_TOKEN="secret-token"\n', "utf8");
+      await writeFile(configPath, JSON.stringify({ approvalMode: "full-auto" }) + "\n", "utf8");
+
+      const result = await createServiceDependenciesForInstance(
+        {
+          USERPROFILE: root,
+          CODEX_EXECUTABLE: "codex",
+        },
+        "alpha",
+      );
+
+      expect((result.bridge as any).adapter).toBeInstanceOf(ProcessCodexAdapter);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("uses the Claude adapter when the instance engine is claude", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
+    const stateDir = path.join(root, ".codex", "channels", "telegram", "alpha");
+    const envPath = path.join(stateDir, ".env");
+    const configPath = path.join(stateDir, "config.json");
+
+    try {
+      await mkdir(stateDir, { recursive: true });
+      await writeFile(envPath, 'TELEGRAM_BOT_TOKEN="secret-token"\n', "utf8");
+      await writeFile(configPath, JSON.stringify({ engine: "claude" }) + "\n", "utf8");
+
+      const result = await createServiceDependenciesForInstance(
+        {
+          USERPROFILE: root,
+          CLAUDE_EXECUTABLE: "claude",
+        },
+        "alpha",
+      );
+
+      expect((result.bridge as any).adapter).toBeInstanceOf(ProcessClaudeAdapter);
+    } finally {
       await rm(root, { recursive: true, force: true });
     }
   });
