@@ -97,10 +97,26 @@ export async function handleNormalizedTelegramMessage(
     const placeholder = await context.api.sendMessage(normalized.chatId, renderWorkingMessage());
     placeholderMessageId = placeholder.message_id;
 
+    const accessDecision = await context.bridge.checkAccess({
+      chatId: normalized.chatId,
+      userId: normalized.userId,
+      chatType: normalized.chatType,
+    });
+
+    if (accessDecision.kind === "reply" || accessDecision.kind === "deny") {
+      await context.api.editMessage(
+        normalized.chatId,
+        placeholderMessageId,
+        accessDecision.text ?? renderErrorMessage("This chat is not authorized."),
+      );
+      return;
+    }
+
     const files = await downloadAttachments(context.api, context.inboxDir, normalized.attachments);
     const result = await context.bridge.handleAuthorizedMessage({
       chatId: normalized.chatId,
       userId: normalized.userId,
+      chatType: normalized.chatType,
       text: normalized.text,
       files,
     });

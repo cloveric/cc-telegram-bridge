@@ -23,6 +23,17 @@ export interface SessionManagerLike {
   bindSession(chatId: number, sessionId: string): Promise<void>;
 }
 
+export interface BridgeAccessInput {
+  chatId: number;
+  userId: number;
+  chatType: string;
+}
+
+export interface BridgeAccessDecision {
+  kind: "allow" | "reply" | "deny";
+  text?: string;
+}
+
 export class Bridge {
   constructor(
     private readonly accessStore: AccessStoreLike,
@@ -30,21 +41,28 @@ export class Bridge {
     private readonly adapter: CodexAdapter,
   ) {}
 
-  async handleAuthorizedMessage(input: {
-    chatId: number;
-    userId: number;
-    text: string;
-    files: string[];
-  }) {
+  async checkAccess(input: BridgeAccessInput): Promise<BridgeAccessDecision> {
     const accessState = await this.accessStore.load();
 
+    if (input.chatType !== "private") {
+      return {
+        kind: "reply",
+        text: "Only private chats are supported.",
+      };
+    }
+
     if (accessState.policy === "allowlist" && !accessState.allowlist.includes(input.chatId)) {
-      throw new Error("User is not in the allowlist");
+      return {
+        kind: "deny",
+        text: "This chat is not authorized.",
+      };
     }
 
     if (
       accessState.policy === "pairing" &&
-      !accessState.pairedUsers.some((user) => user.telegramChatId === input.chatId)
+      !accessState.pairedUsers.some(
+        (user) => user.telegramChatId === input.chatId && input.userId === input.chatId,
+      )
     ) {
       const pendingPair = await this.accessStore.issuePairingCode({
         telegramUserId: input.userId,
@@ -53,7 +71,28 @@ export class Bridge {
       });
 
       return {
+        kind: "reply",
         text: `Pair this chat with code ${pendingPair.code}`,
+      };
+    }
+
+    return { kind: "allow" };
+  }
+
+  async handleAuthorizedMessage(input: {
+    chatId: number;
+    userId: number;
+    chatType: string;
+    text: string;
+    files: string[];
+  }) {
+    const decision = await this.checkAccess(input);
+    if (decision.kind === "deny") {
+      throw new Error(decision.text ?? "This chat is not authorized.");
+    }
+    if (decision.kind === "reply") {
+      return {
+        text: decision.text ?? "This chat is not authorized.",
       };
     }
 

@@ -7,6 +7,7 @@ export interface NormalizedTelegramAttachment {
 export interface NormalizedTelegramMessage {
   chatId: number;
   userId: number;
+  chatType: string;
   text: string;
   attachments: NormalizedTelegramAttachment[];
 }
@@ -48,15 +49,22 @@ export function normalizeUpdate(update: any): NormalizedTelegramMessage | null {
   const message = update?.message;
   const chatId = message?.chat?.id;
   const userId = message?.from?.id;
+  const chatType = message?.chat?.type;
 
-  if (typeof chatId !== "number" || typeof userId !== "number") {
+  if (typeof chatId !== "number" || typeof userId !== "number" || typeof chatType !== "string") {
     return null;
   }
 
   return {
     chatId,
     userId,
-    text: typeof message.text === "string" ? message.text : "",
+    chatType,
+    text:
+      typeof message.text === "string"
+        ? message.text
+        : typeof message.caption === "string"
+          ? message.caption
+          : "",
     attachments: [...normalizeDocumentAttachment(message), ...normalizePhotoAttachment(message)],
   };
 }

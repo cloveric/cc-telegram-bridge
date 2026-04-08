@@ -1,14 +1,40 @@
+import { existsSync } from "node:fs";
 import path from "node:path";
 
 import { normalizeInstanceName } from "./instance.js";
 import type { AppConfig } from "./types.js";
 
 export interface EnvSource {
+  APPDATA?: string;
   USERPROFILE?: string;
   TELEGRAM_BOT_TOKEN?: string;
   CODEX_TELEGRAM_INSTANCE?: string;
   CODEX_TELEGRAM_STATE_DIR?: string;
   CODEX_EXECUTABLE?: string;
+}
+
+function resolveDefaultCodexExecutable(env: EnvSource): string {
+  if (env.CODEX_EXECUTABLE) {
+    return env.CODEX_EXECUTABLE;
+  }
+
+  const appData =
+    env.APPDATA ??
+    (env.USERPROFILE ? path.win32.join(env.USERPROFILE, "AppData", "Roaming") : undefined);
+
+  if (appData) {
+    const windowsCodexCmd = path.win32.join(appData, "npm", "codex.cmd");
+    if (existsSync(windowsCodexCmd)) {
+      return windowsCodexCmd;
+    }
+
+    const windowsCodexShim = path.win32.join(appData, "npm", "codex.ps1");
+    if (existsSync(windowsCodexShim)) {
+      return windowsCodexShim;
+    }
+  }
+
+  return "codex";
 }
 
 export function joinStatePath(base: string, segment: string): string {
@@ -53,6 +79,6 @@ export function resolveConfig(env: EnvSource = process.env): AppConfig {
     accessStatePath: joinStatePath(stateDir, "access.json"),
     sessionStatePath: joinStatePath(stateDir, "session.json"),
     runtimeLogPath: joinStatePath(stateDir, "runtime.log"),
-    codexExecutable: env.CODEX_EXECUTABLE ?? "codex",
+    codexExecutable: resolveDefaultCodexExecutable(env),
   };
 }

@@ -32,6 +32,7 @@ describe("Bridge", () => {
     const result = await bridge.handleAuthorizedMessage({
       chatId: 84,
       userId: 42,
+      chatType: "private",
       text: "hello",
       files: [],
     });
@@ -71,10 +72,11 @@ describe("Bridge", () => {
       bridge.handleAuthorizedMessage({
         chatId: 84,
         userId: 42,
+        chatType: "private",
         text: "hello",
         files: [],
       }),
-    ).rejects.toThrow("User is not in the allowlist");
+    ).rejects.toThrow("This chat is not authorized.");
     expect(sessionManager.getOrCreateSession).not.toHaveBeenCalled();
     expect(adapter.sendUserMessage).not.toHaveBeenCalled();
   });
@@ -103,7 +105,8 @@ describe("Bridge", () => {
     const bridge = new Bridge(accessStore, sessionManager, adapter);
     const result = await bridge.handleAuthorizedMessage({
       chatId: 84,
-      userId: 42,
+      userId: 84,
+      chatType: "private",
       text: "hello",
       files: [],
     });
@@ -112,7 +115,7 @@ describe("Bridge", () => {
       text: "Pair this chat with code ABC123",
     });
     expect(accessStore.issuePairingCode).toHaveBeenCalledWith({
-      telegramUserId: 42,
+      telegramUserId: 84,
       telegramChatId: 84,
       now: expect.any(Date),
     });
@@ -148,7 +151,8 @@ describe("Bridge", () => {
     const bridge = new Bridge(accessStore, sessionManager, adapter);
     const result = await bridge.handleAuthorizedMessage({
       chatId: 84,
-      userId: 42,
+      userId: 84,
+      chatType: "private",
       text: "hello",
       files: [],
     });
@@ -185,6 +189,7 @@ describe("Bridge", () => {
       const result = await bridge.handleAuthorizedMessage({
         chatId: 84,
         userId: 42,
+        chatType: "private",
         text: "hello again",
         files: [],
       });
@@ -219,7 +224,8 @@ describe("Bridge", () => {
     const bridge = new Bridge(accessStore, sessionManager, adapter);
     const result = await bridge.handleAuthorizedMessage({
       chatId: 84,
-      userId: 42,
+      userId: 84,
+      chatType: "private",
       text: "hello",
       files: [],
     });

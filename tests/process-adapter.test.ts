@@ -13,14 +13,18 @@ describe("ProcessCodexAdapter", () => {
   });
 
   it("passes attachments into the generated prompt", async () => {
-    const calls: Array<{ command: string; args: string[] }> = [];
+    const calls: Array<{
+      command: string;
+      args: string[];
+      options: { stdio: ["ignore", "pipe", "pipe"]; shell?: boolean; env?: NodeJS.ProcessEnv };
+    }> = [];
     const child = new FakeChildProcess();
     const spawnCodex = (
       command: string,
       args: string[],
-      _options: { stdio: ["ignore", "pipe", "pipe"] },
+      options: { stdio: ["ignore", "pipe", "pipe"]; shell?: boolean; env?: NodeJS.ProcessEnv },
     ) => {
-      calls.push({ command, args });
+      calls.push({ command, args, options });
       return child;
     };
 
@@ -36,12 +40,13 @@ describe("ProcessCodexAdapter", () => {
 
     await promise;
 
-    expect(calls).toEqual([
-      {
-        command: "codex",
-        args: ["exec", "--json", "Hello\nAttachment: a.png\nAttachment: b.pdf"],
-      },
-    ]);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({
+      command: "codex",
+      args: ["exec", "--json", "Hello\nAttachment: a.png\nAttachment: b.pdf"],
+      options: { stdio: ["ignore", "pipe", "pipe"], shell: false },
+    });
+    expect(calls[0]?.options.env?.TELEGRAM_BOT_TOKEN).toBeUndefined();
   });
 
   it("returns trimmed stdout when codex exits successfully", async () => {
@@ -129,13 +134,17 @@ class FakeChildProcess extends EventEmitter {
 
 function createSpawnHarness() {
   const child = new FakeChildProcess();
-  const calls: Array<{ command: string; args: string[] }> = [];
+  const calls: Array<{
+    command: string;
+    args: string[];
+    options: { stdio: ["ignore", "pipe", "pipe"]; shell?: boolean; env?: NodeJS.ProcessEnv };
+  }> = [];
   const spawnCodex = (
     command: string,
     args: string[],
-    _options: { stdio: ["ignore", "pipe", "pipe"] },
+    options: { stdio: ["ignore", "pipe", "pipe"]; shell?: boolean; env?: NodeJS.ProcessEnv },
   ) => {
-    calls.push({ command, args });
+    calls.push({ command, args, options });
     return child;
   };
 

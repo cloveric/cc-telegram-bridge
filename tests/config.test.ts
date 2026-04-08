@@ -70,10 +70,20 @@ describe("resolveConfig", () => {
 
   it("defaults the codex executable to codex", () => {
     const config = resolveConfig({
-      USERPROFILE: "C:\\Users\\hangw",
+      USERPROFILE: "C:\\Users\\missing-user",
       TELEGRAM_BOT_TOKEN: "abc123",
     });
 
     expect(config.codexExecutable).toBe("codex");
+  });
+
+  it("prefers the installed Windows codex shim when available", () => {
+    const config = resolveConfig({
+      USERPROFILE: "C:\\Users\\hangw",
+      APPDATA: "C:\\Users\\hangw\\AppData\\Roaming",
+      TELEGRAM_BOT_TOKEN: "abc123",
+    });
+
+    expect(config.codexExecutable).toBe("C:\\Users\\hangw\\AppData\\Roaming\\npm\\codex.cmd");
   });
 });

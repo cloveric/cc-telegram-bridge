@@ -46,19 +46,19 @@ describe("normalizeUpdate", () => {
     expect(
       normalizeUpdate({
         message: {
-          chat: { id: 123 },
+          chat: { id: 123, type: "private" },
           from: { id: 456 },
           text: "hello",
         },
       }),
-    ).toEqual({ chatId: 123, userId: 456, text: "hello", attachments: [] });
+    ).toEqual({ chatId: 123, userId: 456, chatType: "private", text: "hello", attachments: [] });
   });
 
   it("extracts a document attachment", () => {
     expect(
       normalizeUpdate({
         message: {
-          chat: { id: 123 },
+          chat: { id: 123, type: "private" },
           from: { id: 456 },
           text: "hello",
           document: {
@@ -70,6 +70,7 @@ describe("normalizeUpdate", () => {
     ).toEqual({
       chatId: 123,
       userId: 456,
+      chatType: "private",
       text: "hello",
       attachments: [
         {
@@ -85,7 +86,7 @@ describe("normalizeUpdate", () => {
     expect(
       normalizeUpdate({
         message: {
-          chat: { id: 123 },
+          chat: { id: 123, type: "private" },
           from: { id: 456 },
           photo: [
             { file_id: "small" },
@@ -96,6 +97,7 @@ describe("normalizeUpdate", () => {
     ).toEqual({
       chatId: 123,
       userId: 456,
+      chatType: "private",
       text: "",
       attachments: [
         {

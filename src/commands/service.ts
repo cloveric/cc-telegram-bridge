@@ -5,10 +5,10 @@ import { spawn, spawnSync } from "node:child_process";
 
 import { resolveInstanceStateDir, type EnvSource } from "../config.js";
 import { normalizeInstanceName } from "../instance.js";
-import { resolveInstanceLockPath } from "../state/instance-lock.js";
+import { resolveInstanceLockPath, type InstanceLockRecord } from "../state/instance-lock.js";
 import { AccessStore } from "../state/access-store.js";
 import { TelegramApi } from "../telegram/api.js";
-import { lookupTelegramBotIdentity, readConfiguredBotToken } from "../service.js";
+import { getLastHandledUpdateId, lookupTelegramBotIdentity, readConfiguredBotToken } from "../service.js";
 
 export interface ServiceCommandEnv
   extends Pick<EnvSource, "USERPROFILE" | "CODEX_TELEGRAM_STATE_DIR" | "TELEGRAM_BOT_TOKEN"> {}
@@ -16,6 +16,7 @@ export interface ServiceCommandEnv
 export interface ServiceCommandDeps {
   cwd?: string;
   isProcessAlive?: (pid: number) => boolean;
+  isExpectedServiceProcess?: (pid: number, entryPath: string, instanceName: string) => boolean;
   spawnDetached?: (command: string, args: string[]) => void;
   killProcessTree?: (pid: number) => void;
   readConfiguredBotToken?: (env: ServiceCommandEnv, instanceName: string) => Promise<string | null>;
@@ -43,6 +44,7 @@ export interface ServiceStatus {
   pairedUsers: number;
   allowlistCount: number;
   pendingPairs: number;
+  lastHandledUpdateId: number | null;
   botTokenConfigured: boolean;
   botIdentity?: {
     firstName: string;
@@ -50,10 +52,6 @@ export interface ServiceStatus {
   };
   botIdentityWarning?: string;
 }
-
-type LockRecord = {
-  pid: number;
-};
 
 function defaultIsProcessAlive(pid: number): boolean {
   try {
@@ -73,6 +71,25 @@ function defaultIsProcessAlive(pid: number): boolean {
 
     throw error;
   }
+}
+
+function defaultIsExpectedServiceProcess(pid: number, entryPath: string, instanceName: string): boolean {
+  const encoded = Buffer.from(
+    `
+      $proc = Get-CimInstance Win32_Process -Filter "ProcessId = ${pid}";
+      if ($null -eq $proc) { exit 1 }
+      $cmd = $proc.CommandLine;
+      if ($cmd -like "*${entryPath.replace(/\\/g, "\\\\")}*" -and $cmd -like "*--instance ${instanceName}*") { exit 0 }
+      exit 1
+    `,
+    "utf16le",
+  ).toString("base64");
+
+  const result = spawnSync("pwsh", ["-NoProfile", "-EncodedCommand", encoded], {
+    windowsHide: true,
+  });
+
+  return result.status === 0;
 }
 
 function defaultSpawnDetached(command: string, args: string[]): void {
@@ -95,7 +112,7 @@ function defaultKillProcessTree(pid: number): void {
   }
 }
 
-async function readLockPid(lockPath: string): Promise<number | null> {
+async function readLockRecord(lockPath: string): Promise<InstanceLockRecord | null> {
   try {
     const raw = await readFile(lockPath, "utf8");
     const parsed = JSON.parse(raw) as unknown;
@@ -104,9 +121,11 @@ async function readLockPid(lockPath: string): Promise<number | null> {
       typeof parsed === "object" &&
       parsed !== null &&
       "pid" in parsed &&
-      typeof (parsed as LockRecord).pid === "number"
+      typeof (parsed as InstanceLockRecord).pid === "number" &&
+      "token" in parsed &&
+      typeof (parsed as InstanceLockRecord).token === "string"
     ) {
-      return (parsed as LockRecord).pid;
+      return parsed as InstanceLockRecord;
     }
   } catch (error) {
     if (
@@ -152,15 +171,20 @@ export async function startServiceInstance(
   const cwd = deps.cwd ?? process.cwd();
   const paths = resolveServicePaths(env, instanceName, cwd);
   const isProcessAlive = deps.isProcessAlive ?? defaultIsProcessAlive;
+  const isExpectedServiceProcess = deps.isExpectedServiceProcess ?? defaultIsExpectedServiceProcess;
   const spawnDetachedProcess = deps.spawnDetached ?? defaultSpawnDetached;
 
   if (!existsSync(paths.entryPath)) {
     throw new Error(`Built entrypoint not found: ${paths.entryPath}`);
   }
 
-  const existingPid = await readLockPid(paths.lockPath);
-  if (existingPid !== null && isProcessAlive(existingPid)) {
-    throw new Error(`Instance "${paths.instanceName}" is already running with pid ${existingPid}.`);
+  const existingLock = await readLockRecord(paths.lockPath);
+  if (
+    existingLock !== null &&
+    isProcessAlive(existingLock.pid) &&
+    isExpectedServiceProcess(existingLock.pid, paths.entryPath, paths.instanceName)
+  ) {
+    throw new Error(`Instance "${paths.instanceName}" is already running with pid ${existingLock.pid}.`);
   }
 
   await mkdir(paths.stateDir, { recursive: true });
@@ -185,14 +209,19 @@ export async function stopServiceInstance(
   const cwd = deps.cwd ?? process.cwd();
   const paths = resolveServicePaths(env, instanceName, cwd);
   const isProcessAlive = deps.isProcessAlive ?? defaultIsProcessAlive;
+  const isExpectedServiceProcess = deps.isExpectedServiceProcess ?? defaultIsExpectedServiceProcess;
   const killProcessTree = deps.killProcessTree ?? defaultKillProcessTree;
 
-  const existingPid = await readLockPid(paths.lockPath);
-  if (existingPid === null || !isProcessAlive(existingPid)) {
+  const existingLock = await readLockRecord(paths.lockPath);
+  if (
+    existingLock === null ||
+    !isProcessAlive(existingLock.pid) ||
+    !isExpectedServiceProcess(existingLock.pid, paths.entryPath, paths.instanceName)
+  ) {
     return `Instance "${paths.instanceName}" is not running.`;
   }
 
-  killProcessTree(existingPid);
+  killProcessTree(existingLock.pid);
   return `Stopped instance "${paths.instanceName}".`;
 }
 
@@ -204,10 +233,16 @@ export async function getServiceStatus(
   const cwd = deps.cwd ?? process.cwd();
   const paths = resolveServicePaths(env, instanceName, cwd);
   const isProcessAlive = deps.isProcessAlive ?? defaultIsProcessAlive;
-  const pid = await readLockPid(paths.lockPath);
-  const running = pid !== null && isProcessAlive(pid);
+  const isExpectedServiceProcess = deps.isExpectedServiceProcess ?? defaultIsExpectedServiceProcess;
+  const lockRecord = await readLockRecord(paths.lockPath);
+  const pid = lockRecord?.pid ?? null;
+  const running =
+    pid !== null &&
+    isProcessAlive(pid) &&
+    isExpectedServiceProcess(pid, paths.entryPath, paths.instanceName);
   const accessStore = new AccessStore(path.join(paths.stateDir, "access.json"));
   const accessStatus = await accessStore.getStatus();
+  const lastHandledUpdateId = await getLastHandledUpdateId(path.join(paths.stateDir, "inbox"));
   const readToken = deps.readConfiguredBotToken ?? readConfiguredBotToken;
   const fetchIdentity =
     deps.fetchTelegramBotIdentity ??
@@ -240,6 +275,7 @@ export async function getServiceStatus(
     pairedUsers: accessStatus.pairedUsers,
     allowlistCount: accessStatus.allowlist.length,
     pendingPairs: accessStatus.pendingPairs.length,
+    lastHandledUpdateId,
     botTokenConfigured: botToken !== null,
     botIdentity,
     botIdentityWarning,

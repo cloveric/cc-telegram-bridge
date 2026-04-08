@@ -56,6 +56,7 @@ describe("telegram service commands", () => {
         serviceDeps: {
           cwd: tempDir,
           isProcessAlive: (pid) => pid === 12345,
+          isExpectedServiceProcess: (pid) => pid === 12345,
         },
       });
 
@@ -157,6 +158,7 @@ describe("telegram service commands", () => {
         serviceDeps: {
           cwd: tempDir,
           isProcessAlive: (pid) => pid === 54321,
+          isExpectedServiceProcess: (pid) => pid === 54321,
           killProcessTree,
         },
       });

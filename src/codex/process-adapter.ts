@@ -9,6 +9,8 @@ import type {
 
 type SpawnOptions = {
   stdio: ["ignore", "pipe", "pipe"];
+  shell?: boolean;
+  env?: NodeJS.ProcessEnv;
 };
 
 type ProcessStreamLike = {
@@ -86,7 +88,14 @@ function isLogicalTelegramSessionId(sessionId: string): boolean {
   return sessionId.startsWith("telegram-");
 }
 
+function requiresShell(command: string): boolean {
+  return /\.cmd$/i.test(command) || /\.bat$/i.test(command) || /\.ps1$/i.test(command);
+}
+
 export class ProcessCodexAdapter implements CodexAdapter {
+  private readonly childEnv: NodeJS.ProcessEnv;
+  private readonly spawnCodex: SpawnCodex;
+
   /**
    * First-pass adapter that runs Codex as a process.
    * The returned session id is a logical Telegram binding key for now, not
@@ -94,8 +103,27 @@ export class ProcessCodexAdapter implements CodexAdapter {
    */
   constructor(
     private readonly codexExecutable: string,
-    private readonly spawnCodex: SpawnCodex = spawn as unknown as SpawnCodex,
-  ) {}
+    childEnvOrSpawn?: NodeJS.ProcessEnv | SpawnCodex,
+    spawnCodexArg?: SpawnCodex,
+  ) {
+    this.childEnv =
+      typeof childEnvOrSpawn === "function"
+        ? (() => {
+            const env = { ...process.env };
+            delete env.TELEGRAM_BOT_TOKEN;
+            return env;
+          })()
+        : childEnvOrSpawn ?? (() => {
+            const env = { ...process.env };
+            delete env.TELEGRAM_BOT_TOKEN;
+            return env;
+          })();
+
+    this.spawnCodex =
+      typeof childEnvOrSpawn === "function"
+        ? childEnvOrSpawn
+        : spawnCodexArg ?? (spawn as unknown as SpawnCodex);
+  }
 
   async createSession(chatId: number): Promise<CodexSessionHandle> {
     return { sessionId: `telegram-${chatId}` };
@@ -120,6 +148,8 @@ export class ProcessCodexAdapter implements CodexAdapter {
   private async runCodexJsonCommand(args: string[]): Promise<{ stdout: string; stderr: string }> {
     const child = this.spawnCodex(this.codexExecutable, args, {
       stdio: ["ignore", "pipe", "pipe"],
+      shell: requiresShell(this.codexExecutable),
+      env: this.childEnv,
     });
 
     return await new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {

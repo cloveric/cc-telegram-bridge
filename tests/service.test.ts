@@ -111,6 +111,7 @@ describe("polling helpers", () => {
       editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
     };
     const bridge = {
+      checkAccess: vi.fn().mockResolvedValue({ kind: "allow" }),
       handleAuthorizedMessage: vi.fn().mockResolvedValue({ text: "done" }),
     };
 
@@ -118,7 +119,7 @@ describe("polling helpers", () => {
       const update = {
         update_id: 42,
         message: {
-          chat: { id: 123 },
+          chat: { id: 123, type: "private" },
           from: { id: 456 },
           text: "hello",
         },
@@ -162,6 +163,7 @@ describe("polling helpers", () => {
       editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
     };
     const bridge = {
+      checkAccess: vi.fn().mockResolvedValue({ kind: "allow" }),
       handleAuthorizedMessage: vi.fn().mockResolvedValue({ text: "done" }),
     };
 
@@ -171,7 +173,7 @@ describe("polling helpers", () => {
           {
             update_id: 10,
             message: {
-              chat: { id: 123 },
+              chat: { id: 123, type: "private" },
               from: { id: 456 },
               text: "first",
             },
@@ -190,7 +192,7 @@ describe("polling helpers", () => {
           {
             update_id: 10,
             message: {
-              chat: { id: 123 },
+              chat: { id: 123, type: "private" },
               from: { id: 456 },
               text: "duplicate",
             },
@@ -198,7 +200,7 @@ describe("polling helpers", () => {
           {
             update_id: 9,
             message: {
-              chat: { id: 123 },
+              chat: { id: 123, type: "private" },
               from: { id: 456 },
               text: "older",
             },
@@ -231,6 +233,7 @@ describe("polling helpers", () => {
       editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
     };
     const bridge = {
+      checkAccess: vi.fn().mockResolvedValue({ kind: "allow" }),
       handleAuthorizedMessage: vi.fn().mockResolvedValue({ text: "done" }),
     };
 
@@ -240,7 +243,7 @@ describe("polling helpers", () => {
           {
             update_id: 10,
             message: {
-              chat: { id: 123 },
+              chat: { id: 123, type: "private" },
               from: { id: 456 },
               text: "first",
             },
@@ -259,7 +262,7 @@ describe("polling helpers", () => {
           {
             update_id: 11,
             message: {
-              chat: { id: 123 },
+              chat: { id: 123, type: "private" },
               from: { id: 456 },
               text: "second",
             },
@@ -267,7 +270,7 @@ describe("polling helpers", () => {
           {
             update_id: 12,
             message: {
-              chat: { id: 123 },
+              chat: { id: 123, type: "private" },
               from: { id: 456 },
               text: "third",
             },
@@ -298,7 +301,7 @@ describe("polling helpers", () => {
         {
           update_id: 10,
           message: {
-            chat: { id: 123 },
+            chat: { id: 123, type: "private" },
             from: { id: 456 },
             text: "first",
           },
@@ -306,7 +309,7 @@ describe("polling helpers", () => {
         {
           update_id: 11,
           message: {
-            chat: { id: 123 },
+            chat: { id: 123, type: "private" },
             from: { id: 456 },
             text: "second",
           },
@@ -316,6 +319,7 @@ describe("polling helpers", () => {
       editMessage: vi.fn().mockResolvedValue({ message_id: 1 }),
     };
     const bridge = {
+      checkAccess: vi.fn().mockResolvedValue({ kind: "allow" }),
       handleAuthorizedMessage: vi
         .fn()
         .mockResolvedValueOnce({ text: "first result" })
@@ -333,6 +337,7 @@ describe("polling helpers", () => {
       error: vi.fn(),
     };
     const bridge = {
+      checkAccess: vi.fn().mockResolvedValue({ kind: "allow" }),
       handleAuthorizedMessage: vi
         .fn()
         .mockRejectedValueOnce(new Error("boom"))
@@ -343,14 +348,14 @@ describe("polling helpers", () => {
       [
         {
           message: {
-            chat: { id: 123 },
+              chat: { id: 123, type: "private" },
             from: { id: 456 },
             text: "first",
           },
         },
         {
           message: {
-            chat: { id: 123 },
+              chat: { id: 123, type: "private" },
             from: { id: 456 },
             text: "second",
           },
@@ -379,6 +384,7 @@ describe("polling helpers", () => {
       getUpdates: vi.fn().mockRejectedValue(new Error("temporary failure")),
     };
     const bridge = {
+      checkAccess: vi.fn().mockResolvedValue({ kind: "allow" }),
       handleAuthorizedMessage: vi.fn(),
     };
 
@@ -399,6 +405,7 @@ describe("polling helpers", () => {
     let maxConcurrentCalls = 0;
     const releaseFirstCall = createDeferred<void>();
     const bridge = {
+      checkAccess: vi.fn().mockResolvedValue({ kind: "allow" }),
       handleAuthorizedMessage: vi.fn().mockImplementation(async ({ text }: { text: string }) => {
         activeCalls += 1;
         maxConcurrentCalls = Math.max(maxConcurrentCalls, activeCalls);
@@ -416,7 +423,7 @@ describe("polling helpers", () => {
       [
         {
           message: {
-            chat: { id: 123 },
+              chat: { id: 123, type: "private" },
             from: { id: 456 },
             text: "first",
           },
@@ -434,7 +441,7 @@ describe("polling helpers", () => {
       [
         {
           message: {
-            chat: { id: 123 },
+              chat: { id: 123, type: "private" },
             from: { id: 456 },
             text: "second",
           },
@@ -475,6 +482,7 @@ describe("polling helpers", () => {
         .mockImplementation(async (_filePath: string, destinationPath: string) => await writeFile(destinationPath, "x")),
     };
     const bridge = {
+      checkAccess: vi.fn().mockResolvedValue({ kind: "allow" }),
       handleAuthorizedMessage: vi.fn().mockResolvedValue({ text: "done" }),
     };
 
@@ -483,6 +491,7 @@ describe("polling helpers", () => {
         {
           chatId: 123,
           userId: 456,
+          chatType: "private",
           text: "hello",
           attachments: [
             { fileId: "doc-1", fileName: "report.pdf", kind: "document" },
@@ -501,6 +510,7 @@ describe("polling helpers", () => {
       expect(bridge.handleAuthorizedMessage).toHaveBeenCalledWith({
         chatId: 123,
         userId: 456,
+        chatType: "private",
         text: "hello",
         files: [
           path.join(inboxDir, "doc-1-report.pdf"),
@@ -522,6 +532,7 @@ describe("polling helpers", () => {
       downloadFile: vi.fn(),
     };
     const bridge = {
+      checkAccess: vi.fn().mockResolvedValue({ kind: "allow" }),
       handleAuthorizedMessage: vi.fn().mockResolvedValue({ text: "final response" }),
     };
 
@@ -529,6 +540,7 @@ describe("polling helpers", () => {
       {
         chatId: 123,
         userId: 456,
+        chatType: "private",
         text: "hello",
         attachments: [],
       },
@@ -551,6 +563,7 @@ describe("polling helpers", () => {
       downloadFile: vi.fn(),
     };
     const bridge = {
+      checkAccess: vi.fn().mockResolvedValue({ kind: "allow" }),
       handleAuthorizedMessage: vi.fn().mockRejectedValue(new Error("boom")),
     };
 
@@ -559,6 +572,7 @@ describe("polling helpers", () => {
         {
           chatId: 123,
           userId: 456,
+          chatType: "private",
           text: "hello",
           attachments: [],
         },
@@ -581,6 +595,7 @@ describe("polling helpers", () => {
       downloadFile: vi.fn(),
     };
     const bridge = {
+      checkAccess: vi.fn().mockResolvedValue({ kind: "allow" }),
       handleAuthorizedMessage: vi.fn().mockResolvedValue({ text: "a".repeat(4500) }),
     };
 
@@ -588,6 +603,7 @@ describe("polling helpers", () => {
       {
         chatId: 123,
         userId: 456,
+        chatType: "private",
         text: "hello",
         attachments: [],
       },
@@ -614,6 +630,7 @@ describe("polling helpers", () => {
       downloadFile: vi.fn(),
     };
     const bridge = {
+      checkAccess: vi.fn().mockResolvedValue({ kind: "allow" }),
       handleAuthorizedMessage: vi.fn().mockResolvedValue({ text: "a".repeat(4500) }),
     };
 
@@ -622,6 +639,7 @@ describe("polling helpers", () => {
         {
           chatId: 123,
           userId: 456,
+          chatType: "private",
           text: "hello",
           attachments: [],
         },

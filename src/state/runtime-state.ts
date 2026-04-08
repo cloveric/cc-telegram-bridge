@@ -37,16 +37,15 @@ export class RuntimeStateStore {
     return this.store.read(createDefaultRuntimeState());
   }
 
-  async claimUpdateId(updateId: number): Promise<boolean> {
+  async markHandledUpdateId(updateId: number): Promise<void> {
     return this.enqueueWrite(async () => {
       const state = await this.load();
       if (state.lastHandledUpdateId !== null && updateId <= state.lastHandledUpdateId) {
-        return false;
+        return;
       }
 
       state.lastHandledUpdateId = updateId;
       await this.store.write(state);
-      return true;
     });
   }
 

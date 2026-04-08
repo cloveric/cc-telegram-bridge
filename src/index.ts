@@ -27,10 +27,6 @@ async function main(): Promise<void> {
       instanceName,
     );
 
-    if (!process.env.TELEGRAM_BOT_TOKEN) {
-      process.env.TELEGRAM_BOT_TOKEN = resolvedEnv.TELEGRAM_BOT_TOKEN;
-    }
-
     const serviceConfig = resolveConfig(resolvedEnv);
     const instanceLock = await acquireInstanceLock(serviceConfig.stateDir);
     const releaseLockOnExit = () => {

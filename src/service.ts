@@ -237,32 +237,43 @@ export async function processTelegramUpdates(
   let nextOffset: number | undefined;
   const chatQueue = context.chatQueue ?? defaultChatQueue;
   const runtimeStateStore = getRuntimeStateStore(context.inboxDir);
+  const runtimeState = await runtimeStateStore.load();
+  let lastHandledUpdateId = runtimeState.lastHandledUpdateId;
 
   for (const update of updates) {
     const updateId = getUpdateId(update);
     const completedOffset = updateId === undefined ? undefined : updateId + 1;
 
     try {
-      if (updateId !== undefined) {
-        const claimed = await runtimeStateStore.claimUpdateId(updateId);
-        if (!claimed) {
-          nextOffset = advanceOffset(nextOffset, completedOffset);
-          continue;
-        }
+      if (updateId !== undefined && lastHandledUpdateId !== null && updateId <= lastHandledUpdateId) {
+        nextOffset = advanceOffset(nextOffset, completedOffset);
+        continue;
       }
 
       const normalized = normalizeUpdate(update);
       if (!normalized) {
+        if (updateId !== undefined) {
+          await runtimeStateStore.markHandledUpdateId(updateId);
+          lastHandledUpdateId = updateId;
+        }
         nextOffset = advanceOffset(nextOffset, completedOffset);
         continue;
       }
 
       if (!normalized.text && normalized.attachments.length === 0) {
+        if (updateId !== undefined) {
+          await runtimeStateStore.markHandledUpdateId(updateId);
+          lastHandledUpdateId = updateId;
+        }
         nextOffset = advanceOffset(nextOffset, completedOffset);
         continue;
       }
 
       await chatQueue.enqueue(normalized.chatId, () => handleNormalizedTelegramMessage(normalized, context));
+      if (updateId !== undefined) {
+        await runtimeStateStore.markHandledUpdateId(updateId);
+        lastHandledUpdateId = updateId;
+      }
       nextOffset = advanceOffset(nextOffset, completedOffset);
     } catch (error) {
       logger.error(formatErrorMessage("Failed to handle Telegram update", error));
@@ -271,6 +282,12 @@ export async function processTelegramUpdates(
   }
 
   return nextOffset;
+}
+
+export async function getLastHandledUpdateId(inboxDir: string): Promise<number | null> {
+  const runtimeStateStore = getRuntimeStateStore(inboxDir);
+  const state = await runtimeStateStore.load();
+  return state.lastHandledUpdateId;
 }
 
 export async function pollTelegramUpdatesOnce(
