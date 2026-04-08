@@ -243,6 +243,23 @@ describe("TelegramApi", () => {
     fetchMock.mockRestore();
   });
 
+  it("rejects malformed getUpdates results at the API boundary", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      json: async () => ({ ok: true, result: { update_id: 7 } }),
+    } as unknown as Response);
+
+    const api = new TelegramApi("token");
+
+    await expect(api.getUpdates()).rejects.toThrow(
+      "Telegram API response had an unexpected result shape for getUpdates",
+    );
+
+    fetchMock.mockRestore();
+  });
+
   it("returns typed message results from sendMessage and editMessage", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch");
     fetchMock

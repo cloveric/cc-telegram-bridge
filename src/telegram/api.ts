@@ -51,6 +51,10 @@ function isTelegramFile(value: unknown): value is TelegramFile {
   return typeof value === "object" && value !== null && "file_path" in value && typeof value.file_path === "string";
 }
 
+function isTelegramUpdateArray(value: unknown): value is unknown[] {
+  return Array.isArray(value);
+}
+
 export class TelegramApi {
   constructor(private readonly botToken: string) {}
 
@@ -169,12 +173,6 @@ export class TelegramApi {
       body.offset = offset;
     }
 
-    const json = await this.requestTelegramResponse<unknown[]>("getUpdates", body);
-
-    if (!json.ok) {
-      throw new Error(`Telegram API request failed for getUpdates: ${json.description ?? "unknown error"}`);
-    }
-
-    return json.result ?? [];
+    return this.postJson("getUpdates", body, isTelegramUpdateArray);
   }
 }
