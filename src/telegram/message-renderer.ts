@@ -1,6 +1,6 @@
 export function chunkTelegramMessage(text: string, limit = 4000): string[] {
-  if (limit <= 0) {
-    throw new RangeError("limit must be greater than 0");
+  if (!Number.isInteger(limit) || !Number.isFinite(limit) || limit <= 0) {
+    throw new RangeError("limit must be a positive integer");
   }
 
   const chunks: string[] = [];

@@ -19,6 +19,12 @@ describe("chunkTelegramMessage", () => {
   it("rejects non-positive limits", () => {
     expect(() => chunkTelegramMessage("hello", 0)).toThrow(RangeError);
   });
+
+  it("rejects invalid numeric limits", () => {
+    expect(() => chunkTelegramMessage("hello", Number.NaN)).toThrow(RangeError);
+    expect(() => chunkTelegramMessage("hello", Number.POSITIVE_INFINITY)).toThrow(RangeError);
+    expect(() => chunkTelegramMessage("hello", 3.5)).toThrow(RangeError);
+  });
 });
 
 describe("message rendering", () => {
@@ -62,6 +68,23 @@ describe("TelegramApi", () => {
 
     await expect(api.sendMessage(1, "hello")).rejects.toThrow(
       "Telegram API request failed for sendMessage: 500 Internal Server Error",
+    );
+
+    fetchMock.mockRestore();
+  });
+
+  it("throws for ok-false API payloads", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      json: async () => ({ ok: false, description: "bad request" }),
+    } as unknown as Response);
+
+    const api = new TelegramApi("token");
+
+    await expect(api.sendMessage(1, "hello")).rejects.toThrow(
+      "Telegram API request failed for sendMessage: bad request",
     );
 
     fetchMock.mockRestore();
