@@ -61,6 +61,8 @@ type ClaudeWorker = {
   lineBuffer: string;
   currentSessionId: string | null;
   pendingTurn: PendingTurn | null;
+  instructions: string | null;
+  approvalMode: ApprovalMode;
 };
 
 const MAX_INSTRUCTIONS_CHARS = 16_000;
@@ -209,7 +211,21 @@ export class ClaudeStreamAdapter implements CodexAdapter {
   private getOrCreateWorker(sessionId: string, instructions: string | null, approvalMode: ApprovalMode): ClaudeWorker {
     const existing = this.workers.get(sessionId);
     if (existing) {
-      return existing;
+      if (existing.instructions === instructions && existing.approvalMode === approvalMode) {
+        return existing;
+      }
+
+      if (existing.pendingTurn) {
+        throw new Error("Cannot reconfigure Claude session while a turn is in flight");
+      }
+
+      const resumedSessionId = existing.currentSessionId ?? sessionId;
+      existing.child.kill?.();
+      this.workers.delete(sessionId);
+      if (existing.currentSessionId && existing.currentSessionId !== sessionId) {
+        this.workers.delete(existing.currentSessionId);
+      }
+      sessionId = resumedSessionId;
     }
 
     const args = ["-p", "--verbose", "--input-format", "stream-json", "--output-format", "stream-json"];
@@ -242,6 +258,8 @@ export class ClaudeStreamAdapter implements CodexAdapter {
       lineBuffer: "",
       currentSessionId: isLogicalTelegramSessionId(sessionId) ? null : sessionId,
       pendingTurn: null,
+      instructions,
+      approvalMode,
     };
 
     child.stdout?.on("data", (chunk) => {
@@ -304,6 +322,10 @@ export class ClaudeStreamAdapter implements CodexAdapter {
     if (parsed.type === "result" && worker.pendingTurn) {
       const pending = worker.pendingTurn;
       worker.pendingTurn = null;
+      if (parsed.is_error) {
+        pending.reject(new Error((parsed.result ?? pending.assistantText ?? "Claude reported an error").trim()));
+        return;
+      }
       pending.resolve({
         text: (parsed.result ?? pending.assistantText ?? "").trim() || "Claude completed the request.",
         sessionId: worker.currentSessionId ?? undefined,

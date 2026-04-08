@@ -119,6 +119,9 @@ describe("createServiceDependenciesForInstance", () => {
       );
 
       expect((result.bridge as any).adapter).toBeInstanceOf(CodexAppServerAdapter);
+      expect((result.bridge as any).adapter.childEnv.CODEX_HOME).toBe(
+        path.join(root, ".codex", "channels", "telegram", "alpha", "engine-home"),
+      );
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -169,6 +172,9 @@ describe("createServiceDependenciesForInstance", () => {
       );
 
       expect((result.bridge as any).adapter).toBeInstanceOf(ClaudeStreamAdapter);
+      expect((result.bridge as any).adapter.childEnv.CLAUDE_CONFIG_DIR).toBe(
+        path.join(root, ".codex", "channels", "telegram", "alpha", "engine-home"),
+      );
     } finally {
       await rm(root, { recursive: true, force: true });
     }

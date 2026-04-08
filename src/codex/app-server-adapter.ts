@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { readFile } from "node:fs/promises";
 
 import type {
   CodexAdapter,
@@ -94,6 +95,7 @@ function buildCommandInvocation(command: string, args: string[]): { command: str
 export class CodexAppServerAdapter implements CodexAdapter {
   private readonly childEnv: NodeJS.ProcessEnv;
   private readonly spawnCodex: SpawnCodex;
+  private readonly instructionsPath: string | undefined;
   private child: AppServerChildProcess | null = null;
   private initializePromise: Promise<void> | null = null;
   private lineBuffer = "";
@@ -107,17 +109,25 @@ export class CodexAppServerAdapter implements CodexAdapter {
     private readonly cwd: string,
     childEnvOrSpawn?: NodeJS.ProcessEnv | SpawnCodex,
     spawnCodexArg?: SpawnCodex,
+    instructionsPath?: string,
+    engineHomePath?: string,
   ) {
     this.childEnv =
       typeof childEnvOrSpawn === "function"
         ? (() => {
             const env = { ...process.env };
             delete env.TELEGRAM_BOT_TOKEN;
+            if (engineHomePath) {
+              env.CODEX_HOME = engineHomePath;
+            }
             return env;
           })()
         : childEnvOrSpawn ?? (() => {
             const env = { ...process.env };
             delete env.TELEGRAM_BOT_TOKEN;
+            if (engineHomePath) {
+              env.CODEX_HOME = engineHomePath;
+            }
             return env;
           })();
 
@@ -125,6 +135,7 @@ export class CodexAppServerAdapter implements CodexAdapter {
       typeof childEnvOrSpawn === "function"
         ? childEnvOrSpawn
         : spawnCodexArg ?? (spawn as unknown as SpawnCodex);
+    this.instructionsPath = instructionsPath;
   }
 
   async createSession(chatId: number): Promise<CodexSessionHandle> {
@@ -134,7 +145,8 @@ export class CodexAppServerAdapter implements CodexAdapter {
   async sendUserMessage(sessionId: string, input: CodexUserMessageInput): Promise<CodexAdapterResponse> {
     await this.ensureInitialized();
 
-    const prompt = this.buildPrompt(input);
+    const instructions = input.instructions ?? (this.instructionsPath ? await this.loadInstructions() : null);
+    const prompt = this.buildPrompt(input, instructions);
     const threadId = isLogicalTelegramSessionId(sessionId) ? await this.startThread() : await this.ensureThreadLoaded(sessionId);
     const text = await this.startTurn(threadId, prompt);
 
@@ -144,11 +156,25 @@ export class CodexAppServerAdapter implements CodexAdapter {
     };
   }
 
-  private buildPrompt(input: CodexUserMessageInput): string {
+  private async loadInstructions(): Promise<string | null> {
+    if (!this.instructionsPath) {
+      return null;
+    }
+
+    try {
+      const content = await readFile(this.instructionsPath, "utf8");
+      const trimmed = content.trim();
+      return trimmed || null;
+    } catch {
+      return null;
+    }
+  }
+
+  private buildPrompt(input: CodexUserMessageInput, instructions: string | null): string {
     const parts: string[] = [];
 
-    if (input.instructions) {
-      parts.push(`[System Instructions]\n${input.instructions}\n[End Instructions]`);
+    if (instructions) {
+      parts.push(`[System Instructions]\n${instructions}\n[End Instructions]`);
     }
 
     parts.push(input.text);

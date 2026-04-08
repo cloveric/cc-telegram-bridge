@@ -1,4 +1,7 @@
 import { EventEmitter } from "node:events";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
@@ -162,5 +165,76 @@ describe("ClaudeStreamAdapter", () => {
     await expect(resultPromise).resolves.toEqual({
       text: "READY",
     });
+  });
+
+  it("restarts the worker when instructions or approval mode change", async () => {
+    const { children, calls, spawnFn } = createSpawnHarness();
+    const root = await mkdtemp(path.join(os.tmpdir(), "cc-telegram-bridge-"));
+    const instructionsPath = path.join(root, "agent.md");
+    const configPath = path.join(root, "config.json");
+    const workspacePath = path.join(root, "workspace");
+
+    try {
+      await writeFile(instructionsPath, "You are v1.", "utf8");
+      await writeFile(configPath, JSON.stringify({ approvalMode: "normal" }) + "\n", "utf8");
+
+      const adapter = new ClaudeStreamAdapter("claude", {
+        spawnFn,
+        instructionsPath,
+        configPath,
+        workspacePath,
+      });
+
+      const first = adapter.sendUserMessage("telegram-12345", {
+        text: "First",
+        files: [],
+      });
+
+      await waitFor(() => children.length === 1 && children[0].stdin.lines.length === 1);
+      children[0].stdout.emitData('{"type":"system","subtype":"init","session_id":"session-123"}\n');
+      children[0].stdout.emitData('{"type":"result","subtype":"success","is_error":false,"result":"ONE","session_id":"session-123"}\n');
+      const firstResult = await first;
+      expect(firstResult.sessionId).toBe("session-123");
+
+      await writeFile(instructionsPath, "You are v2.", "utf8");
+      await writeFile(configPath, JSON.stringify({ approvalMode: "full-auto" }) + "\n", "utf8");
+
+      const second = adapter.sendUserMessage("session-123", {
+        text: "Second",
+        files: [],
+      });
+
+      await waitFor(() => children.length === 2 && children[1].stdin.lines.length === 1);
+      expect(calls[1]?.args).toContain("--system-prompt");
+      expect(calls[1]?.args).toContain("You are v2.");
+      expect(calls[1]?.args).toContain("--permission-mode");
+      expect(calls[1]?.args).toContain("bypassPermissions");
+      expect(calls[1]?.args).toContain("-r");
+      expect(calls[1]?.args).toContain("session-123");
+
+      children[1].stdout.emitData('{"type":"system","subtype":"init","session_id":"session-123"}\n');
+      children[1].stdout.emitData('{"type":"result","subtype":"success","is_error":false,"result":"TWO","session_id":"session-123"}\n');
+      await expect(second).resolves.toEqual({ text: "TWO" });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects structured error results", async () => {
+    const { children, spawnFn } = createSpawnHarness();
+    const adapter = new ClaudeStreamAdapter("claude", {
+      spawnFn,
+    });
+
+    const resultPromise = adapter.sendUserMessage("telegram-12345", {
+      text: "Fail",
+      files: [],
+    });
+
+    await waitFor(() => children.length === 1 && children[0].stdin.lines.length === 1);
+    children[0].stdout.emitData('{"type":"system","subtype":"init","session_id":"session-123"}\n');
+    children[0].stdout.emitData('{"type":"result","subtype":"success","is_error":true,"result":"Permission denied","session_id":"session-123"}\n');
+
+    await expect(resultPromise).rejects.toThrow("Permission denied");
   });
 });

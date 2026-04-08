@@ -257,7 +257,16 @@ async function createAdapter(
   }
 
   if (resolveEngineRuntime(engine, approvalMode) === "app-server") {
-    return new CodexAppServerAdapter(config.codexExecutable, process.cwd());
+    const engineHomePath = path.join(config.stateDir, "engine-home");
+    await mkdir(engineHomePath, { recursive: true });
+    return new CodexAppServerAdapter(
+      config.codexExecutable,
+      process.cwd(),
+      undefined,
+      undefined,
+      instructionsPath,
+      engineHomePath,
+    );
   }
 
   const engineHomePath = path.join(config.stateDir, "engine-home");

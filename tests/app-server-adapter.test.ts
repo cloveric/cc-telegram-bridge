@@ -1,4 +1,7 @@
 import { EventEmitter } from "node:events";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
@@ -126,6 +129,45 @@ describe("CodexAppServerAdapter", () => {
     expect(calls[0]?.command).toBe("codex");
     expect(calls[0]?.args).toEqual(["app-server"]);
     expect(calls[0]?.options.windowsHide).toBe(true);
+  });
+
+  it("loads instructions from agent.md and isolates CODEX_HOME", async () => {
+    const { child, calls, spawnFn } = createSpawnHarness();
+    const root = await mkdtemp(path.join(os.tmpdir(), "cc-telegram-bridge-"));
+    const instructionsPath = path.join(root, "agent.md");
+    const engineHomePath = path.join(root, "engine-home");
+
+    try {
+      await writeFile(instructionsPath, "You are isolated.", "utf8");
+      const adapter = new CodexAppServerAdapter(
+        "codex",
+        process.cwd(),
+        undefined,
+        spawnFn,
+        instructionsPath,
+        engineHomePath,
+      );
+
+      const promise = adapter.sendUserMessage("telegram-12345", {
+        text: "Hello",
+        files: [],
+      });
+
+      await waitFor(() => child.stdin.lines.length >= 1);
+      child.stdout.emitData('{"id":1,"result":{"platformOs":"windows"}}\n');
+      await waitFor(() => child.stdin.lines.length >= 2);
+      child.stdout.emitData('{"id":2,"result":{"thread":{"id":"thread-123"}}}\n');
+      await waitFor(() => child.stdin.lines.length >= 3);
+
+      const turnStart = JSON.parse(child.stdin.lines[2] ?? "{}");
+      expect(turnStart.params.input[0].text).toBe("[System Instructions]\nYou are isolated.\n[End Instructions]\nHello");
+      expect(calls[0]?.options.env?.CODEX_HOME).toBe(engineHomePath);
+
+      child.stdout.emitData('{"method":"turn/completed","params":{"threadId":"thread-123","turn":{"id":"turn-1","items":[],"status":"completed","error":null}}}\n');
+      await promise;
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   it("reuses an existing thread without starting a new one", async () => {
