@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, mkdir, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -16,7 +16,6 @@ describe("runCli", () => {
         env: { USERPROFILE: tempDir },
         logger: {
           log: (message) => messages.push(message),
-          error: (message) => messages.push(message),
         },
       });
 
@@ -39,7 +38,6 @@ describe("runCli", () => {
         env: { USERPROFILE: tempDir },
         logger: {
           log: (message) => messages.push(message),
-          error: (message) => messages.push(message),
         },
       });
 
@@ -48,6 +46,48 @@ describe("runCli", () => {
 
       const envPath = path.join(tempDir, ".codex", "channels", "telegram", "alpha", ".env");
       await expect(readFile(envPath, "utf8")).resolves.toBe('TELEGRAM_BOT_TOKEN="bot-token-456"\n');
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects an invalid instance name", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
+
+    try {
+      await expect(
+        runCli(["telegram", "configure", "--instance", "..\\..\\x", "bot-token-456"], {
+          env: { USERPROFILE: tempDir },
+        }),
+      ).rejects.toThrow("Invalid instance name");
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects missing configure token", async () => {
+    await expect(runCli(["telegram", "configure"], { env: { USERPROFILE: "C:\\Users\\hangw" } })).rejects.toThrow(
+      "Usage: telegram configure <bot-token> | telegram configure --instance <name> <bot-token>",
+    );
+  });
+
+  it("returns false for non-CLI invocation", async () => {
+    await expect(runCli(["status"], { env: { USERPROFILE: "C:\\Users\\hangw" } })).resolves.toBe(false);
+  });
+
+  it("updates an existing .env file instead of replacing unrelated lines", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
+
+    try {
+      const envPath = path.join(tempDir, ".codex", "channels", "telegram", "default", ".env");
+      await mkdir(path.dirname(envPath), { recursive: true });
+      await writeFile(envPath, "EXTRA=1\nTELEGRAM_BOT_TOKEN=old-token\nKEEP=2\n", "utf8");
+
+      await runCli(["telegram", "configure", "new-token"], {
+        env: { USERPROFILE: tempDir },
+      });
+
+      await expect(readFile(envPath, "utf8")).resolves.toBe("EXTRA=1\nKEEP=2\nTELEGRAM_BOT_TOKEN=\"new-token\"\n");
     } finally {
       await rm(tempDir, { recursive: true, force: true });
     }

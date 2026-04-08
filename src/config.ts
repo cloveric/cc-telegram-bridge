@@ -1,5 +1,6 @@
 import path from "node:path";
 
+import { normalizeInstanceName } from "./instance.js";
 import type { AppConfig } from "./types.js";
 
 export interface EnvSource {
@@ -21,6 +22,8 @@ export function joinStatePath(base: string, segment: string): string {
 export function resolveInstanceStateDir(
   env: Pick<EnvSource, "USERPROFILE" | "CODEX_TELEGRAM_INSTANCE" | "CODEX_TELEGRAM_STATE_DIR"> = process.env,
 ): string {
+  const instanceName = normalizeInstanceName(env.CODEX_TELEGRAM_INSTANCE);
+
   if (env.CODEX_TELEGRAM_STATE_DIR) {
     return env.CODEX_TELEGRAM_STATE_DIR;
   }
@@ -30,7 +33,6 @@ export function resolveInstanceStateDir(
     throw new Error("USERPROFILE is required");
   }
 
-  const instanceName = env.CODEX_TELEGRAM_INSTANCE ?? "default";
   return path.win32.join(userProfile, ".codex", "channels", "telegram", instanceName);
 }
 
@@ -40,7 +42,7 @@ export function resolveConfig(env: EnvSource = process.env): AppConfig {
     throw new Error("TELEGRAM_BOT_TOKEN is required");
   }
 
-  const instanceName = env.CODEX_TELEGRAM_INSTANCE ?? "default";
+  const instanceName = normalizeInstanceName(env.CODEX_TELEGRAM_INSTANCE);
   const stateDir = resolveInstanceStateDir(env);
 
   return {

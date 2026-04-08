@@ -58,6 +58,16 @@ describe("resolveConfig", () => {
     expect(config.accessStatePath).toBe("C:\\Users\\hangw\\.codex\\channels\\telegram\\alpha\\access.json");
   });
 
+  it("rejects unsafe instance names", () => {
+    expect(() =>
+      resolveConfig({
+        USERPROFILE: "C:\\Users\\hangw",
+        TELEGRAM_BOT_TOKEN: "abc123",
+        CODEX_TELEGRAM_INSTANCE: "..\\..\\x",
+      }),
+    ).toThrow("Invalid instance name");
+  });
+
   it("defaults the codex executable to codex", () => {
     const config = resolveConfig({
       USERPROFILE: "C:\\Users\\hangw",

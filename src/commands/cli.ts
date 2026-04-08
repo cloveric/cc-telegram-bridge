@@ -1,9 +1,9 @@
 import type { InstanceTokenEnv } from "./access.js";
 import { writeInstanceBotToken } from "./access.js";
+import { normalizeInstanceName } from "../instance.js";
 
 export interface CliLogger {
   log: (message: string) => void;
-  error: (message: string) => void;
 }
 
 export interface CliOptions {
@@ -20,26 +20,18 @@ function normalizeCommandArgs(argv: string[]): string[] {
 }
 
 function parseConfigureCommand(argv: string[]): { instanceName: string; botToken: string } {
-  const instanceNameIndex = argv.indexOf("--instance");
-  let instanceName = "default";
-  let tokens = argv.slice(1);
-
-  if (instanceNameIndex !== -1) {
-    const next = argv[instanceNameIndex + 1];
-    if (!next || next.startsWith("-")) {
-      throw new Error("Missing instance name after --instance");
-    }
-
-    instanceName = next;
-    tokens = argv.slice(1, instanceNameIndex).concat(argv.slice(instanceNameIndex + 2));
+  if (argv.length === 2) {
+    return { instanceName: "default", botToken: argv[1] };
   }
 
-  const botToken = tokens.find((value) => !value.startsWith("-"));
-  if (!botToken) {
-    throw new Error("Missing bot token for configure command");
+  if (argv.length === 4 && argv[1] === "--instance") {
+    return {
+      instanceName: normalizeInstanceName(argv[2]),
+      botToken: argv[3],
+    };
   }
 
-  return { instanceName, botToken };
+  throw new Error("Usage: telegram configure <bot-token> | telegram configure --instance <name> <bot-token>");
 }
 
 export async function runCli(argv: string[], options: CliOptions = {}): Promise<boolean> {
