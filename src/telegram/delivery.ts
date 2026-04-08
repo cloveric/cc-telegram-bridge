@@ -86,6 +86,15 @@ async function deliverTelegramResponse(
   text: string,
   onPlaceholderDelivered: () => void,
 ): Promise<void> {
+  const fileMatch = text.match(/```file:([^\n]+)\n([\s\S]*?)```/);
+  if (fileMatch) {
+    const [, fileName, fileBody] = fileMatch;
+    await api.editMessage(chatId, placeholderMessageId, `Sending file: ${fileName.trim()}`);
+    onPlaceholderDelivered();
+    await api.sendDocument(chatId, fileName.trim(), fileBody);
+    return;
+  }
+
   const chunks = chunkTelegramMessage(text);
   const [firstChunk = ""] = chunks;
 
@@ -153,6 +162,7 @@ export async function handleNormalizedTelegramMessage(
       userId: normalized.userId,
       chatType: normalized.chatType,
       text: normalized.text,
+      replyContext: normalized.replyContext,
       files,
     });
 

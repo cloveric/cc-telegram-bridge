@@ -90,6 +90,10 @@ export class Bridge {
     userId: number;
     chatType: string;
     text: string;
+    replyContext?: {
+      messageId: number;
+      text: string;
+    };
     files: string[];
   }) {
     const decision = await this.checkAccess(input);
@@ -103,8 +107,11 @@ export class Bridge {
     }
 
     const session = await this.sessionManager.getOrCreateSession(input.chatId);
+    const text = input.replyContext
+      ? `${input.text}\n\n[Quoted message #${input.replyContext.messageId}]\n${input.replyContext.text || "(no text content)"}`
+      : input.text;
     const response = await this.adapter.sendUserMessage(session.sessionId, {
-      text: input.text,
+      text,
       files: input.files,
     });
 

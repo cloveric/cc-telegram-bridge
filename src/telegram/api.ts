@@ -175,6 +175,45 @@ export class TelegramApi {
     }, isTelegramMessage);
   }
 
+  async sendDocument(chatId: number, filename: string, contents: string | Uint8Array): Promise<TelegramMessage> {
+    const boundary = `----cc-telegram-bridge-${Math.random().toString(16).slice(2)}`;
+    const payload =
+      typeof contents === "string" ? new TextEncoder().encode(contents) : contents;
+    const head =
+      `--${boundary}\r\n` +
+      `Content-Disposition: form-data; name="chat_id"\r\n\r\n${chatId}\r\n` +
+      `--${boundary}\r\n` +
+      `Content-Disposition: form-data; name="document"; filename="${filename}"\r\n` +
+      `Content-Type: application/octet-stream\r\n\r\n`;
+    const tail = `\r\n--${boundary}--\r\n`;
+    const body = new Uint8Array(
+      Buffer.concat([
+        Buffer.from(head, "utf8"),
+        Buffer.from(payload),
+        Buffer.from(tail, "utf8"),
+      ]),
+    );
+
+    const response = await fetch(this.buildUrl("sendDocument"), {
+      method: "POST",
+      headers: {
+        "Content-Type": `multipart/form-data; boundary=${boundary}`,
+      },
+      body,
+    });
+
+    if (!response.ok) {
+      throw new Error(`Telegram API request failed for sendDocument: ${response.status} ${response.statusText}`);
+    }
+
+    const json = await response.json();
+    if (!isTelegramApiResponse<TelegramMessage>(json) || !json.ok || !isTelegramMessage(json.result)) {
+      throw new Error("Telegram API response had an unexpected shape for sendDocument");
+    }
+
+    return json.result;
+  }
+
   async editMessage(chatId: number, messageId: number, text: string): Promise<TelegramMessage> {
     return this.postJson("editMessageText", {
       chat_id: chatId,

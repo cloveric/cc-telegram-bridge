@@ -70,7 +70,40 @@ describe("normalizeUpdate", () => {
           text: "hello",
         },
       }),
-    ).toEqual({ chatId: 123, userId: 456, chatType: "private", text: "hello", attachments: [] });
+    ).toEqual({
+      chatId: 123,
+      userId: 456,
+      chatType: "private",
+      text: "hello",
+      replyContext: undefined,
+      attachments: [],
+    });
+  });
+
+  it("extracts quoted reply context", () => {
+    expect(
+      normalizeUpdate({
+        message: {
+          chat: { id: 123, type: "private" },
+          from: { id: 456 },
+          text: "reply",
+          reply_to_message: {
+            message_id: 99,
+            text: "quoted text",
+          },
+        },
+      }),
+    ).toEqual({
+      chatId: 123,
+      userId: 456,
+      chatType: "private",
+      text: "reply",
+      replyContext: {
+        messageId: 99,
+        text: "quoted text",
+      },
+      attachments: [],
+    });
   });
 
   it("extracts a document attachment", () => {
@@ -91,6 +124,7 @@ describe("normalizeUpdate", () => {
       userId: 456,
       chatType: "private",
       text: "hello",
+      replyContext: undefined,
       attachments: [
         {
           fileId: "doc-file",
@@ -118,6 +152,7 @@ describe("normalizeUpdate", () => {
       userId: 456,
       chatType: "private",
       text: "",
+      replyContext: undefined,
       attachments: [
         {
           fileId: "large",
@@ -389,5 +424,26 @@ describe("TelegramApi", () => {
       fetchMock.mockRestore();
       await rm(root, { recursive: true, force: true });
     }
+  });
+
+  it("uploads a document via multipart form data", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      json: async () => ({ ok: true, result: { message_id: 17, text: "sent" } }),
+    } as unknown as Response);
+
+    const api = new TelegramApi("token");
+
+    await expect(api.sendDocument(123, "report.txt", "hello file")).resolves.toEqual({
+      message_id: 17,
+      text: "sent",
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [, options] = fetchMock.mock.calls[0]!;
+    expect(String((options as RequestInit).headers && (options as any).headers["Content-Type"])).toContain("multipart/form-data");
+
+    fetchMock.mockRestore();
   });
 });

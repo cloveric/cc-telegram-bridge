@@ -9,7 +9,38 @@ export interface NormalizedTelegramMessage {
   userId: number;
   chatType: string;
   text: string;
+  replyContext?: {
+    messageId: number;
+    text: string;
+  };
   attachments: NormalizedTelegramAttachment[];
+}
+
+function normalizeReplyContext(message: any): { messageId: number; text: string } | undefined {
+  const reply = message?.reply_to_message;
+  const messageId = reply?.message_id;
+  if (typeof messageId !== "number") {
+    return undefined;
+  }
+
+  const replyText =
+    typeof reply?.text === "string"
+      ? reply.text
+      : typeof reply?.caption === "string"
+        ? reply.caption
+        : "";
+
+  if (!replyText) {
+    return {
+      messageId,
+      text: "",
+    };
+  }
+
+  return {
+    messageId,
+    text: replyText,
+  };
 }
 
 function normalizeDocumentAttachment(message: any): NormalizedTelegramAttachment[] {
@@ -65,6 +96,7 @@ export function normalizeUpdate(update: any): NormalizedTelegramMessage | null {
         : typeof message.caption === "string"
           ? message.caption
           : "",
+    replyContext: normalizeReplyContext(message),
     attachments: [...normalizeDocumentAttachment(message), ...normalizePhotoAttachment(message)],
   };
 }

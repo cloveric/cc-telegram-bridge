@@ -658,6 +658,7 @@ describe("polling helpers", () => {
           userId: 456,
           chatType: "private",
           text: "hello",
+          replyContext: undefined,
           attachments: [
             { fileId: "doc-1", fileName: "report.pdf", kind: "document" },
             { fileId: "photo-1", kind: "photo" },
@@ -680,6 +681,7 @@ describe("polling helpers", () => {
         userId: 456,
         chatType: "private",
         text: "hello",
+        replyContext: undefined,
         files: [
           path.join(inboxDir, "doc-1-report.pdf"),
           path.join(inboxDir, "photo-1.jpg"),
@@ -710,6 +712,7 @@ describe("polling helpers", () => {
         userId: 456,
         chatType: "private",
         text: "hello",
+        replyContext: undefined,
         attachments: [],
       },
       {
@@ -744,6 +747,7 @@ describe("polling helpers", () => {
           userId: 456,
           chatType: "private",
           text: "hello",
+          replyContext: undefined,
           attachments: [],
         },
         {
@@ -775,6 +779,7 @@ describe("polling helpers", () => {
         userId: 456,
         chatType: "private",
         text: "hello",
+        replyContext: undefined,
         attachments: [],
       },
       {
@@ -811,6 +816,7 @@ describe("polling helpers", () => {
           userId: 456,
           chatType: "private",
           text: "hello",
+          replyContext: undefined,
           attachments: [],
         },
         {
@@ -827,5 +833,84 @@ describe("polling helpers", () => {
     expect(api.editMessage).toHaveBeenNthCalledWith(3, 123, 11, "a".repeat(4000));
     expect(api.sendMessage).toHaveBeenNthCalledWith(2, 123, "a".repeat(500));
     expect(api.sendMessage).toHaveBeenNthCalledWith(3, 123, renderErrorMessage("send failed"));
+  });
+
+  it("passes quoted reply context to the bridge", async () => {
+    const api = {
+      sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      getFile: vi.fn(),
+      downloadFile: vi.fn(),
+    };
+    const bridge = {
+      checkAccess: vi.fn().mockResolvedValue({ kind: "allow" }),
+      handleAuthorizedMessage: vi.fn().mockResolvedValue({ text: "done" }),
+    };
+
+    await handleNormalizedTelegramMessage(
+      {
+        chatId: 123,
+        userId: 456,
+        chatType: "private",
+        text: "reply",
+        replyContext: {
+          messageId: 77,
+          text: "quoted text",
+        },
+        attachments: [],
+      },
+      {
+        api: api as never,
+        bridge: bridge as never,
+        inboxDir: path.join(os.tmpdir(), "ignored"),
+      },
+    );
+
+    expect(bridge.handleAuthorizedMessage).toHaveBeenCalledWith({
+      chatId: 123,
+      userId: 456,
+      chatType: "private",
+      text: "reply",
+      replyContext: {
+        messageId: 77,
+        text: "quoted text",
+      },
+      files: [],
+    });
+  });
+
+  it("sends a document when the model returns a file block", async () => {
+    const api = {
+      sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      sendDocument: vi.fn().mockResolvedValue({ message_id: 12 }),
+      getFile: vi.fn(),
+      downloadFile: vi.fn(),
+    };
+    const bridge = {
+      checkAccess: vi.fn().mockResolvedValue({ kind: "allow" }),
+      handleAuthorizedMessage: vi
+        .fn()
+        .mockResolvedValue({ text: "```file:report.txt\nhello world\n```" }),
+    };
+
+    await handleNormalizedTelegramMessage(
+      {
+        chatId: 123,
+        userId: 456,
+        chatType: "private",
+        text: "send file",
+        replyContext: undefined,
+        attachments: [],
+      },
+      {
+        api: api as never,
+        bridge: bridge as never,
+        inboxDir: path.join(os.tmpdir(), "ignored"),
+      },
+    );
+
+    expect(api.editMessage).toHaveBeenNthCalledWith(3, 123, 11, "Sending file: report.txt");
+    expect(api.sendDocument).toHaveBeenCalledWith(123, "report.txt", "hello world\n");
   });
 });

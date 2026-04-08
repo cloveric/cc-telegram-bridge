@@ -34,6 +34,7 @@ describe("Bridge", () => {
       userId: 42,
       chatType: "private",
       text: "hello",
+      replyContext: undefined,
       files: [],
     });
 
@@ -74,6 +75,7 @@ describe("Bridge", () => {
         userId: 42,
         chatType: "private",
         text: "hello",
+        replyContext: undefined,
         files: [],
       }),
     ).rejects.toThrow("This chat is not authorized for this instance.");
@@ -108,6 +110,7 @@ describe("Bridge", () => {
       userId: 42,
       chatType: "private",
       text: "hello",
+      replyContext: undefined,
       files: [],
     });
 
@@ -154,6 +157,7 @@ describe("Bridge", () => {
       userId: 42,
       chatType: "private",
       text: "hello",
+      replyContext: undefined,
       files: [],
     });
 
@@ -191,6 +195,7 @@ describe("Bridge", () => {
         userId: 42,
         chatType: "private",
         text: "hello again",
+        replyContext: undefined,
         files: [],
       });
 
@@ -227,6 +232,7 @@ describe("Bridge", () => {
       userId: 84,
       chatType: "private",
       text: "hello",
+      replyContext: undefined,
       files: [],
     });
 
@@ -260,8 +266,47 @@ describe("Bridge", () => {
         userId: 84,
         chatType: "group",
         text: "hello",
+        replyContext: undefined,
         files: [],
       }),
     ).resolves.toEqual({ text: "This bot only accepts private chats." });
+  });
+
+  it("includes quoted reply context in the prompt", async () => {
+    const accessStore: AccessStoreLike = {
+      load: vi.fn().mockResolvedValue({
+        policy: "allowlist",
+        pairedUsers: [],
+        allowlist: [84],
+        pendingPairs: [],
+      }),
+      issuePairingCode: vi.fn(),
+    };
+    const sessionManager: SessionManagerLike = {
+      getOrCreateSession: vi.fn().mockResolvedValue({ sessionId: "telegram-84" }),
+      bindSession: vi.fn(),
+    };
+    const adapter: CodexAdapter = {
+      sendUserMessage: vi.fn().mockResolvedValue({ text: "done" }),
+      createSession: vi.fn(),
+    };
+
+    const bridge = new Bridge(accessStore, sessionManager, adapter);
+    await bridge.handleAuthorizedMessage({
+      chatId: 84,
+      userId: 42,
+      chatType: "private",
+      text: "answer this",
+      replyContext: {
+        messageId: 99,
+        text: "quoted text",
+      },
+      files: [],
+    });
+
+    expect(adapter.sendUserMessage).toHaveBeenCalledWith("telegram-84", {
+      text: "answer this\n\n[Quoted message #99]\nquoted text",
+      files: [],
+    });
   });
 });
