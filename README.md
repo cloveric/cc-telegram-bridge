@@ -89,6 +89,30 @@ npm run dev -- telegram service stop
 npm run dev -- telegram service stop --instance work
 ```
 
+PowerShell helpers are also included:
+
+```powershell
+.\scripts\start-instance.ps1
+.\scripts\status-instance.ps1
+.\scripts\stop-instance.ps1
+```
+
+Named instance:
+
+```powershell
+.\scripts\start-instance.ps1 -Instance work
+.\scripts\status-instance.ps1 -Instance work
+.\scripts\stop-instance.ps1 -Instance work
+```
+
+Pre-complete verification hook:
+
+```powershell
+.\scripts\pre-complete-hook.ps1
+```
+
+This runs the full test suite and build before treating a milestone as complete.
+
 `telegram service status` reports:
 
 - whether the instance is running
