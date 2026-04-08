@@ -1,46 +1,86 @@
 <p align="center">
-  <img src="./assets/github-banner.svg" alt="Codex Telegram Channel banner" width="100%" />
+  <img src="./assets/github-banner.svg" alt="Codex Telegram Channel" width="100%" />
 </p>
 
 <p align="center">
-  <strong>Run Codex through Telegram with isolated bot instances, resumable threads, attachment ingestion, and operator-friendly controls.</strong>
+  <a href="https://github.com/cloveric/codex-telegram-channel/blob/main/LICENSE"><img src="https://img.shields.io/github/license/cloveric/codex-telegram-channel?style=flat-square&color=818cf8" alt="License"></a>
+  <img src="https://img.shields.io/badge/TypeScript-5.9-3178c6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript">
+  <img src="https://img.shields.io/badge/Node.js-%3E%3D20-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node.js">
+  <img src="https://img.shields.io/badge/platform-Windows-0078D4?style=flat-square&logo=windows&logoColor=white" alt="Windows">
+  <img src="https://img.shields.io/badge/tests-Vitest-6E9F18?style=flat-square&logo=vitest&logoColor=white" alt="Vitest">
+  <img src="https://img.shields.io/badge/validation-Zod_4-3E67B1?style=flat-square&logo=zod&logoColor=white" alt="Zod">
 </p>
 
 <p align="center">
-  <a href="https://github.com/cloveric/codex-telegram-channel">Repository</a>
-  ·
-  <a href="#quick-start">Quick Start</a>
-  ·
-  <a href="#service-operations">Service Operations</a>
-  ·
-  <a href="#access-control">Access Control</a>
+  <strong>Run OpenAI Codex through Telegram with isolated bot instances, resumable threads, and operator-grade controls.</strong>
 </p>
 
-## Overview
+<p align="center">
+  <a href="#-quick-start">Quick Start</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#-architecture">Architecture</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#-service-operations">Service Ops</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#-access-control">Access Control</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#-troubleshooting">Troubleshooting</a>
+</p>
 
-`codex-telegram-channel` is a Windows-first Telegram bridge for Codex. It treats each bot as a distinct runtime instance with its own token, state, lock, logs, inbox, update watermark, and chat-to-thread bindings.
+---
 
-This is not a multiplexed “one process hosts many bots” design. The operating model is simple:
+## Why This Exists
 
-- one bot token per instance
-- one instance per running process
-- one Telegram chat bound to one persisted Codex thread
+Running Codex from your phone should feel like operating a private field console — not babysitting a fragile script. **Codex Telegram Channel** turns each Telegram bot into an isolated Codex runtime with its own state, access model, and thread bindings.
 
-## Core Capabilities
+This is **not** a multiplexed "one process hosts many bots" design. The operating model is deliberately simple:
 
-- Instance-scoped bot tokens and state directories
-- Pairing and allowlist access control
-- Service lifecycle commands: start, stop, status
-- Per-chat serialized execution
-- Attachment download into the instance inbox
-- Placeholder message plus edited final response
-- Resumable Codex threads using `codex exec --json` and `codex exec resume --json`
-- Local duplicate-instance protection with an instance lock
-- Update de-duplication and persisted runtime state
+| Principle | What it means |
+|---|---|
+| **One bot token per instance** | Each instance owns its token, state directory, and lock file |
+| **One instance per process** | No shared mutable state between bots |
+| **One chat per Codex thread** | Messages resume the exact same thread — no cold starts |
+
+---
+
+## Highlights
+
+<table>
+  <tr>
+    <td width="50%">
+      <h3>Instance Isolation</h3>
+      <p>Every instance keeps its own token, access model, lock, inbox, logs, update watermark, and Codex threads. Run three bots? Three isolated processes.</p>
+    </td>
+    <td width="50%">
+      <h3>Access Control</h3>
+      <p>Pairing codes + allowlist policy gate execution <em>before</em> Codex work or attachment downloads are permitted. No anonymous access by default.</p>
+    </td>
+  </tr>
+  <tr>
+    <td>
+      <h3>Resumable Threads</h3>
+      <p>The first message creates a Codex thread; subsequent messages <code>resume</code> it. Context carries across sessions via <code>codex exec resume --json</code>.</p>
+    </td>
+    <td>
+      <h3>Service Lifecycle</h3>
+      <p>Start, stop, status, and restart commands with PID tracking, stderr logs, and bot identity verification built in.</p>
+    </td>
+  </tr>
+  <tr>
+    <td>
+      <h3>Attachment Ingestion</h3>
+      <p>Files sent to the bot are downloaded into a per-instance <code>inbox/</code> directory and made available to the Codex session automatically.</p>
+    </td>
+    <td>
+      <h3>Update Deduplication</h3>
+      <p>Persisted watermarks and offset tracking ensure no message is processed twice, even across restarts.</p>
+    </td>
+  </tr>
+</table>
+
+---
 
 ## Quick Start
 
-Install and build:
+### Prerequisites
+
+- **Node.js** >= 20
+- **OpenAI Codex CLI** installed and authenticated
+- A **Telegram Bot Token** from [@BotFather](https://t.me/BotFather)
+
+### Install
 
 ```powershell
 git clone https://github.com/cloveric/codex-telegram-channel.git
@@ -49,170 +89,220 @@ npm install
 npm run build
 ```
 
-Configure the default bot instance:
+### Configure & Launch
 
 ```powershell
-npm run dev -- telegram configure <bot-token>
-```
+# Configure the default instance
+npm run dev -- telegram configure <your-bot-token>
 
-Configure a named instance:
-
-```powershell
-npm run dev -- telegram configure --instance work <bot-token>
-```
-
-Recommended operator flow:
-
-1. Configure an instance token
-2. Start the instance service
-3. Pair your private chat
-4. Switch policy to `allowlist` if you want only approved chats to continue
-5. Use `telegram service status` to verify the process, PID, bot identity, and last handled update
-
-## Service Operations
-
-Start the default instance:
-
-```powershell
+# Start the service
 npm run dev -- telegram service start
-```
 
-Start a named instance:
-
-```powershell
-npm run dev -- telegram service start --instance work
-```
-
-Check service status:
-
-```powershell
+# Check status
 npm run dev -- telegram service status
+```
+
+### Named Instances
+
+Run multiple bots by specifying `--instance`:
+
+```powershell
+npm run dev -- telegram configure --instance work <token>
+npm run dev -- telegram service start --instance work
 npm run dev -- telegram service status --instance work
 ```
 
-Stop an instance:
+---
 
-```powershell
-npm run dev -- telegram service stop
-npm run dev -- telegram service stop --instance work
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                        codex-telegram-channel                       │
+├─────────────┬──────────────┬──────────────────┬─────────────────────┤
+│  Telegram   │   Runtime    │     Codex        │      State          │
+│  Layer      │   Layer      │     Layer        │      Layer          │
+├─────────────┼──────────────┼──────────────────┼─────────────────────┤
+│ api.ts      │ bridge.ts    │ adapter.ts       │ access-store.ts     │
+│ delivery.ts │ chat-queue.ts│ process-adapter  │ session-store.ts    │
+│ update-     │ session-     │   .ts            │ runtime-state.ts    │
+│ normalizer  │ manager.ts   │                  │ instance-lock.ts    │
+│   .ts       │              │                  │ json-store.ts       │
+│ message-    │              │                  │                     │
+│ renderer.ts │              │                  │                     │
+└─────────────┴──────────────┴──────────────────┴─────────────────────┘
 ```
 
-PowerShell helpers are also included:
+**Data flow:**
 
-```powershell
-.\scripts\start-instance.ps1
-.\scripts\status-instance.ps1
-.\scripts\stop-instance.ps1
+```
+Telegram Update → Normalize → Access Check → Chat Queue (serialized)
+    → Session Lookup → Codex Exec (new or resume) → Render → Deliver
 ```
 
-Named instance:
+Each layer is independently testable. The bridge orchestrates the flow without owning any state directly.
 
-```powershell
-.\scripts\start-instance.ps1 -Instance work
-.\scripts\status-instance.ps1 -Instance work
-.\scripts\stop-instance.ps1 -Instance work
+---
+
+## Service Operations
+
+| Command | Description |
+|---|---|
+| `telegram service start` | Acquire lock, load state, begin polling |
+| `telegram service stop` | Graceful shutdown with state persistence |
+| `telegram service status` | Running state, PID, policy, bot identity, last update ID |
+| `telegram service restart` | Stop + start with clean consumer reset |
+
+### Status Output
+
+```
+Running:       yes
+PID:           4821
+Policy:        allowlist
+Paired users:  2
+Allowlist:     2
+Pending pairs: 0
+Last update:   948271653
+Bot identity:  @cloveric6bot
 ```
 
-Pre-complete verification hook:
+### PowerShell Helpers
 
 ```powershell
-.\scripts\pre-complete-hook.ps1
+.\scripts\start-instance.ps1 [-Instance work]
+.\scripts\status-instance.ps1 [-Instance work]
+.\scripts\stop-instance.ps1 [-Instance work]
 ```
 
-This runs the full test suite and build before treating a milestone as complete.
-
-`telegram service status` reports:
-
-- whether the instance is running
-- PID
-- access policy
-- paired user count
-- allowlist count
-- pending pair count
-- last handled Telegram update id
-- bot identity when token lookup succeeds
+---
 
 ## Access Control
 
-Redeem a pairing code:
+Access is gated in two layers: **pairing** (initial handshake) and **policy** (ongoing authorization).
 
 ```powershell
+# Generate and redeem a pairing code
 npm run dev -- telegram access pair <code>
-```
 
-Set policy:
-
-```powershell
+# Switch to allowlist-only mode
 npm run dev -- telegram access policy allowlist
-```
 
-Allow or revoke a chat:
-
-```powershell
+# Manage the allowlist
 npm run dev -- telegram access allow <chat-id>
 npm run dev -- telegram access revoke <chat-id>
-```
 
-View current access status:
-
-```powershell
+# View current access state
 npm run dev -- telegram status
 ```
 
-## Troubleshooting
+### Recommended Operator Flow
 
-If the bot replies more than once:
+1. Configure an instance token
+2. Start the instance service
+3. Pair your private chat with the generated code
+4. Switch policy to `allowlist` to lock down access
+5. Use `service status` to verify everything is running
 
-- run `npm run dev -- telegram service status`
-- make sure only one instance is running for that instance name
-- use `npm run dev -- telegram service restart` to reset the local consumer cleanly
-
-If the bot does not reply at all:
-
-- run `npm run dev -- telegram service logs`
-- confirm `Bot token configured: yes`
-- confirm `Running: yes`
-
-If `service status` says the instance is not running:
-
-- run `npm run dev -- telegram service start`
-- if it still fails, inspect the reported stderr log path
-
-If you changed bot tokens:
-
-- rerun `telegram configure`
-- then restart the instance service
+---
 
 ## State Layout
 
-Each instance stores state under:
+Each instance persists state under a dedicated directory:
 
-```text
+```
 %USERPROFILE%\.codex\channels\telegram\<instance>\
+├── .env                    # Bot token
+├── access.json             # Pairing + allowlist data
+├── session.json            # Chat-to-thread bindings
+├── runtime-state.json      # Watermarks, offsets
+├── instance.lock.json      # Process lock
+├── service.stdout.log      # Service stdout
+├── service.stderr.log      # Service stderr
+└── inbox\                  # Downloaded attachments
 ```
 
-Per-instance files:
+---
 
-- `.env`
-- `access.json`
-- `session.json`
-- `runtime-state.json`
-- `instance.lock.json`
-- `service.stdout.log`
-- `service.stderr.log`
-- `inbox\`
+## Project Structure
 
-## Repository Layout
+```
+codex-telegram-channel/
+├── src/
+│   ├── index.ts              # Entry point
+│   ├── config.ts             # Configuration
+│   ├── instance.ts           # Instance definition
+│   ├── service.ts            # Service lifecycle
+│   ├── types.ts              # Shared types
+│   ├── codex/                # Codex integration
+│   ├── commands/             # CLI commands
+│   ├── runtime/              # Bridge, queue, sessions
+│   ├── state/                # Persistence layer
+│   └── telegram/             # Telegram API wrapper
+├── tests/                    # Vitest test suites
+├── scripts/                  # PowerShell helpers
+├── site/                     # Static landing page
+└── assets/                   # Visual assets
+```
 
-- `src/`: bridge, state, runtime, Telegram, and Codex integration
-- `tests/`: Vitest suites
-- `site/`: static presentation assets
-- `assets/`: repository visual assets
+---
 
-## Scripts
+## Development
 
-- `npm run build`
-- `npm run dev`
-- `npm start`
-- `npm test`
-- `npm run test:watch`
+```powershell
+# Run in development mode
+npm run dev -- <command>
+
+# Run tests
+npm test
+
+# Watch mode
+npm run test:watch
+
+# Build for production
+npm run build
+
+# Start production build
+npm start
+```
+
+---
+
+## Troubleshooting
+
+<details>
+<summary><strong>Bot replies more than once</strong></summary>
+
+1. Run `telegram service status` — ensure only one instance is running for that name
+2. Use `telegram service restart` to reset the consumer cleanly
+
+</details>
+
+<details>
+<summary><strong>Bot does not reply at all</strong></summary>
+
+1. Run `telegram service logs`
+2. Confirm `Bot token configured: yes`
+3. Confirm `Running: yes`
+
+</details>
+
+<details>
+<summary><strong>Service won't start</strong></summary>
+
+1. Check if another instance holds the lock
+2. Inspect the stderr log path reported by `service status`
+3. If you changed bot tokens, rerun `telegram configure` then restart
+
+</details>
+
+---
+
+## License
+
+[MIT](./LICENSE)
+
+---
+
+<p align="center">
+  <sub>Built with purpose. Operated with control.</sub>
+</p>
