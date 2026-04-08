@@ -58,7 +58,7 @@ describe("ProcessCodexAdapter", () => {
     expect(calls).toHaveLength(1);
     expect(calls[0]).toMatchObject({
       command: "codex",
-      args: ["exec", "--json", "Hello\nAttachment: a.png\nAttachment: b.pdf"],
+      args: ["exec", "--json", "--skip-git-repo-check", "Hello\nAttachment: a.png\nAttachment: b.pdf"],
       options: { stdio: ["ignore", "pipe", "pipe"], shell: false, windowsHide: true },
     });
     expect(calls[0]?.options.env?.TELEGRAM_BOT_TOKEN).toBeUndefined();
@@ -169,6 +169,23 @@ describe("ProcessCodexAdapter", () => {
     await expect(promise).rejects.toThrow("codex failed");
   });
 
+  it("prefers structured turn failure messages over stderr noise", async () => {
+    const { spawnCodex, child } = createSpawnHarness();
+    const adapter = new ProcessCodexAdapter("codex", spawnCodex);
+
+    const promise = adapter.sendUserMessage("thread-123", {
+      text: "Hello",
+      files: [],
+    });
+
+    child.stdout.emitData('{"type":"error","message":"Reconnecting... 5/5"}\n');
+    child.stdout.emitData('{"type":"turn.failed","error":{"message":"unexpected status 401 Unauthorized"}}\n');
+    child.stderr.emitData("codex internal logs\n");
+    child.close(1);
+
+    await expect(promise).rejects.toThrow("unexpected status 401 Unauthorized");
+  });
+
   it("prepends instance instructions from agent.md when present", async () => {
     const { spawnCodex, child, calls } = createSpawnHarness();
     const root = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
@@ -189,7 +206,7 @@ describe("ProcessCodexAdapter", () => {
       child.close(0);
       await promise;
 
-      expect(calls[0]?.args[2]).toContain("[System Instructions]\nYou are bot alpha.\n[End Instructions]\nHello");
+      expect(calls[0]?.args[3]).toContain("[System Instructions]\nYou are bot alpha.\n[End Instructions]\nHello");
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -215,8 +232,8 @@ describe("ProcessCodexAdapter", () => {
       child.close(0);
       await promise;
 
-      expect(calls[0]?.args[2]).toContain("[Instructions truncated at 16000 characters]");
-      expect(calls[0]?.args[2].length).toBeLessThan(17_000);
+      expect(calls[0]?.args[3]).toContain("[Instructions truncated at 16000 characters]");
+      expect(calls[0]?.args[3].length).toBeLessThan(17_000);
 
       const { spawnCodex: secondSpawn, child: secondChild, calls: secondCalls } = createSpawnHarness();
       const brokenAdapter = new ProcessCodexAdapter("codex", undefined, secondSpawn, path.join(root, "missing.md"));
@@ -231,7 +248,7 @@ describe("ProcessCodexAdapter", () => {
       secondChild.close(0);
       await secondPromise;
 
-      expect(secondCalls[0]?.args[2]).toBe("Hello again");
+      expect(secondCalls[0]?.args[3]).toBe("Hello again");
     } finally {
       await rm(root, { recursive: true, force: true });
     }

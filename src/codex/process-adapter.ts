@@ -40,6 +40,16 @@ type CodexJsonEvent =
         type?: string;
         text?: string;
       };
+    }
+  | {
+      type: "error";
+      message?: string;
+    }
+  | {
+      type: "turn.failed";
+      error?: {
+        message?: string;
+      };
     };
 
 function parseJsonEvents(stdout: string): CodexJsonEvent[] {
@@ -81,6 +91,30 @@ function extractLastAgentMessage(events: CodexJsonEvent[]): string | null {
       typeof event.item.text === "string"
     ) {
       lastMessage = event.item.text;
+    }
+  }
+
+  return lastMessage;
+}
+
+function extractLastTurnFailureMessage(events: CodexJsonEvent[]): string | null {
+  let lastMessage: string | null = null;
+
+  for (const event of events) {
+    if (event.type === "turn.failed" && typeof event.error?.message === "string" && event.error.message.trim()) {
+      lastMessage = event.error.message;
+    }
+  }
+
+  return lastMessage;
+}
+
+function extractLastErrorMessage(events: CodexJsonEvent[]): string | null {
+  let lastMessage: string | null = null;
+
+  for (const event of events) {
+    if (event.type === "error" && typeof event.message === "string" && event.message.trim()) {
+      lastMessage = event.message;
     }
   }
 
@@ -242,12 +276,25 @@ export class ProcessCodexAdapter implements CodexAdapter {
           ? ["--full-auto"]
           : [];
     const args = isLogicalTelegramSessionId(sessionId)
-      ? ["exec", "--json", ...approvalFlags, prompt]
-      : ["exec", "resume", "--json", ...approvalFlags, sessionId, prompt];
+      ? ["exec", "--json", "--skip-git-repo-check", ...approvalFlags, prompt]
+      : ["exec", "resume", "--json", "--skip-git-repo-check", ...approvalFlags, sessionId, prompt];
     const result = await this.runCodexJsonCommand(args);
     const events = parseJsonEvents(result.stdout);
     const lastAgentMessage = extractLastAgentMessage(events);
     const threadId = extractThreadId(events);
+    const turnFailureMessage = extractLastTurnFailureMessage(events);
+
+    if (turnFailureMessage) {
+      throw new Error(turnFailureMessage);
+    }
+
+    if (result.exitCode !== 0) {
+      const stderrMessage = result.stderr.trim();
+      throw new Error(
+        extractLastErrorMessage(events) ??
+          (stderrMessage || `codex exited with code ${result.exitCode}`),
+      );
+    }
 
     return {
       text: lastAgentMessage?.trim() || `Session ${sessionId} completed.`,
@@ -255,7 +302,7 @@ export class ProcessCodexAdapter implements CodexAdapter {
     };
   }
 
-  private async runCodexJsonCommand(args: string[]): Promise<{ stdout: string; stderr: string }> {
+  private async runCodexJsonCommand(args: string[]): Promise<{ stdout: string; stderr: string; exitCode: number | null }> {
     const invocation = buildCommandInvocation(this.codexExecutable, args);
     const child = this.spawnCodex(invocation.command, invocation.args, {
       stdio: ["ignore", "pipe", "pipe"],
@@ -264,7 +311,7 @@ export class ProcessCodexAdapter implements CodexAdapter {
       windowsHide: true,
     });
 
-    return await new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
+    return await new Promise<{ stdout: string; stderr: string; exitCode: number | null }>((resolve, reject) => {
       let stdout = "";
       let stderr = "";
 
@@ -278,12 +325,7 @@ export class ProcessCodexAdapter implements CodexAdapter {
 
       child.once("error", reject);
       child.once("close", (code) => {
-        if (code === 0) {
-          resolve({ stdout, stderr });
-          return;
-        }
-
-        reject(new Error(stderr.trim() || `codex exited with code ${code}`));
+        resolve({ stdout, stderr, exitCode: code });
       });
     });
   }
