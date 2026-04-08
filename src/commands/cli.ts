@@ -628,6 +628,42 @@ async function runYoloCommand(
   throw new Error("Usage: telegram yolo [on|off|unsafe] [--instance <name>]");
 }
 
+async function runEngineCommand(
+  argv: string[],
+  env: InstanceTokenEnv,
+  logger: CliLogger,
+): Promise<boolean> {
+  const { instanceName, args } = extractInstanceOption(argv.slice(1));
+  const configPath = resolveConfigJsonPath(env, instanceName);
+
+  if (args.length === 0) {
+    const config = await readInstanceConfig(configPath);
+    const engine = config.engine ?? "codex";
+    logger.log(`Instance "${instanceName}": engine = ${engine}`);
+    return true;
+  }
+
+  const engine = args[0];
+  if (engine !== "codex" && engine !== "claude") {
+    throw new Error("Usage: telegram engine <codex|claude> [--instance <name>]");
+  }
+
+  const config = await readInstanceConfig(configPath);
+  config.engine = engine;
+  await writeInstanceConfig(configPath, config);
+
+  const auditStateDir = resolveAuditStateDir(env, instanceName);
+  await appendAuditEvent(auditStateDir, {
+    type: "config.engine",
+    instanceName,
+    outcome: "success",
+    metadata: { engine },
+  });
+
+  logger.log(`Instance "${instanceName}": engine set to "${engine}". Restart the service to apply.`);
+  return true;
+}
+
 const HELP_TEXT = `Usage: telegram <command> [options]
 
 Commands:
@@ -643,6 +679,7 @@ Commands:
   instructions <show|set|path> [--instance <name>]
                                               Manage per-instance agent.md
   yolo [on|off|unsafe] [--instance <name>]    Toggle YOLO auto-approval mode
+  engine [codex|claude] [--instance <name>]   Switch AI engine per instance
   help                                        Show this help message`;
 
 export async function runCli(argv: string[], options: CliOptions = {}): Promise<boolean> {
@@ -689,6 +726,10 @@ export async function runCli(argv: string[], options: CliOptions = {}): Promise<
 
   if (normalized[0] === "yolo") {
     return runYoloCommand(normalized, env, logger);
+  }
+
+  if (normalized[0] === "engine") {
+    return runEngineCommand(normalized, env, logger);
   }
 
   return false;

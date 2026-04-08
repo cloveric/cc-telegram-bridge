@@ -1,9 +1,11 @@
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
 
 import { resolveConfig, resolveInstanceStateDir, type EnvSource } from "./config.js";
 import { Bridge } from "./runtime/bridge.js";
 import { ProcessCodexAdapter } from "./codex/process-adapter.js";
+import { ProcessClaudeAdapter } from "./codex/claude-adapter.js";
+import type { CodexAdapter } from "./codex/adapter.js";
 import { AccessStore } from "./state/access-store.js";
 import { appendAuditEvent } from "./state/audit-log.js";
 import { SessionStore } from "./state/session-store.js";
@@ -163,6 +165,45 @@ export async function resolveServiceEnvForInstance(env: EnvSource, instanceName:
   };
 }
 
+export type EngineType = "codex" | "claude";
+
+async function readInstanceEngine(configPath: string): Promise<EngineType> {
+  try {
+    const raw = await readFile(configPath, "utf8");
+    const parsed = JSON.parse(raw) as { engine?: string };
+    if (parsed.engine === "claude") {
+      return "claude";
+    }
+    return "codex";
+  } catch {
+    return "codex";
+  }
+}
+
+function resolveClaudeExecutable(): string {
+  return "claude";
+}
+
+async function createAdapter(
+  config: ReturnType<typeof resolveConfig>,
+  instructionsPath: string,
+  configPath: string,
+): Promise<CodexAdapter> {
+  const engine = await readInstanceEngine(configPath);
+  const workspacePath = path.join(config.stateDir, "workspace");
+
+  if (engine === "claude") {
+    await mkdir(workspacePath, { recursive: true });
+    return new ProcessClaudeAdapter(resolveClaudeExecutable(), {
+      instructionsPath,
+      configPath,
+      workspacePath,
+    });
+  }
+
+  return new ProcessCodexAdapter(config.codexExecutable, undefined, undefined, instructionsPath, configPath);
+}
+
 export async function createServiceDependencies(env: EnvSource): Promise<{ config: ReturnType<typeof resolveConfig>; api: TelegramApi; bridge: Bridge }> {
   const config = resolveConfig(env);
   const api = new TelegramApi(config.telegramBotToken);
@@ -170,7 +211,7 @@ export async function createServiceDependencies(env: EnvSource): Promise<{ confi
   const sessionStore = new SessionStore(config.sessionStatePath);
   const instructionsPath = path.join(config.stateDir, "agent.md");
   const configPath = path.join(config.stateDir, "config.json");
-  const adapter = new ProcessCodexAdapter(config.codexExecutable, undefined, undefined, instructionsPath, configPath);
+  const adapter = await createAdapter(config, instructionsPath, configPath);
   const sessionManager = new SessionManager(sessionStore, adapter);
   const bridge = new Bridge(accessStore, sessionManager, adapter);
 

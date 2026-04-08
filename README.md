@@ -7,150 +7,123 @@
   <img src="https://img.shields.io/badge/TypeScript-5.9-3178c6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript">
   <img src="https://img.shields.io/badge/Node.js-%3E%3D20-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node.js">
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-0078D4?style=flat-square&logo=node.js&logoColor=white" alt="Windows | macOS | Linux">
+  <img src="https://img.shields.io/badge/engines-Codex%20%7C%20Claude-F97316?style=flat-square" alt="Codex | Claude">
   <img src="https://img.shields.io/badge/tests-Vitest-6E9F18?style=flat-square&logo=vitest&logoColor=white" alt="Vitest">
-  <img src="https://img.shields.io/badge/validation-Zod_4-3E67B1?style=flat-square&logo=zod&logoColor=white" alt="Zod">
 </p>
 
 <h3 align="center">
-  Run a fleet of personality-customizable Codex agents on Telegram.<br>
-  Each bot gets its own <code>agent.md</code>, state, threads, and access control.<br>
-  <sub>Think <a href="https://github.com/openclaw">OpenClaw</a>, but for Codex over Telegram.</sub>
+  Run a fleet of AI coding agents on Telegram — powered by Codex or Claude Code.<br>
+  Each bot gets its own engine, personality, state, and access control.<br>
+  <sub>Think <a href="https://github.com/openclaw">OpenClaw</a>, but for Codex and Claude over Telegram.</sub>
 </h3>
 
 <p align="center">
-  <a href="#-multi-bot-setup">Multi-Bot</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#-agent-instructions">agent.md</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#-yolo-mode">YOLO Mode</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#-quick-start">Quick Start</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#-architecture">Architecture</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#-service-operations">Service Ops</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#-access-control">Access Control</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#-audit-trail">Audit</a>
+  <a href="#-dual-engine">Dual Engine</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#-multi-bot-setup">Multi-Bot</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#-agent-instructions">agent.md</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#-yolo-mode">YOLO</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#-quick-start">Quick Start</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#-architecture">Architecture</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#-service-operations">Ops</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#-access-control">Access</a>
 </p>
+
+---
+
+## Dual Engine: Codex + Claude Code
+
+Each bot instance can run either **OpenAI Codex** or **Claude Code** as its backend. Switch engines per-instance with one command:
+
+```powershell
+# Set an instance to use Claude Code
+npm run dev -- telegram engine claude --instance review-bot
+
+# Set another to use Codex
+npm run dev -- telegram engine codex --instance helper-bot
+
+# Check current engine
+npm run dev -- telegram engine --instance review-bot
+```
+
+| Feature | Codex Engine | Claude Engine |
+|---|---|---|
+| CLI command | `codex exec --json` | `claude -p --output-format json` |
+| Session resume | `codex exec resume --json <id>` | `claude -p -r <session-id>` |
+| Project instructions | `agent.md` (prepended to prompt) | `agent.md` (via `--system-prompt`) + `CLAUDE.md` (auto-loaded from workspace) |
+| YOLO mode | `--full-auto` / `--dangerously-bypass-approvals-and-sandbox` | `--permission-mode bypassPermissions` / `--dangerously-skip-permissions` |
+| Working directory | N/A | `workspace/` under instance dir (with `CLAUDE.md`) |
+
+### Claude Engine: CLAUDE.md Support
+
+When using the Claude engine, each instance gets a `workspace/` directory. Drop a `CLAUDE.md` in there for project-level instructions that Claude Code reads natively:
+
+```
+~/.codex/channels/telegram/review-bot/
+├── agent.md              ← "You are a strict code reviewer"
+├── workspace/
+│   └── CLAUDE.md         ← "TypeScript project. Use ESLint. Never modify tests."
+├── config.json           ← { "engine": "claude", "approvalMode": "full-auto" }
+└── .env
+```
+
+Two layers of instructions, no conflict:
+- **agent.md** → Your bot personality (injected via `--system-prompt`)
+- **CLAUDE.md** → Project rules (Claude auto-discovers from working directory)
 
 ---
 
 ## Multi-Bot Setup
 
-Run as many Codex bots as you need. Each instance is fully isolated — its own token, personality, threads, access rules, inbox, and audit trail. No shared state, no interference.
+Run as many bots as you need. Each instance is fully isolated — its own engine, token, personality, threads, access rules, inbox, and audit trail.
 
 ```
-                  ┌──────────────────────────────┐
-                  │   codex-telegram-channel      │
-                  └──────────┬───────────────────┘
-          ┌─────────────────┼──────────────────┐
-          ▼                 ▼                   ▼
-   ┌─────────────┐  ┌─────────────┐  ┌──────────────┐
-   │  "default"  │  │   "work"    │  │  "personal"  │
-   │  @mybot     │  │  @work_bot  │  │  @helper_bot │
-   │             │  │             │  │              │
-   │ agent.md:   │  │ agent.md:   │  │ agent.md:    │
-   │ "General    │  │ "Senior     │  │ "Reply in    │
-   │  assistant" │  │  reviewer"  │  │  Chinese"    │
-   │             │  │             │  │              │
-   │ policy:     │  │ policy:     │  │ policy:      │
-   │  pairing    │  │  allowlist  │  │  pairing     │
-   └─────────────┘  └─────────────┘  └──────────────┘
-     PID 4821         PID 5102         PID 5340
+          ┌─────────────────────────────────────────────┐
+          │          codex-telegram-channel              │
+          └────────────┬──────────────┬─────────────────┘
+                       │              │
+        ┌──────────────┼──────────────┼──────────────┐
+        ▼              ▼              ▼              ▼
+ ┌────────────┐ ┌────────────┐ ┌────────────┐ ┌────────────┐
+ │  "default" │ │   "work"   │ │ "reviewer" │ │ "research" │
+ │  engine:   │ │  engine:   │ │  engine:   │ │  engine:   │
+ │   codex    │ │   codex    │ │   claude   │ │   claude   │
+ │            │ │            │ │            │ │            │
+ │ agent.md:  │ │ agent.md:  │ │ agent.md:  │ │ agent.md:  │
+ │ "General   │ │ "Reply in  │ │ "Strict    │ │ "Deep      │
+ │  helper"   │ │  Chinese"  │ │  reviewer" │ │  research" │
+ └────────────┘ └────────────┘ └────────────┘ └────────────┘
+   PID 4821       PID 5102       PID 5340       PID 5520
 ```
 
-### Deploy Multiple Bots in 30 Seconds
+### Deploy in 30 Seconds
 
-```powershell
-# Create three bots from @BotFather, then:
-
-# 1. Configure each instance with its own token
+```bash
+# Configure each instance
 npm run dev -- telegram configure <token-A>
 npm run dev -- telegram configure --instance work <token-B>
-npm run dev -- telegram configure --instance personal <token-C>
+npm run dev -- telegram configure --instance reviewer <token-C>
 
-# 2. Start them all (each runs as its own process)
+# Set engines
+npm run dev -- telegram engine claude --instance reviewer
+
+# Set personalities
+npm run dev -- telegram instructions set --instance reviewer ./reviewer-instructions.md
+
+# Enable YOLO for mobile use
+npm run dev -- telegram yolo on --instance work
+
+# Start them all
 npm run dev -- telegram service start
 npm run dev -- telegram service start --instance work
-npm run dev -- telegram service start --instance personal
-
-# 3. Check fleet status
-npm run dev -- telegram service status
-npm run dev -- telegram service status --instance work
-npm run dev -- telegram service status --instance personal
-```
-
-Each instance stores state independently:
-
-```
-%USERPROFILE%\.codex\channels\telegram\
-├── default\          ← @mybot
-│   ├── agent.md      ← personality & instructions
-│   ├── .env          ← bot token
-│   ├── access.json
-│   ├── session.json
-│   ├── audit.log.jsonl
-│   └── inbox\
-├── work\             ← @work_bot
-│   ├── agent.md
-│   ├── .env
-│   └── ...
-└── personal\         ← @helper_bot
-    ├── agent.md
-    ├── .env
-    └── ...
+npm run dev -- telegram service start --instance reviewer
 ```
 
 ---
 
 ## Agent Instructions
 
-The killer feature: **each bot can have its own personality and behavior** defined in an `agent.md` file.
-
-The `agent.md` is prepended to every Codex prompt. It's loaded fresh on every message, so you can edit it without restarting the service.
-
-### Examples
-
-**Work bot** — code reviewer:
-
-```markdown
-# agent.md for "work" instance
-
-You are a senior code reviewer. Focus on:
-- Correctness and edge cases
-- Security vulnerabilities
-- Performance implications
-- Naming and readability
-
-Be direct. Flag issues by severity. Don't sugarcoat.
-```
-
-**Personal bot** — friendly assistant:
-
-```markdown
-# agent.md for "personal" instance
-
-You are a friendly coding assistant. Reply in Chinese.
-Keep answers concise. Use code examples when helpful.
-When unsure, say so — don't guess.
-```
-
-**Research bot** — exploration mode:
-
-```markdown
-# agent.md for "research" instance
-
-You are a research assistant. When given a topic:
-1. Explore the problem space thoroughly
-2. List tradeoffs between approaches
-3. Provide citations and references
-4. Suggest next steps
-
-Think step by step. Prefer depth over breadth.
-```
-
-### CLI Commands
+Each bot has its own `agent.md`. Hot-reloaded on every message — edit anytime, no restart needed.
 
 ```powershell
-# See where the agent.md lives
-npm run dev -- telegram instructions path --instance work
-
-# Import instructions from a file
-npm run dev -- telegram instructions set --instance work ./work-instructions.md
-
-# View current instructions
 npm run dev -- telegram instructions show --instance work
+npm run dev -- telegram instructions set --instance work ./my-instructions.md
+npm run dev -- telegram instructions path --instance work
 ```
 
-Or just edit the file directly:
+Or edit directly:
 
 ```powershell
 # Windows
@@ -164,90 +137,18 @@ open -e ~/.codex/channels/telegram/work/agent.md
 
 ## YOLO Mode
 
-Operating from your phone? Don't want to deal with approval prompts? Enable YOLO mode per instance.
-
 ```powershell
-# Enable YOLO (full-auto, sandboxed — safe default)
-npm run dev -- telegram yolo on --instance work
-
-# Check current mode
-npm run dev -- telegram yolo --instance work
-
-# Disable
-npm run dev -- telegram yolo off --instance work
+npm run dev -- telegram yolo on --instance work      # Safe auto-approve
+npm run dev -- telegram yolo unsafe --instance work   # Skip ALL checks
+npm run dev -- telegram yolo off --instance work      # Normal flow
+npm run dev -- telegram yolo --instance work          # Check status
 ```
 
-| Mode | Flag passed to Codex | What it does |
-|---|---|---|
-| `off` | (none) | Normal approval flow — Codex asks before risky actions |
-| `on` | `--full-auto` | Auto-approve within workspace sandbox. Safe for most tasks |
-| `unsafe` | `--dangerously-bypass-approvals-and-sandbox` | Skip ALL approvals and sandbox. Full power, zero guardrails |
-
-YOLO mode is stored per-instance in `config.json` and **hot-reloaded on every message** — toggle it from CLI while the bot is running, no restart needed.
-
-> **Tip**: Use `yolo on` for daily mobile use. Reserve `yolo unsafe` for trusted environments only.
-
----
-
-## Why This Design
-
-This is **not** a multiplexed "one process hosts many bots" design. The operating model is deliberately simple:
-
-| Principle | What it means |
-|---|---|
-| **One bot token per instance** | Each instance owns its token, state directory, and lock file |
-| **One instance per process** | No shared mutable state between bots |
-| **One chat per Codex thread** | Messages resume the exact same thread — no cold starts |
-| **One agent.md per bot** | Each bot has its own personality, role, and behavior rules |
-
-The OpenClaw-style experience: you create multiple specialized bots, each with distinct instructions and access policies, and manage them as a fleet from one CLI.
-
----
-
-## Highlights
-
-<table>
-  <tr>
-    <td width="50%">
-      <h3>Per-Bot Personality</h3>
-      <p>Each instance loads its own <code>agent.md</code> on every message. Change the file, the behavior changes immediately. No restart needed.</p>
-    </td>
-    <td width="50%">
-      <h3>Instance Isolation</h3>
-      <p>Every instance keeps its own token, access model, lock, inbox, logs, update watermark, and Codex threads. Run three bots? Three isolated processes.</p>
-    </td>
-  </tr>
-  <tr>
-    <td>
-      <h3>Resumable Threads</h3>
-      <p>The first message creates a Codex thread; subsequent messages <code>resume</code> it. Context carries across sessions via <code>codex exec resume --json</code>.</p>
-    </td>
-    <td>
-      <h3>Access Control</h3>
-      <p>Pairing codes + allowlist policy gate execution <em>before</em> Codex work or attachment downloads are permitted. Per-bot access rules.</p>
-    </td>
-  </tr>
-  <tr>
-    <td>
-      <h3>YOLO Mode</h3>
-      <p>One command to let Codex auto-approve everything — perfect for mobile use. Per-instance, hot-reloadable, with a safe <code>full-auto</code> default and an <code>unsafe</code> escape hatch.</p>
-    </td>
-    <td>
-      <h3>Full Audit Trail</h3>
-      <p>Every action (pairing, messages, errors, access changes, YOLO toggles) is recorded in a per-instance append-only JSONL audit stream.</p>
-    </td>
-  </tr>
-  <tr>
-    <td>
-      <h3>Service Lifecycle</h3>
-      <p>Start, stop, status, restart, logs, and doctor commands with PID tracking, graceful SIGTERM/SIGINT shutdown, and bot identity verification.</p>
-    </td>
-    <td>
-      <h3>Production Resilience</h3>
-      <p>Exponential backoff on polling errors (1s → 60s), Telegram 429 rate limit auto-retry, fault-tolerant update processing (one failure doesn't drop the batch).</p>
-    </td>
-  </tr>
-</table>
+| Mode | Codex | Claude | Use case |
+|---|---|---|---|
+| `off` | Normal approvals | Normal approvals | Default, safest |
+| `on` | `--full-auto` | `--permission-mode bypassPermissions` | Mobile use |
+| `unsafe` | `--dangerously-bypass-*` | `--dangerously-skip-permissions` | Trusted env only |
 
 ---
 
@@ -256,12 +157,12 @@ The OpenClaw-style experience: you create multiple specialized bots, each with d
 ### Prerequisites
 
 - **Node.js** >= 20
-- **OpenAI Codex CLI** installed and authenticated
+- **OpenAI Codex CLI** and/or **Claude Code CLI** installed and authenticated
 - A **Telegram Bot Token** from [@BotFather](https://t.me/BotFather)
 
 ### Install
 
-```powershell
+```bash
 git clone https://github.com/cloveric/codex-telegram-channel.git
 cd codex-telegram-channel
 npm install
@@ -270,20 +171,18 @@ npm run build
 
 ### Single Bot (Simplest)
 
-```powershell
+```bash
 npm run dev -- telegram configure <your-bot-token>
 npm run dev -- telegram service start
-npm run dev -- telegram service status
 ```
 
-### Operator Flow
+### Claude Bot
 
-1. Configure instance token(s)
-2. Write `agent.md` for each bot's personality
-3. Start instance service(s)
-4. Pair your private chat with the generated code
-5. Switch policy to `allowlist` to lock down access
-6. Use `service status` and `service doctor` to monitor
+```bash
+npm run dev -- telegram configure --instance claude-bot <token>
+npm run dev -- telegram engine claude --instance claude-bot
+npm run dev -- telegram service start --instance claude-bot
+```
 
 ---
 
@@ -293,16 +192,16 @@ npm run dev -- telegram service status
 ┌─────────────────────────────────────────────────────────────────────┐
 │                        codex-telegram-channel                       │
 ├─────────────┬──────────────┬──────────────────┬─────────────────────┤
-│  Telegram   │   Runtime    │     Codex        │      State          │
+│  Telegram   │   Runtime    │     AI Engine    │      State          │
 │  Layer      │   Layer      │     Layer        │      Layer          │
 ├─────────────┼──────────────┼──────────────────┼─────────────────────┤
 │ api.ts      │ bridge.ts    │ adapter.ts       │ access-store.ts     │
 │ delivery.ts │ chat-queue.ts│ process-adapter  │ session-store.ts    │
-│ update-     │ session-     │   .ts            │ runtime-state.ts    │
-│ normalizer  │ manager.ts   │                  │ instance-lock.ts    │
-│   .ts       │              │                  │ json-store.ts       │
-│ message-    │              │  agent.md ──►    │ audit-log.ts        │
-│ renderer.ts │              │  prompt prepend  │                     │
+│ update-     │ session-     │   .ts (Codex)    │ runtime-state.ts    │
+│ normalizer  │ manager.ts   │ claude-adapter   │ instance-lock.ts    │
+│   .ts       │              │   .ts (Claude)   │ json-store.ts       │
+│ message-    │              │                  │ audit-log.ts        │
+│ renderer.ts │              │ agent.md + config│                     │
 └─────────────┴──────────────┴──────────────────┴─────────────────────┘
 ```
 
@@ -310,9 +209,46 @@ npm run dev -- telegram service status
 
 ```
 Telegram Update → Normalize → Access Check → Chat Queue (serialized)
-    → Load agent.md → Session Lookup → Codex Exec (new or resume)
-    → Render → Deliver → Audit
+    → Load config.json (engine) → Load agent.md → Session Lookup
+    → Codex Exec or Claude -p (new or resume) → Render → Deliver → Audit
 ```
+
+---
+
+## Highlights
+
+<table>
+  <tr>
+    <td width="50%">
+      <h3>Dual Engine</h3>
+      <p>Switch between Codex and Claude Code per instance. Mix and match — one bot on Codex, another on Claude, managed from one CLI.</p>
+    </td>
+    <td width="50%">
+      <h3>Per-Bot Personality</h3>
+      <p>Each instance loads its own <code>agent.md</code> on every message. Claude instances also get <code>CLAUDE.md</code> project rules.</p>
+    </td>
+  </tr>
+  <tr>
+    <td>
+      <h3>YOLO Mode</h3>
+      <p>One command to auto-approve everything — works with both engines. Per-instance, hot-reloadable.</p>
+    </td>
+    <td>
+      <h3>Instance Isolation</h3>
+      <p>Every instance: own engine, token, access, sessions, threads, inbox, audit trail. No shared state.</p>
+    </td>
+  </tr>
+  <tr>
+    <td>
+      <h3>Production Resilience</h3>
+      <p>Long polling (~0ms latency), exponential backoff, 429 auto-retry, graceful SIGTERM/SIGINT shutdown, fault-tolerant batch processing.</p>
+    </td>
+    <td>
+      <h3>Full Audit Trail</h3>
+      <p>Every action recorded per-instance in append-only JSONL — including engine switches and YOLO toggles.</p>
+    </td>
+  </tr>
+</table>
 
 ---
 
@@ -320,12 +256,14 @@ Telegram Update → Normalize → Access Check → Chat Queue (serialized)
 
 | Command | Description |
 |---|---|
-| `telegram service start` | Acquire lock, load state, begin polling with exponential backoff |
-| `telegram service stop` | Graceful shutdown (SIGTERM/SIGINT) with state persistence |
-| `telegram service status` | Running state, PID, session bindings, bot identity, audit health |
+| `telegram service start` | Acquire lock, load state, begin long-polling |
+| `telegram service stop` | Graceful shutdown (SIGTERM/SIGINT) |
+| `telegram service status` | Running state, PID, engine, bot identity, audit health |
 | `telegram service restart` | Stop + start with clean consumer reset |
 | `telegram service logs` | Tail stdout/stderr logs |
-| `telegram service doctor` | Health check: build, token, runtime, identity, sessions, audit |
+| `telegram service doctor` | Health check across all subsystems |
+| `telegram engine [codex\|claude]` | Switch AI engine per instance |
+| `telegram yolo [on\|off\|unsafe]` | Toggle auto-approval mode |
 | `telegram help` | Show all available commands |
 
 All commands accept `--instance <name>` to target a specific bot.
@@ -352,36 +290,14 @@ All commands accept `--instance <name>` to target a specific bot.
 
 ## Access Control
 
-Access is gated per-instance in two layers: **pairing** (initial handshake) and **policy** (ongoing authorization).
+Per-instance, two layers: **pairing** + **allowlist**.
 
-```powershell
+```bash
 npm run dev -- telegram access pair <code>
 npm run dev -- telegram access policy allowlist
 npm run dev -- telegram access allow <chat-id>
 npm run dev -- telegram access revoke <chat-id>
 npm run dev -- telegram status [--instance work]
-```
-
----
-
-## Session Visibility
-
-```powershell
-npm run dev -- telegram session list [--instance work]
-npm run dev -- telegram session show [--instance work] <chat-id>
-```
-
----
-
-## Audit Trail
-
-Each instance writes an append-only JSONL audit stream:
-
-```powershell
-npm run dev -- telegram audit [--instance work]
-npm run dev -- telegram audit 50
-npm run dev -- telegram audit --type update.handle --outcome error
-npm run dev -- telegram audit --chat 688567588
 ```
 
 ---
@@ -394,7 +310,9 @@ npm run dev -- telegram audit --chat 688567588
 
 <instance>/
 ├── agent.md                # Bot personality & instructions
-├── config.json             # Instance config (YOLO mode, etc.)
+├── config.json             # Engine (codex|claude), YOLO mode
+├── workspace/              # Claude working directory (Claude engine only)
+│   └── CLAUDE.md           # Claude Code project instructions
 ├── .env                    # Bot token
 ├── access.json             # Pairing + allowlist data
 ├── session.json            # Chat-to-thread bindings
@@ -410,7 +328,7 @@ npm run dev -- telegram audit --chat 688567588
 
 ## Development
 
-```powershell
+```bash
 npm run dev -- <command>     # Development mode
 npm test                     # Run tests
 npm run test:watch           # Watch mode
@@ -423,35 +341,27 @@ npm start                    # Start production build
 ## Troubleshooting
 
 <details>
-<summary><strong>Bot replies more than once</strong></summary>
+<summary><strong>Bot does not reply</strong></summary>
 
-1. Run `telegram service status` — ensure only one instance is running for that name
-2. Use `telegram service restart` to reset the consumer cleanly
+1. Run `telegram service doctor` to diagnose
+2. Check `telegram service logs` for errors
+3. Verify the engine is installed: `codex --version` or `claude --version`
 
 </details>
 
 <details>
-<summary><strong>Bot does not reply at all</strong></summary>
+<summary><strong>Switching to Claude engine</strong></summary>
 
-1. Run `telegram service doctor` to diagnose
-2. Check `telegram service logs` for errors
-3. Confirm `Bot token configured: yes` in status
+1. `telegram engine claude --instance <name>`
+2. Restart the service: `telegram service restart --instance <name>`
+3. Optionally add a `CLAUDE.md` in the workspace directory
 
 </details>
 
 <details>
 <summary><strong>agent.md changes not taking effect</strong></summary>
 
-No restart needed — `agent.md` is loaded fresh on every message. Verify the file path with `telegram instructions path --instance <name>` and check the content with `telegram instructions show`.
-
-</details>
-
-<details>
-<summary><strong>Service won't start</strong></summary>
-
-1. Check if another instance holds the lock
-2. Run `telegram service doctor` for detailed health checks
-3. If you changed bot tokens, rerun `telegram configure` then restart
+No restart needed — loaded fresh on every message. Verify path with `telegram instructions path --instance <name>`.
 
 </details>
 
@@ -464,5 +374,5 @@ No restart needed — `agent.md` is loaded fresh on every message. Verify the fi
 ---
 
 <p align="center">
-  <sub>Your Codex. Your bots. Your rules.</sub>
+  <sub>Your agents. Your engines. Your rules.</sub>
 </p>

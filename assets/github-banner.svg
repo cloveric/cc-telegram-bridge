@@ -50,6 +50,9 @@
     <rect x="292" y="100" width="170" height="36" rx="18" fill="rgba(34,211,238,0.1)" stroke="rgba(34,211,238,0.2)" stroke-width="1"/>
     <text x="315" y="124" fill="#67E8F9" font-family="'SF Mono', 'Cascadia Code', Consolas, monospace" font-size="13" font-weight="600" letter-spacing="1.5">MULTI-BOT</text>
 
+    <rect x="474" y="100" width="210" height="36" rx="18" fill="rgba(249,115,22,0.1)" stroke="rgba(249,115,22,0.2)" stroke-width="1"/>
+    <text x="493" y="124" fill="#FDBA74" font-family="'SF Mono', 'Cascadia Code', Consolas, monospace" font-size="13" font-weight="600" letter-spacing="1.5">CODEX + CLAUDE</text>
+
     <!-- Title -->
     <text x="80" y="200" fill="#F1F5F9" font-family="'Inter', 'SF Pro Display', 'Segoe UI', system-ui, sans-serif" font-size="52" font-weight="800" letter-spacing="-1.5">Codex Telegram</text>
     <text x="80" y="268" fill="#F1F5F9" font-family="'Inter', 'SF Pro Display', 'Segoe UI', system-ui, sans-serif" font-size="52" font-weight="800" letter-spacing="-1.5">Channel</text>
@@ -58,8 +61,8 @@
     <rect x="80" y="288" width="120" height="3" rx="1.5" fill="url(#accentGrad)"/>
 
     <!-- Subtitle -->
-    <text x="80" y="330" fill="#94A3B8" font-family="'Inter', 'SF Pro Display', 'Segoe UI', system-ui, sans-serif" font-size="19" font-weight="400">Run a fleet of Codex agents on Telegram.</text>
-    <text x="80" y="358" fill="#94A3B8" font-family="'Inter', 'SF Pro Display', 'Segoe UI', system-ui, sans-serif" font-size="19" font-weight="400">Each bot gets its own personality, state, and threads.</text>
+    <text x="80" y="330" fill="#94A3B8" font-family="'Inter', 'SF Pro Display', 'Segoe UI', system-ui, sans-serif" font-size="19" font-weight="400">Run a fleet of AI coding agents on Telegram.</text>
+    <text x="80" y="358" fill="#94A3B8" font-family="'Inter', 'SF Pro Display', 'Segoe UI', system-ui, sans-serif" font-size="19" font-weight="400">Codex or Claude — each bot gets its own engine and personality.</text>
 
     <!-- Feature pills row 1 -->
     <g>
@@ -115,7 +118,7 @@
     <text x="726" y="170" fill="#6366F1" font-family="'SF Mono', Consolas, monospace" font-size="12" font-weight="600">$</text>
     <text x="740" y="170" fill="#CBD5E1" font-family="'SF Mono', Consolas, monospace" font-size="12"> service start --instance work</text>
     <text x="726" y="194" fill="#34D399" font-family="'SF Mono', Consolas, monospace" font-size="12">&#x2713;</text>
-    <text x="740" y="194" fill="#94A3B8" font-family="'SF Mono', Consolas, monospace" font-size="12"> Running | @work_codex_bot</text>
+    <text x="740" y="194" fill="#94A3B8" font-family="'SF Mono', Consolas, monospace" font-size="12"> Running | engine: codex</text>
 
     <text x="726" y="222" fill="#64748B" font-family="'SF Mono', Consolas, monospace" font-size="11">  agent.md:</text>
     <text x="840" y="222" fill="#A5B4FC" font-family="'SF Mono', Consolas, monospace" font-size="11">"Senior code reviewer. Focus on</text>
@@ -141,7 +144,7 @@
     <text x="726" y="394" fill="#6366F1" font-family="'SF Mono', Consolas, monospace" font-size="12" font-weight="600">$</text>
     <text x="740" y="394" fill="#CBD5E1" font-family="'SF Mono', Consolas, monospace" font-size="12"> service start --instance personal</text>
     <text x="726" y="418" fill="#34D399" font-family="'SF Mono', Consolas, monospace" font-size="12">&#x2713;</text>
-    <text x="740" y="418" fill="#94A3B8" font-family="'SF Mono', Consolas, monospace" font-size="12"> Running | @my_helper_bot</text>
+    <text x="740" y="418" fill="#94A3B8" font-family="'SF Mono', Consolas, monospace" font-size="12"> Running | engine: claude</text>
 
     <text x="726" y="446" fill="#64748B" font-family="'SF Mono', Consolas, monospace" font-size="11">  agent.md:</text>
     <text x="840" y="446" fill="#D8B4FE" font-family="'SF Mono', Consolas, monospace" font-size="11">"Friendly assistant. Reply in</text>
