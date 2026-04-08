@@ -43,6 +43,14 @@ export interface TelegramFile {
   file_path: string;
 }
 
+function isTelegramMessage(value: unknown): value is TelegramMessage {
+  return typeof value === "object" && value !== null && "message_id" in value && typeof value.message_id === "number";
+}
+
+function isTelegramFile(value: unknown): value is TelegramFile {
+  return typeof value === "object" && value !== null && "file_path" in value && typeof value.file_path === "string";
+}
+
 export class TelegramApi {
   constructor(private readonly botToken: string) {}
 
@@ -54,7 +62,11 @@ export class TelegramApi {
     return `https://api.telegram.org/file/bot${this.botToken}/${filePath}`;
   }
 
-  private async postJson<T>(method: string, body: Record<string, unknown>): Promise<T> {
+  private async postJson<T>(
+    method: string,
+    body: Record<string, unknown>,
+    validateResult?: (value: unknown) => value is T,
+  ): Promise<T> {
     const response = await fetch(this.buildUrl(method), {
       method: "POST",
       headers: {
@@ -82,6 +94,10 @@ export class TelegramApi {
 
     if (!payload.ok) {
       throw new Error(`Telegram API request failed for ${method}: ${payload.description ?? "unknown error"}`);
+    }
+
+    if (validateResult && !validateResult(payload.result)) {
+      throw new Error(`Telegram API response had an unexpected result shape for ${method}`);
     }
 
     return payload.result;
@@ -118,7 +134,7 @@ export class TelegramApi {
     return this.postJson("sendMessage", {
       chat_id: chatId,
       text,
-    });
+    }, isTelegramMessage);
   }
 
   async editMessage(chatId: number, messageId: number, text: string): Promise<TelegramMessage> {
@@ -126,13 +142,13 @@ export class TelegramApi {
       chat_id: chatId,
       message_id: messageId,
       text,
-    });
+    }, isTelegramMessage);
   }
 
   async getFile(fileId: string): Promise<TelegramFile> {
     return this.postJson("getFile", {
       file_id: fileId,
-    });
+    }, isTelegramFile);
   }
 
   async downloadFile(filePath: string, destinationPath: string): Promise<void> {

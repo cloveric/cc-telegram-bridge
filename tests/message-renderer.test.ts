@@ -267,6 +267,34 @@ describe("TelegramApi", () => {
     fetchMock.mockRestore();
   });
 
+  it("rejects malformed message results at the API boundary", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch");
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        json: async () => ({ ok: true, result: { message_id: "9" } }),
+      } as unknown as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        json: async () => ({ ok: true, result: {} }),
+      } as unknown as Response);
+
+    const api = new TelegramApi("token");
+
+    await expect(api.sendMessage(1, "working")).rejects.toThrow(
+      "Telegram API response had an unexpected result shape for sendMessage",
+    );
+    await expect(api.editMessage(1, 9, "done")).rejects.toThrow(
+      "Telegram API response had an unexpected result shape for editMessageText",
+    );
+
+    fetchMock.mockRestore();
+  });
+
   it("resolves getFile metadata", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue({
       ok: true,
@@ -285,6 +313,23 @@ describe("TelegramApi", () => {
       },
       body: JSON.stringify({ file_id: "abc" }),
     });
+
+    fetchMock.mockRestore();
+  });
+
+  it("rejects malformed getFile results at the API boundary", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      json: async () => ({ ok: true, result: { file_id: "abc", file_path: 42 } }),
+    } as unknown as Response);
+
+    const api = new TelegramApi("token");
+
+    await expect(api.getFile("abc")).rejects.toThrow(
+      "Telegram API response had an unexpected result shape for getFile",
+    );
 
     fetchMock.mockRestore();
   });

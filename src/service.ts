@@ -1,4 +1,4 @@
-import { mkdir, readFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 
 import { resolveConfig, resolveInstanceStateDir, type EnvSource } from "./config.js";
@@ -7,12 +7,8 @@ import { ProcessCodexAdapter } from "./codex/process-adapter.js";
 import { AccessStore } from "./state/access-store.js";
 import { SessionStore } from "./state/session-store.js";
 import { TelegramApi } from "./telegram/api.js";
-import { chunkTelegramMessage, renderErrorMessage, renderWorkingMessage } from "./telegram/message-renderer.js";
-import {
-  normalizeUpdate,
-  type NormalizedTelegramAttachment,
-  type NormalizedTelegramMessage,
-} from "./telegram/update-normalizer.js";
+import { handleNormalizedTelegramMessage, type TelegramDeliveryContext } from "./telegram/delivery.js";
+import { normalizeUpdate } from "./telegram/update-normalizer.js";
 import { SessionManager } from "./runtime/session-manager.js";
 import { normalizeInstanceName } from "./instance.js";
 
@@ -21,9 +17,7 @@ export interface ServiceDependencies {
   bridge: Bridge;
 }
 
-export interface TelegramServiceContext extends ServiceDependencies {
-  inboxDir: string;
-}
+export interface TelegramServiceContext extends TelegramDeliveryContext {}
 
 export interface ResolvedInstanceEnv extends EnvSource {
   USERPROFILE?: string;
@@ -171,104 +165,6 @@ function getLastUpdateOffset(updates: unknown[], fallbackOffset?: number): numbe
 function formatErrorMessage(scope: string, error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
   return `${scope}: ${message}`;
-}
-
-function inferExtension(attachment: NormalizedTelegramAttachment, telegramFilePath: string): string {
-  const explicitExtension = attachment.fileName ? path.extname(attachment.fileName) : "";
-  if (explicitExtension) {
-    return explicitExtension;
-  }
-
-  const filePathExtension = path.extname(telegramFilePath);
-  if (filePathExtension) {
-    return filePathExtension;
-  }
-
-  if (attachment.kind === "photo") {
-    return ".jpg";
-  }
-
-  return "";
-}
-
-function buildInboxFileName(attachment: NormalizedTelegramAttachment, telegramFilePath: string): string {
-  const extension = inferExtension(attachment, telegramFilePath);
-  const explicitBaseName = attachment.fileName ? path.basename(attachment.fileName, path.extname(attachment.fileName)) : "";
-  const safeBaseName = explicitBaseName.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "");
-
-  if (safeBaseName) {
-    return `${attachment.fileId}-${safeBaseName}${extension}`;
-  }
-
-  return `${attachment.fileId}${extension}`;
-}
-
-async function ensureInboxDirExists(inboxDir: string): Promise<void> {
-  await mkdir(inboxDir, { recursive: true });
-}
-
-async function downloadAttachments(
-  api: TelegramApi,
-  inboxDir: string,
-  attachments: NormalizedTelegramAttachment[],
-): Promise<string[]> {
-  if (attachments.length === 0) {
-    return [];
-  }
-
-  await ensureInboxDirExists(inboxDir);
-  const downloadedFiles: string[] = [];
-
-  for (const attachment of attachments) {
-    const telegramFile = await api.getFile(attachment.fileId);
-    const destinationPath = path.join(inboxDir, buildInboxFileName(attachment, telegramFile.file_path));
-    await api.downloadFile(telegramFile.file_path, destinationPath);
-    downloadedFiles.push(destinationPath);
-  }
-
-  return downloadedFiles;
-}
-
-async function sendTelegramResponse(api: TelegramApi, chatId: number, placeholderMessageId: number, text: string): Promise<void> {
-  const chunks = chunkTelegramMessage(text);
-  const [firstChunk = ""] = chunks;
-
-  await api.editMessage(chatId, placeholderMessageId, firstChunk);
-
-  for (const chunk of chunks.slice(1)) {
-    await api.sendMessage(chatId, chunk);
-  }
-}
-
-export async function handleNormalizedTelegramMessage(
-  normalized: NormalizedTelegramMessage,
-  context: TelegramServiceContext,
-): Promise<void> {
-  let placeholderMessageId: number | undefined;
-
-  try {
-    const placeholder = await context.api.sendMessage(normalized.chatId, renderWorkingMessage());
-    placeholderMessageId = placeholder.message_id;
-
-    const files = await downloadAttachments(context.api, context.inboxDir, normalized.attachments);
-    const result = await context.bridge.handleAuthorizedMessage({
-      chatId: normalized.chatId,
-      userId: normalized.userId,
-      text: normalized.text,
-      files,
-    });
-
-    await sendTelegramResponse(context.api, normalized.chatId, placeholderMessageId, result.text);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    if (placeholderMessageId !== undefined) {
-      await context.api.editMessage(normalized.chatId, placeholderMessageId, renderErrorMessage(message));
-    } else {
-      await context.api.sendMessage(normalized.chatId, renderErrorMessage(message));
-    }
-
-    throw error;
-  }
 }
 
 export async function processTelegramUpdates(

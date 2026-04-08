@@ -6,12 +6,12 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   createServiceDependenciesForInstance,
-  handleNormalizedTelegramMessage,
   parseServiceInstanceName,
   pollTelegramUpdatesOnce,
   processTelegramUpdates,
   readInstanceBotTokenFromEnvFile,
 } from "../src/service.js";
+import { handleNormalizedTelegramMessage } from "../src/telegram/delivery.js";
 import { renderErrorMessage, renderWorkingMessage } from "../src/telegram/message-renderer.js";
 
 describe("parseServiceInstanceName", () => {
@@ -282,5 +282,42 @@ describe("polling helpers", () => {
 
     expect(api.editMessage).toHaveBeenCalledWith(123, 11, "a".repeat(4000));
     expect(api.sendMessage).toHaveBeenNthCalledWith(2, 123, "a".repeat(500));
+  });
+
+  it("sends a separate error message when a follow-up chunk fails after the placeholder was edited", async () => {
+    const api = {
+      sendMessage: vi
+        .fn()
+        .mockResolvedValueOnce({ message_id: 11 })
+        .mockRejectedValueOnce(new Error("send failed"))
+        .mockResolvedValueOnce({ message_id: 12 }),
+      editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      getFile: vi.fn(),
+      downloadFile: vi.fn(),
+    };
+    const bridge = {
+      handleAuthorizedMessage: vi.fn().mockResolvedValue({ text: "a".repeat(4500) }),
+    };
+
+    await expect(
+      handleNormalizedTelegramMessage(
+        {
+          chatId: 123,
+          userId: 456,
+          text: "hello",
+          attachments: [],
+        },
+        {
+          api: api as never,
+          bridge: bridge as never,
+          inboxDir: path.join(os.tmpdir(), "ignored"),
+        },
+      ),
+    ).rejects.toThrow("send failed");
+
+    expect(api.editMessage).toHaveBeenCalledTimes(1);
+    expect(api.editMessage).toHaveBeenCalledWith(123, 11, "a".repeat(4000));
+    expect(api.sendMessage).toHaveBeenNthCalledWith(2, 123, "a".repeat(500));
+    expect(api.sendMessage).toHaveBeenNthCalledWith(3, 123, renderErrorMessage("send failed"));
   });
 });
