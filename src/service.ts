@@ -222,6 +222,31 @@ async function seedIsolatedCodexHome(
   ]);
 }
 
+function resolveSharedClaudeHome(env: Pick<EnvSource, "HOME" | "USERPROFILE">): string | null {
+  const homeDir = process.platform === "win32" ? env.USERPROFILE ?? env.HOME : env.HOME ?? env.USERPROFILE;
+  if (!homeDir) {
+    return null;
+  }
+
+  return homeDir;
+}
+
+async function seedIsolatedClaudeConfig(
+  env: Pick<EnvSource, "HOME" | "USERPROFILE">,
+  engineHomePath: string,
+): Promise<void> {
+  const sharedClaudeHome = resolveSharedClaudeHome(env);
+  if (!sharedClaudeHome) {
+    return;
+  }
+
+  await mkdir(engineHomePath, { recursive: true });
+  await Promise.all([
+    copyIfExists(path.join(sharedClaudeHome, ".claude.json"), path.join(engineHomePath, ".claude.json")),
+    copyIfExists(path.join(sharedClaudeHome, ".claude", ".credentials.json"), path.join(engineHomePath, ".credentials.json")),
+  ]);
+}
+
 export type EngineType = "codex" | "claude";
 type ApprovalMode = "normal" | "full-auto" | "bypass";
 
@@ -299,7 +324,7 @@ async function createAdapter(
   if (engine === "claude") {
     const engineHomePath = path.join(config.stateDir, "engine-home");
     await mkdir(workspacePath, { recursive: true });
-    await mkdir(engineHomePath, { recursive: true });
+    await seedIsolatedClaudeConfig(env, engineHomePath);
     return new ClaudeStreamAdapter(resolveClaudeExecutable(env), {
       instructionsPath,
       configPath,

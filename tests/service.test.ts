@@ -211,6 +211,42 @@ describe("createServiceDependenciesForInstance", () => {
       await rm(root, { recursive: true, force: true });
     }
   });
+
+  it("copies shared Claude auth files into the isolated engine home", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
+    const stateDir = path.join(root, ".codex", "channels", "telegram", "alpha");
+    const envPath = path.join(stateDir, ".env");
+    const configPath = path.join(stateDir, "config.json");
+    const globalClaudeDir = path.join(root, ".claude");
+    const globalClaudeCredentialsPath = path.join(globalClaudeDir, ".credentials.json");
+    const globalClaudeJsonPath = path.join(root, ".claude.json");
+
+    try {
+      await mkdir(stateDir, { recursive: true });
+      await mkdir(globalClaudeDir, { recursive: true });
+      await writeFile(envPath, 'TELEGRAM_BOT_TOKEN="secret-token"\n', "utf8");
+      await writeFile(configPath, JSON.stringify({ engine: "claude" }) + "\n", "utf8");
+      await writeFile(globalClaudeCredentialsPath, '{"claudeAiOauth":{"accessToken":"shared-token"}}\n', "utf8");
+      await writeFile(globalClaudeJsonPath, '{"projects":{}}\n', "utf8");
+
+      await createServiceDependenciesForInstance(
+        {
+          USERPROFILE: root,
+          CLAUDE_EXECUTABLE: "claude",
+        },
+        "alpha",
+      );
+
+      await expect(readFile(path.join(stateDir, "engine-home", ".credentials.json"), "utf8")).resolves.toBe(
+        '{"claudeAiOauth":{"accessToken":"shared-token"}}\n',
+      );
+      await expect(readFile(path.join(stateDir, "engine-home", ".claude.json"), "utf8")).resolves.toBe(
+        '{"projects":{}}\n',
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("polling helpers", () => {
