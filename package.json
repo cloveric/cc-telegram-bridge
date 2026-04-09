@@ -11,6 +11,9 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@types/adm-zip": "^0.5.8",
+    "adm-zip": "^0.5.17",
+    "pdf-parse": "^2.4.5",
     "zod": "^4.1.5"
   },
   "devDependencies": {

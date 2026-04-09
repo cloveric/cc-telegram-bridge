@@ -2,7 +2,13 @@ import { mkdir } from "node:fs/promises";
 import path from "node:path";
 
 import { Bridge } from "../runtime/bridge.js";
+import {
+  prepareArchiveContinueWorkflow,
+  prepareAttachmentWorkflow,
+  type DownloadedAttachment,
+} from "../runtime/file-workflow.js";
 import { appendAuditEvent } from "../state/audit-log.js";
+import { FileWorkflowStore } from "../state/file-workflow-store.js";
 import { UsageStore } from "../state/usage-store.js";
 import { readFile } from "node:fs/promises";
 
@@ -75,19 +81,22 @@ async function downloadAttachments(
   api: TelegramApi,
   inboxDir: string,
   attachments: NormalizedTelegramAttachment[],
-): Promise<string[]> {
+): Promise<DownloadedAttachment[]> {
   if (attachments.length === 0) {
     return [];
   }
 
   await ensureInboxDirExists(inboxDir);
-  const downloadedFiles: string[] = [];
+  const downloadedFiles: DownloadedAttachment[] = [];
 
   for (const attachment of attachments) {
     const telegramFile = await api.getFile(attachment.fileId);
     const destinationPath = path.join(inboxDir, buildInboxFileName(attachment, telegramFile.file_path));
     await api.downloadFile(telegramFile.file_path, destinationPath);
-    downloadedFiles.push(destinationPath);
+    downloadedFiles.push({
+      attachment,
+      localPath: destinationPath,
+    });
   }
 
   return downloadedFiles;
@@ -131,6 +140,9 @@ export async function handleNormalizedTelegramMessage(
   let progressEditChain = Promise.resolve();
   let progressEditCounter = 0;
   let lastAllowedProgressEditCounter = Number.POSITIVE_INFINITY;
+  let workflowRecordId: string | undefined;
+  const stateDir = path.dirname(context.inboxDir);
+  const workflowStore = new FileWorkflowStore(stateDir);
 
   try {
     const placeholder = await context.api.sendMessage(normalized.chatId, renderWorkingMessage());
@@ -173,10 +185,51 @@ export async function handleNormalizedTelegramMessage(
       );
     }
 
-    const files = await downloadAttachments(context.api, context.inboxDir, normalized.attachments);
+    const downloadedAttachments = await downloadAttachments(context.api, context.inboxDir, normalized.attachments);
+
+    const workflowResult =
+      downloadedAttachments.length > 0
+        ? await prepareAttachmentWorkflow({
+            stateDir,
+            chatId: normalized.chatId,
+            userId: normalized.userId,
+            text: normalized.text,
+            downloadedAttachments,
+          })
+        : await prepareArchiveContinueWorkflow({
+            stateDir,
+            chatId: normalized.chatId,
+            text: normalized.text,
+          });
+
+    if (workflowResult?.kind === "reply") {
+      await context.api.editMessage(normalized.chatId, placeholderMessageId, workflowResult.text);
+      await appendAuditEvent(stateDir, {
+        type: "update.handle",
+        instanceName: context.instanceName,
+        chatId: normalized.chatId,
+        userId: normalized.userId,
+        updateId: context.updateId,
+        outcome: "success",
+        metadata: {
+          durationMs: Date.now() - startedAt,
+          attachments: normalized.attachments.length,
+          responseChars: workflowResult.text.length,
+          chunkCount: chunkTelegramMessage(workflowResult.text).length,
+        },
+      });
+      return;
+    }
+
+    workflowRecordId = workflowResult?.workflowRecordId;
+    const requestText = workflowResult?.kind === "direct" ? workflowResult.text : normalized.text;
+    const requestFiles = workflowResult?.kind === "direct"
+      ? workflowResult.files
+      : downloadedAttachments.map((attachment) => attachment.localPath);
+
     await context.api.editMessage(normalized.chatId, placeholderMessageId, renderExecutionMessage());
 
-    const verbosity = await loadVerbosity(path.dirname(context.inboxDir));
+    const verbosity = await loadVerbosity(stateDir);
     let lastProgressEdit = 0;
     const PROGRESS_THROTTLE_MS = verbosity === 2 ? 1000 : 2000;
     const progressMessageId = placeholderMessageId;
@@ -205,9 +258,9 @@ export async function handleNormalizedTelegramMessage(
       chatId: normalized.chatId,
       userId: normalized.userId,
       chatType: normalized.chatType,
-      text: normalized.text,
+      text: requestText,
       replyContext: normalized.replyContext,
-      files,
+      files: requestFiles,
       onProgress,
     });
 
@@ -215,8 +268,14 @@ export async function handleNormalizedTelegramMessage(
     lastAllowedProgressEditCounter = progressEditCounter;
     await progressEditChain;
 
+    if (workflowRecordId) {
+      await workflowStore.update(workflowRecordId, (record) => {
+        record.status = "completed";
+      });
+    }
+
     if (result.usage) {
-      const usageStore = new UsageStore(path.dirname(context.inboxDir));
+      const usageStore = new UsageStore(stateDir);
       await usageStore.record({
         inputTokens: result.usage.inputTokens,
         outputTokens: result.usage.outputTokens,
@@ -247,6 +306,14 @@ export async function handleNormalizedTelegramMessage(
     progressEditsClosed = true;
     lastAllowedProgressEditCounter = progressEditCounter;
     await progressEditChain;
+
+    if (workflowRecordId) {
+      await workflowStore.update(workflowRecordId, (record) => {
+        if (record.status === "processing") {
+          record.status = "failed";
+        }
+      });
+    }
 
     if (placeholderShowsResponse) {
       await context.api.sendMessage(normalized.chatId, renderErrorMessage(message));

@@ -2,6 +2,7 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
+import AdmZip from "adm-zip";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -28,6 +29,27 @@ function createDeferred<T>() {
   });
 
   return { promise, resolve, reject };
+}
+
+async function waitForCondition(condition: () => boolean): Promise<void> {
+  for (let attempt = 0; attempt < 50; attempt++) {
+    if (condition()) {
+      return;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+
+  throw new Error("Condition was not met in time");
+}
+
+function createZipBuffer(files: Record<string, string>): Buffer {
+  const zip = new AdmZip();
+  for (const [filename, contents] of Object.entries(files)) {
+    zip.addFile(filename, Buffer.from(contents, "utf8"));
+  }
+
+  return zip.toBuffer();
 }
 
 afterEach(async () => {
@@ -751,15 +773,245 @@ describe("polling helpers", () => {
         chatId: 123,
         userId: 456,
         chatType: "private",
-        text: "hello",
+        text: expect.stringContaining("hello"),
         replyContext: undefined,
         files: [
-          path.join(inboxDir, "doc-1-report.pdf"),
-          path.join(inboxDir, "photo-1.jpg"),
+          expect.stringContaining(path.join("workspace", ".telegram-files")),
+          expect.stringContaining(path.join("workspace", ".telegram-files")),
         ],
       }));
+      expect((bridge.handleAuthorizedMessage as ReturnType<typeof vi.fn>).mock.calls[0]?.[0]?.text).toContain("[Document Extract]");
+      expect((bridge.handleAuthorizedMessage as ReturnType<typeof vi.fn>).mock.calls[0]?.[0]?.text).toContain("[Image Uploads]");
       await expect(readFile(path.join(inboxDir, "doc-1-report.pdf"), "utf8")).resolves.toBe("x");
       await expect(readFile(path.join(inboxDir, "photo-1.jpg"), "utf8")).resolves.toBe("x");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("summarizes uploaded zip archives and waits for continue", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
+    const inboxDir = path.join(root, "inbox");
+    const zipBuffer = createZipBuffer({
+      "README.md": "# hello",
+      "package.json": '{"name":"demo"}',
+      "src/index.ts": "console.log('hi')",
+    });
+    const api = {
+      sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      getFile: vi.fn().mockResolvedValue({ file_path: "uploads/repo.zip" }),
+      downloadFile: vi.fn().mockImplementation(async (_filePath: string, destinationPath: string) => {
+        await writeFile(destinationPath, zipBuffer);
+      }),
+    };
+    const bridge = {
+      checkAccess: vi.fn().mockResolvedValue({ kind: "allow" }),
+      handleAuthorizedMessage: vi.fn(),
+    };
+
+    try {
+      await handleNormalizedTelegramMessage(
+        {
+          chatId: 123,
+          userId: 456,
+          chatType: "private",
+          text: "",
+          replyContext: undefined,
+          attachments: [{ fileId: "zip-1", fileName: "repo.zip", kind: "document" }],
+        },
+        {
+          api: api as never,
+          bridge: bridge as never,
+          inboxDir,
+        },
+      );
+
+      expect(bridge.handleAuthorizedMessage).not.toHaveBeenCalled();
+      expect(api.editMessage).toHaveBeenLastCalledWith(
+        123,
+        11,
+        expect.stringContaining("Reply \"继续分析\" to continue with this archive."),
+      );
+
+      const workflowState = JSON.parse(await readFile(path.join(root, "file-workflow.json"), "utf8")) as {
+        records: Array<{ status: string; kind: string; summary: string }>;
+      };
+      expect(workflowState.records).toHaveLength(1);
+      expect(workflowState.records[0]?.kind).toBe("archive");
+      expect(workflowState.records[0]?.status).toBe("awaiting_continue");
+      expect(workflowState.records[0]?.summary).toContain("README.md");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("continues analysis for the latest uploaded archive when requested", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
+    const inboxDir = path.join(root, "inbox");
+    const zipBuffer = createZipBuffer({
+      "README.md": "# hello",
+      "src/index.ts": "console.log('hi')",
+    });
+    const api = {
+      sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      getFile: vi.fn().mockResolvedValue({ file_path: "uploads/repo.zip" }),
+      downloadFile: vi.fn().mockImplementation(async (_filePath: string, destinationPath: string) => {
+        await writeFile(destinationPath, zipBuffer);
+      }),
+    };
+    const bridge = {
+      checkAccess: vi.fn().mockResolvedValue({ kind: "allow" }),
+      handleAuthorizedMessage: vi.fn().mockResolvedValue({ text: "analysis done" }),
+    };
+
+    try {
+      await handleNormalizedTelegramMessage(
+        {
+          chatId: 123,
+          userId: 456,
+          chatType: "private",
+          text: "",
+          replyContext: undefined,
+          attachments: [{ fileId: "zip-1", fileName: "repo.zip", kind: "document" }],
+        },
+        {
+          api: api as never,
+          bridge: bridge as never,
+          inboxDir,
+        },
+      );
+
+      await handleNormalizedTelegramMessage(
+        {
+          chatId: 123,
+          userId: 456,
+          chatType: "private",
+          text: "继续分析 看看结构",
+          replyContext: undefined,
+          attachments: [],
+        },
+        {
+          api: api as never,
+          bridge: bridge as never,
+          inboxDir,
+        },
+      );
+
+      expect(bridge.handleAuthorizedMessage).toHaveBeenCalledTimes(1);
+      expect(bridge.handleAuthorizedMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          chatId: 123,
+          text: expect.stringContaining("[Archive Analysis Context]"),
+          files: [],
+        }),
+      );
+      expect((bridge.handleAuthorizedMessage as ReturnType<typeof vi.fn>).mock.calls[0]?.[0]?.text).toContain(
+        "看看结构",
+      );
+      expect((bridge.handleAuthorizedMessage as ReturnType<typeof vi.fn>).mock.calls[0]?.[0]?.text).toContain(
+        "Extracted files live under:",
+      );
+
+      const workflowState = JSON.parse(await readFile(path.join(root, "file-workflow.json"), "utf8")) as {
+        records: Array<{ status: string }>;
+      };
+      expect(workflowState.records[0]?.status).toBe("completed");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("injects extracted text for supported document uploads", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
+    const inboxDir = path.join(root, "inbox");
+    const api = {
+      sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      getFile: vi.fn().mockResolvedValue({ file_path: "docs/note.md" }),
+      downloadFile: vi.fn().mockImplementation(async (_filePath: string, destinationPath: string) => {
+        await writeFile(destinationPath, "# Heading\nBody text");
+      }),
+    };
+    const bridge = {
+      checkAccess: vi.fn().mockResolvedValue({ kind: "allow" }),
+      handleAuthorizedMessage: vi.fn().mockResolvedValue({ text: "done" }),
+    };
+
+    try {
+      await handleNormalizedTelegramMessage(
+        {
+          chatId: 123,
+          userId: 456,
+          chatType: "private",
+          text: "帮我总结",
+          replyContext: undefined,
+          attachments: [{ fileId: "doc-1", fileName: "note.md", kind: "document" }],
+        },
+        {
+          api: api as never,
+          bridge: bridge as never,
+          inboxDir,
+        },
+      );
+
+      expect(bridge.handleAuthorizedMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          text: expect.stringContaining("[Document Extract]"),
+          files: expect.any(Array),
+        }),
+      );
+      expect((bridge.handleAuthorizedMessage as ReturnType<typeof vi.fn>).mock.calls[0]?.[0]?.text).toContain(
+        "# Heading\nBody text",
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("stages image uploads and forwards explicit image context to the bridge", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
+    const inboxDir = path.join(root, "inbox");
+    const api = {
+      sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      getFile: vi.fn().mockResolvedValue({ file_path: "photos/screenshot.jpg" }),
+      downloadFile: vi.fn().mockImplementation(async (_filePath: string, destinationPath: string) => {
+        await writeFile(destinationPath, "img");
+      }),
+    };
+    const bridge = {
+      checkAccess: vi.fn().mockResolvedValue({ kind: "allow" }),
+      handleAuthorizedMessage: vi.fn().mockResolvedValue({ text: "done" }),
+    };
+
+    try {
+      await handleNormalizedTelegramMessage(
+        {
+          chatId: 123,
+          userId: 456,
+          chatType: "private",
+          text: "看看这张图",
+          replyContext: undefined,
+          attachments: [{ fileId: "photo-1", kind: "photo" }],
+        },
+        {
+          api: api as never,
+          bridge: bridge as never,
+          inboxDir,
+        },
+      );
+
+      expect(bridge.handleAuthorizedMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          text: expect.stringContaining("[Image Uploads]"),
+          files: [expect.stringContaining(path.join("workspace", ".telegram-files"))],
+        }),
+      );
+      expect((bridge.handleAuthorizedMessage as ReturnType<typeof vi.fn>).mock.calls[0]?.[0]?.text).toContain(
+        "看看这张图",
+      );
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -800,6 +1052,8 @@ describe("polling helpers", () => {
   });
 
   it("waits for in-flight progress edits before applying the final response", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
+    const inboxDir = path.join(root, "inbox");
     const progressEdit = createDeferred<{ message_id: number }>();
     const api = {
       sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
@@ -821,30 +1075,36 @@ describe("polling helpers", () => {
       }),
     };
 
-    const pending = handleNormalizedTelegramMessage(
-      {
-        chatId: 123,
-        userId: 456,
-        chatType: "private",
-        text: "hello",
-        replyContext: undefined,
-        attachments: [],
-      },
-      {
-        api: api as never,
-        bridge: bridge as never,
-        inboxDir: path.join(os.tmpdir(), "ignored"),
-      },
-    );
+    try {
+      const pending = handleNormalizedTelegramMessage(
+        {
+          chatId: 123,
+          userId: 456,
+          chatType: "private",
+          text: "hello",
+          replyContext: undefined,
+          attachments: [],
+        },
+        {
+          api: api as never,
+          bridge: bridge as never,
+          inboxDir,
+        },
+      );
 
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(api.editMessage).toHaveBeenCalledWith(123, 11, "partial progress");
-    expect(api.editMessage).not.toHaveBeenCalledWith(123, 11, "final response");
+      await waitForCondition(() =>
+        api.editMessage.mock.calls.some((call) => call[0] === 123 && call[1] === 11 && call[2] === "partial progress"),
+      );
+      expect(api.editMessage).toHaveBeenCalledWith(123, 11, "partial progress");
+      expect(api.editMessage).not.toHaveBeenCalledWith(123, 11, "final response");
 
-    progressEdit.resolve({ message_id: 11 });
-    await pending;
+      progressEdit.resolve({ message_id: 11 });
+      await pending;
 
-    expect(api.editMessage).toHaveBeenCalledWith(123, 11, "final response");
+      expect(api.editMessage).toHaveBeenCalledWith(123, 11, "final response");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   it("edits the placeholder to an error message when the bridge throws", async () => {
