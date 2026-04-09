@@ -799,6 +799,54 @@ describe("polling helpers", () => {
     expect(api.editMessage).toHaveBeenNthCalledWith(3, 123, 11, "final response");
   });
 
+  it("waits for in-flight progress edits before applying the final response", async () => {
+    const progressEdit = createDeferred<{ message_id: number }>();
+    const api = {
+      sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      editMessage: vi.fn().mockImplementation(async (_chatId: number, _messageId: number, text: string) => {
+        if (text === "partial progress") {
+          return await progressEdit.promise;
+        }
+
+        return { message_id: 11 };
+      }),
+      getFile: vi.fn(),
+      downloadFile: vi.fn(),
+    };
+    const bridge = {
+      checkAccess: vi.fn().mockResolvedValue({ kind: "allow" }),
+      handleAuthorizedMessage: vi.fn().mockImplementation(async ({ onProgress }: { onProgress?: (text: string) => void }) => {
+        onProgress?.("partial progress");
+        return { text: "final response" };
+      }),
+    };
+
+    const pending = handleNormalizedTelegramMessage(
+      {
+        chatId: 123,
+        userId: 456,
+        chatType: "private",
+        text: "hello",
+        replyContext: undefined,
+        attachments: [],
+      },
+      {
+        api: api as never,
+        bridge: bridge as never,
+        inboxDir: path.join(os.tmpdir(), "ignored"),
+      },
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(api.editMessage).toHaveBeenCalledWith(123, 11, "partial progress");
+    expect(api.editMessage).not.toHaveBeenCalledWith(123, 11, "final response");
+
+    progressEdit.resolve({ message_id: 11 });
+    await pending;
+
+    expect(api.editMessage).toHaveBeenCalledWith(123, 11, "final response");
+  });
+
   it("edits the placeholder to an error message when the bridge throws", async () => {
     const api = {
       sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),

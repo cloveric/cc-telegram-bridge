@@ -94,10 +94,12 @@ describe("CodexAppServerAdapter", () => {
   it("starts a persistent thread for a logical session and returns the real thread id", async () => {
     const { child, calls, spawnFn } = createSpawnHarness();
     const adapter = new CodexAppServerAdapter("codex", process.cwd(), spawnFn);
+    const progressUpdates: string[] = [];
 
     const promise = adapter.sendUserMessage("telegram-12345", {
       text: "Hello",
       files: ["a.txt"],
+      onProgress: (text) => progressUpdates.push(text),
     });
 
     await waitFor(() => child.stdin.lines.length >= 1);
@@ -129,6 +131,7 @@ describe("CodexAppServerAdapter", () => {
       text: "READY",
       sessionId: "thread-123",
     });
+    expect(progressUpdates).toEqual(["READY"]);
     expect(calls[0]?.command).toBe("codex");
     expect(calls[0]?.args).toEqual(["app-server"]);
     expect(calls[0]?.options.windowsHide).toBe(true);

@@ -57,6 +57,7 @@ type PendingTurn = {
   finalText?: string;
   errorMessage?: string;
   turnId?: string;
+  onProgress?: (partialText: string) => void;
   resolve: (text: string) => void;
   reject: (error: Error) => void;
 };
@@ -153,7 +154,7 @@ export class CodexAppServerAdapter implements CodexAdapter {
     const threadId = isLogicalTelegramSessionId(sessionId)
       ? await this.startThread()
       : await this.resolveThreadForMessage(sessionId);
-    const text = await this.startTurn(threadId, prompt);
+    const text = await this.startTurn(threadId, prompt, input.onProgress);
 
     return {
       text: text.trim() || `Session ${threadId} completed.`,
@@ -282,7 +283,11 @@ export class CodexAppServerAdapter implements CodexAdapter {
       const threadId = this.readString(parsed.params?.threadId);
       const delta = this.readString(parsed.params?.delta);
       if (threadId && delta) {
-        this.pendingTurns.get(threadId)?.chunks.push(delta);
+        const pending = this.pendingTurns.get(threadId);
+        if (pending) {
+          pending.chunks.push(delta);
+          pending.onProgress?.(pending.chunks.join(""));
+        }
       }
       return;
     }
@@ -489,9 +494,13 @@ export class CodexAppServerAdapter implements CodexAdapter {
     }
   }
 
-  private async startTurn(threadId: string, prompt: string): Promise<string> {
+  private async startTurn(
+    threadId: string,
+    prompt: string,
+    onProgress?: (partialText: string) => void,
+  ): Promise<string> {
     const pending = await new Promise<string>((resolve, reject) => {
-      this.pendingTurns.set(threadId, { chunks: [], resolve, reject });
+      this.pendingTurns.set(threadId, { chunks: [], onProgress, resolve, reject });
       this.request("turn/start", {
         threadId,
         input: [

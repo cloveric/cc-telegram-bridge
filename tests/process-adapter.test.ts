@@ -119,6 +119,24 @@ describe("ProcessCodexAdapter", () => {
     await expect(promise).resolves.toEqual({ text: "answer from codex" });
   });
 
+  it("does not emit pseudo-streaming progress from completed agent messages", async () => {
+    const { spawnCodex, child } = createSpawnHarness();
+    const adapter = new ProcessCodexAdapter("codex", spawnCodex);
+    const progressUpdates: string[] = [];
+
+    const promise = adapter.sendUserMessage("thread-123", {
+      text: "Hello",
+      files: [],
+      onProgress: (text) => progressUpdates.push(text),
+    });
+
+    child.stdout.emitData('{"type":"item.completed","item":{"type":"agent_message","text":"partial-but-complete"}}\n');
+    child.close(0);
+
+    await expect(promise).resolves.toEqual({ text: "partial-but-complete" });
+    expect(progressUpdates).toEqual([]);
+  });
+
   it("falls back when codex returns empty stdout", async () => {
     const { spawnCodex, child } = createSpawnHarness();
     const adapter = new ProcessCodexAdapter("codex", spawnCodex);

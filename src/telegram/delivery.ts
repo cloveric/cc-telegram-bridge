@@ -113,6 +113,10 @@ export async function handleNormalizedTelegramMessage(
   const startedAt = Date.now();
   let placeholderMessageId: number | undefined;
   let placeholderShowsResponse = false;
+  let progressEditsClosed = false;
+  let progressEditChain = Promise.resolve();
+  let progressEditCounter = 0;
+  let lastAllowedProgressEditCounter = Number.POSITIVE_INFINITY;
 
   try {
     const placeholder = await context.api.sendMessage(normalized.chatId, renderWorkingMessage());
@@ -168,7 +172,17 @@ export async function handleNormalizedTelegramMessage(
       if (!partialText || partialText.length < 5) return;
       lastProgressEdit = now;
       const preview = partialText.length > 4000 ? `${partialText.slice(-4000)}\n\n...` : partialText;
-      context.api.editMessage(normalized.chatId, progressMessageId, preview).catch(() => {});
+      const progressId = ++progressEditCounter;
+      progressEditChain = progressEditChain
+        .catch(() => {})
+        .then(async () => {
+          if (progressId > lastAllowedProgressEditCounter) {
+            return;
+          }
+
+          await context.api.editMessage(normalized.chatId, progressMessageId, preview);
+        })
+        .catch(() => {});
     };
 
     const result = await context.bridge.handleAuthorizedMessage({
@@ -181,6 +195,9 @@ export async function handleNormalizedTelegramMessage(
       onProgress,
     });
 
+    progressEditsClosed = true;
+    lastAllowedProgressEditCounter = progressEditCounter;
+    await progressEditChain;
     await deliverTelegramResponse(context.api, normalized.chatId, placeholderMessageId, result.text, () => {
       placeholderShowsResponse = true;
     });
@@ -200,6 +217,9 @@ export async function handleNormalizedTelegramMessage(
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    progressEditsClosed = true;
+    lastAllowedProgressEditCounter = progressEditCounter;
+    await progressEditChain;
 
     if (placeholderShowsResponse) {
       await context.api.sendMessage(normalized.chatId, renderErrorMessage(message));

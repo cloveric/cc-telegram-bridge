@@ -278,7 +278,7 @@ export class ProcessCodexAdapter implements CodexAdapter {
     const args = isLogicalTelegramSessionId(sessionId)
       ? ["exec", "--json", "--skip-git-repo-check", ...approvalFlags, prompt]
       : ["exec", "resume", "--json", "--skip-git-repo-check", ...approvalFlags, sessionId, prompt];
-    const result = await this.runCodexJsonCommand(args, input.onProgress);
+    const result = await this.runCodexJsonCommand(args);
     const events = parseJsonEvents(result.stdout);
     const lastAgentMessage = extractLastAgentMessage(events);
     const threadId = extractThreadId(events);
@@ -302,10 +302,7 @@ export class ProcessCodexAdapter implements CodexAdapter {
     };
   }
 
-  private async runCodexJsonCommand(
-    args: string[],
-    onProgress?: (partialText: string) => void,
-  ): Promise<{ stdout: string; stderr: string; exitCode: number | null }> {
+  private async runCodexJsonCommand(args: string[]): Promise<{ stdout: string; stderr: string; exitCode: number | null }> {
     const invocation = buildCommandInvocation(this.codexExecutable, args);
     const child = this.spawnCodex(invocation.command, invocation.args, {
       stdio: ["ignore", "pipe", "pipe"],
@@ -317,36 +314,9 @@ export class ProcessCodexAdapter implements CodexAdapter {
     return await new Promise<{ stdout: string; stderr: string; exitCode: number | null }>((resolve, reject) => {
       let stdout = "";
       let stderr = "";
-      let lineBuffer = "";
-      let lastAgentText = "";
 
       child.stdout?.on("data", (chunk) => {
-        const text = chunk.toString();
-        stdout += text;
-
-        if (onProgress) {
-          lineBuffer += text;
-          const lines = lineBuffer.split(/\r?\n/);
-          lineBuffer = lines.pop() ?? "";
-
-          for (const line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed) continue;
-            try {
-              const event = JSON.parse(trimmed) as CodexJsonEvent;
-              if (
-                event.type === "item.completed" &&
-                event.item?.type === "agent_message" &&
-                typeof event.item.text === "string"
-              ) {
-                lastAgentText = event.item.text.trim();
-                onProgress(lastAgentText);
-              }
-            } catch {
-              // Non-JSON line, ignore
-            }
-          }
-        }
+        stdout += chunk.toString();
       });
 
       child.stderr?.on("data", (chunk) => {
