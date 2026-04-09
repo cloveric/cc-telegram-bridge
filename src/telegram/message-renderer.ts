@@ -13,7 +13,7 @@ export function chunkTelegramMessage(text: string, limit = 4000): string[] {
 }
 
 export function renderWorkingMessage(): string {
-  return "Received. Starting your Codex session...";
+  return "Received. Starting your session...";
 }
 
 export function renderErrorMessage(error: string): string {
@@ -29,7 +29,7 @@ export function renderAttachmentDownloadMessage(count: number): string {
 }
 
 export function renderExecutionMessage(): string {
-  return "Running Codex on your request...";
+  return "Working on your request...";
 }
 
 export function renderUnauthorizedMessage(): string {

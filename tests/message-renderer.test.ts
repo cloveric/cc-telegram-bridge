@@ -42,7 +42,7 @@ describe("chunkTelegramMessage", () => {
 
 describe("message rendering", () => {
   it("renders the working message", () => {
-    expect(renderWorkingMessage()).toBe("Received. Starting your Codex session...");
+    expect(renderWorkingMessage()).toBe("Received. Starting your session...");
   });
 
   it("renders error messages", () => {
@@ -53,7 +53,7 @@ describe("message rendering", () => {
     expect(renderAccessCheckMessage()).toBe("Checking access policy...");
     expect(renderAttachmentDownloadMessage(1)).toBe("Downloading 1 attachment...");
     expect(renderAttachmentDownloadMessage(2)).toBe("Downloading 2 attachments...");
-    expect(renderExecutionMessage()).toBe("Running Codex on your request...");
+    expect(renderExecutionMessage()).toBe("Working on your request...");
     expect(renderUnauthorizedMessage()).toBe("This chat is not authorized for this instance.");
     expect(renderPrivateChatRequiredMessage()).toBe("This bot only accepts private chats.");
     expect(renderPairingMessage("ABC123")).toBe("Pair this private chat with code ABC123");

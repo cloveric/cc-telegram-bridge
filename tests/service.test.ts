@@ -746,7 +746,7 @@ describe("polling helpers", () => {
       expect(api.downloadFile).toHaveBeenCalledTimes(2);
       expect(api.editMessage).toHaveBeenNthCalledWith(1, 123, 11, "Checking access policy...");
       expect(api.editMessage).toHaveBeenNthCalledWith(2, 123, 11, "Downloading 2 attachments...");
-      expect(api.editMessage).toHaveBeenNthCalledWith(3, 123, 11, "Running Codex on your request...");
+      expect(api.editMessage).toHaveBeenNthCalledWith(3, 123, 11, "Working on your request...");
       expect(bridge.handleAuthorizedMessage).toHaveBeenCalledWith(expect.objectContaining({
         chatId: 123,
         userId: 456,
@@ -795,7 +795,7 @@ describe("polling helpers", () => {
 
     expect(api.sendMessage).toHaveBeenCalledWith(123, renderWorkingMessage());
     expect(api.editMessage).toHaveBeenNthCalledWith(1, 123, 11, "Checking access policy...");
-    expect(api.editMessage).toHaveBeenNthCalledWith(2, 123, 11, "Running Codex on your request...");
+    expect(api.editMessage).toHaveBeenNthCalledWith(2, 123, 11, "Working on your request...");
     expect(api.editMessage).toHaveBeenNthCalledWith(3, 123, 11, "final response");
   });
 
@@ -948,7 +948,7 @@ describe("polling helpers", () => {
 
     expect(api.editMessage).toHaveBeenCalledTimes(3);
     expect(api.editMessage).toHaveBeenNthCalledWith(1, 123, 11, "Checking access policy...");
-    expect(api.editMessage).toHaveBeenNthCalledWith(2, 123, 11, "Running Codex on your request...");
+    expect(api.editMessage).toHaveBeenNthCalledWith(2, 123, 11, "Working on your request...");
     expect(api.editMessage).toHaveBeenNthCalledWith(3, 123, 11, "a".repeat(4000));
     expect(api.sendMessage).toHaveBeenNthCalledWith(2, 123, "a".repeat(500));
     expect(api.sendMessage).toHaveBeenNthCalledWith(3, 123, renderErrorMessage("send failed"));
