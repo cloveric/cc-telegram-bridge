@@ -22,7 +22,7 @@
 </h3>
 
 <p align="center">
-  <a href="#-dual-engine">Dual Engine</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#-multi-bot-setup">Multi-Bot</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#-agent-instructions">agent.md</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#-yolo-mode">YOLO</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#-quick-start">Quick Start</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#-architecture">Architecture</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#-service-operations">Ops</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#-access-control">Access</a>
+  <a href="#-dual-engine">Dual Engine</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#-multi-bot-setup">Multi-Bot</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#-agent-instructions">agent.md</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#-yolo-mode">YOLO</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#-usage-tracking">Usage</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#-quick-start">Quick Start</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#-docker">Docker</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#-service-operations">Ops</a>
 </p>
 
 > **RULE 1:** Let your Claude Code or Codex CLI set this up for you. Clone the repo, open it in your terminal, and tell your AI agent: *"read the README and configure a Telegram bot for me"*. It will handle the rest.
@@ -158,6 +158,45 @@ npm run dev -- telegram yolo --instance work          # Check status
 
 ---
 
+## Usage Tracking
+
+Track token consumption and cost per instance:
+
+```bash
+npm run dev -- telegram usage                    # Default instance
+npm run dev -- telegram usage --instance work    # Named instance
+```
+
+Output:
+```
+Instance: work
+Requests: 42
+Input tokens: 185,230
+Output tokens: 12,450
+Cached tokens: 96,000
+Estimated cost: $0.3521
+Last updated: 2026-04-09T10:00:00Z
+```
+
+Claude reports exact USD cost. Codex reports tokens only (cost shows as "unknown").
+
+---
+
+## Verbosity Control
+
+Control how much streaming progress you see:
+
+```bash
+npm run dev -- telegram verbosity 0 --instance work   # Quiet — no live updates
+npm run dev -- telegram verbosity 1 --instance work   # Normal — update every 2s (default)
+npm run dev -- telegram verbosity 2 --instance work   # Detailed — update every 1s
+npm run dev -- telegram verbosity --instance work      # Check current level
+```
+
+Stored in `config.json`, hot-reloadable.
+
+---
+
 ## Quick Start
 
 ### Prerequisites
@@ -257,12 +296,22 @@ Telegram Update → Normalize → Access Check → Chat Queue (serialized)
   </tr>
   <tr>
     <td>
-      <h3>Full Audit Trail</h3>
-      <p>Every action recorded per-instance in append-only JSONL — including engine switches and YOLO toggles. Filterable by type, chat, and outcome.</p>
+      <h3>Usage Tracking</h3>
+      <p>Per-instance token counts (input/output/cached) and USD cost. <code>telegram usage</code> to check spend anytime.</p>
     </td>
     <td>
-      <h3>Session Inspection</h3>
-      <p>List and inspect chat-to-thread bindings per instance. See which Telegram chat maps to which Codex/Claude session.</p>
+      <h3>Verbosity Control</h3>
+      <p>Per-instance output level: 0 = quiet, 1 = normal (2s), 2 = detailed (1s). <code>telegram verbosity 2</code> to see more.</p>
+    </td>
+  </tr>
+  <tr>
+    <td>
+      <h3>Full Audit Trail</h3>
+      <p>Every action recorded per-instance in append-only JSONL — filterable by type, chat, and outcome.</p>
+    </td>
+    <td>
+      <h3>Docker Ready</h3>
+      <p>Multi-stage Dockerfile included. Build once, deploy anywhere.</p>
     </td>
   </tr>
 </table>
@@ -281,6 +330,8 @@ Telegram Update → Normalize → Access Check → Chat Queue (serialized)
 | `telegram service doctor` | Health check across all subsystems |
 | `telegram engine [codex\|claude]` | Switch AI engine per instance |
 | `telegram yolo [on\|off\|unsafe]` | Toggle auto-approval mode |
+| `telegram usage` | Show token usage and estimated cost |
+| `telegram verbosity [0\|1\|2]` | Set streaming progress level |
 | `telegram help` | Show all available commands |
 
 All commands accept `--instance <name>` to target a specific bot.
@@ -349,7 +400,8 @@ npm run dev -- telegram audit --chat 688567588                      # Filter by 
 
 <instance>/
 ├── agent.md                # Bot personality & instructions
-├── config.json             # Engine (codex|claude), YOLO mode
+├── config.json             # Engine, YOLO mode, verbosity
+├── usage.json              # Token usage and cost tracking
 ├── engine-home/            # Isolated engine config, memory, sessions
 │   ├── memory/             # Claude: auto-memory (CLAUDE_CONFIG_DIR)
 │   ├── sessions/           # Codex: thread history (CODEX_HOME)
@@ -378,6 +430,21 @@ npm run test:watch           # Watch mode
 npm run build                # Build for production
 npm start                    # Start production build
 ```
+
+---
+
+## Docker
+
+```bash
+# Build
+docker build -t cc-telegram-bridge .
+
+# Run (configure first, then start)
+docker run -v ~/.codex:/root/.codex cc-telegram-bridge telegram configure <token>
+docker run -v ~/.codex:/root/.codex cc-telegram-bridge telegram service start
+```
+
+Mount `~/.codex` to persist state across container restarts.
 
 ---
 
