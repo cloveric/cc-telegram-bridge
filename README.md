@@ -210,7 +210,8 @@ npm run dev -- telegram service start --instance claude-bot
 ```
 Telegram Update → Normalize → Access Check → Chat Queue (serialized)
     → Load config.json (engine) → Load agent.md → Session Lookup
-    → Codex Exec or Claude -p (new or resume) → Render → Deliver → Audit
+    → Codex Exec or Claude -p (new or resume)
+    → Stream progress to placeholder (every 2s) → Final Render → Deliver → Audit
 ```
 
 ---
@@ -240,12 +241,22 @@ Telegram Update → Normalize → Access Check → Chat Queue (serialized)
   </tr>
   <tr>
     <td>
-      <h3>Production Resilience</h3>
-      <p>Long polling (~0ms latency), exponential backoff, 429 auto-retry, graceful SIGTERM/SIGINT shutdown, fault-tolerant batch processing.</p>
+      <h3>Streaming Progress</h3>
+      <p>See AI responses as they're generated — the Telegram message updates live every 2 seconds during Codex/Claude execution, instead of waiting for completion.</p>
     </td>
     <td>
+      <h3>Production Resilience</h3>
+      <p>Long polling (~0ms latency), exponential backoff, 429 auto-retry, 409 conflict auto-shutdown, graceful SIGTERM/SIGINT, fault-tolerant batch processing.</p>
+    </td>
+  </tr>
+  <tr>
+    <td>
       <h3>Full Audit Trail</h3>
-      <p>Every action recorded per-instance in append-only JSONL — including engine switches and YOLO toggles.</p>
+      <p>Every action recorded per-instance in append-only JSONL — including engine switches and YOLO toggles. Filterable by type, chat, and outcome.</p>
+    </td>
+    <td>
+      <h3>Session Inspection</h3>
+      <p>List and inspect chat-to-thread bindings per instance. See which Telegram chat maps to which Codex/Claude session.</p>
     </td>
   </tr>
 </table>
@@ -298,6 +309,28 @@ npm run dev -- telegram access policy allowlist
 npm run dev -- telegram access allow <chat-id>
 npm run dev -- telegram access revoke <chat-id>
 npm run dev -- telegram status [--instance work]
+```
+
+---
+
+## Session Inspection
+
+```bash
+npm run dev -- telegram session list [--instance work]
+npm run dev -- telegram session show [--instance work] <chat-id>
+```
+
+---
+
+## Audit Trail
+
+Per-instance append-only JSONL log with filterable queries:
+
+```bash
+npm run dev -- telegram audit [--instance work]
+npm run dev -- telegram audit 50                                    # Last 50 entries
+npm run dev -- telegram audit --type update.handle --outcome error  # Filter by type/outcome
+npm run dev -- telegram audit --chat 688567588                      # Filter by chat
 ```
 
 ---
@@ -359,6 +392,13 @@ npm start                    # Start production build
 1. `telegram engine claude --instance <name>`
 2. Restart the service: `telegram service restart --instance <name>`
 3. Optionally add a `CLAUDE.md` in the workspace directory
+
+</details>
+
+<details>
+<summary><strong>Bot sends duplicate replies</strong></summary>
+
+A 409 Conflict means two processes are polling the same bot token. The service auto-detects this and shuts down. Run `telegram service status` to check, then `telegram service stop` and `telegram service start` to clean restart.
 
 </details>
 
