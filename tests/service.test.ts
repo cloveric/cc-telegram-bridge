@@ -140,7 +140,7 @@ describe("createServiceDependenciesForInstance", () => {
         "alpha",
       );
 
-      expect((result.bridge as any).adapter).toBeInstanceOf(CodexAppServerAdapter);
+      expect((result.bridge as any).adapter).toBeInstanceOf(ProcessCodexAdapter);
       expect((result.bridge as any).adapter.childEnv.CODEX_HOME).toBe(
         path.join(root, ".codex", "channels", "telegram", "alpha", "engine-home"),
       );

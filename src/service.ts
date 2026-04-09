@@ -282,7 +282,7 @@ export function resolveEngineRuntime(engine: EngineType, approvalMode: ApprovalM
     return "process";
   }
 
-  return approvalMode === "normal" ? "app-server" : "process";
+  return "process";
 }
 
 function resolveClaudeExecutable(env: EnvSource): string {

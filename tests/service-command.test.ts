@@ -144,7 +144,7 @@ describe("telegram service commands", () => {
       expect(messages[0]).toContain("Running: yes");
       expect(messages[0]).toContain("Pid: 12345");
       expect(messages[0]).toContain("Engine: codex");
-      expect(messages[0]).toContain("Runtime: app-server");
+      expect(messages[0]).toContain("Runtime: process");
       expect(messages[0]).toContain("Allowlist count: 0");
       expect(messages[0]).toContain("Pending pair count: 0");
       expect(messages[0]).toContain("Session bindings: 0");
@@ -210,7 +210,7 @@ describe("telegram service commands", () => {
 
       expect(handled).toBe(true);
       expect(messages[0]).toContain("Bot token configured: yes");
-      expect(messages[0]).toContain("Runtime: app-server");
+      expect(messages[0]).toContain("Runtime: process");
       expect(messages[0]).toContain("Bot identity lookup failed: temporary Telegram failure");
       expect(messages[0]).toContain("State dir:");
     } finally {
