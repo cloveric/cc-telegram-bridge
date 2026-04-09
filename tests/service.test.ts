@@ -1055,10 +1055,12 @@ describe("polling helpers", () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
     const inboxDir = path.join(root, "inbox");
     const progressEdit = createDeferred<{ message_id: number }>();
+    const progressStarted = createDeferred<void>();
     const api = {
       sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
       editMessage: vi.fn().mockImplementation(async (_chatId: number, _messageId: number, text: string) => {
         if (text === "partial progress") {
+          progressStarted.resolve();
           return await progressEdit.promise;
         }
 
@@ -1092,9 +1094,7 @@ describe("polling helpers", () => {
         },
       );
 
-      await waitForCondition(() =>
-        api.editMessage.mock.calls.some((call) => call[0] === 123 && call[1] === 11 && call[2] === "partial progress"),
-      );
+      await progressStarted.promise;
       expect(api.editMessage).toHaveBeenCalledWith(123, 11, "partial progress");
       expect(api.editMessage).not.toHaveBeenCalledWith(123, 11, "final response");
 
