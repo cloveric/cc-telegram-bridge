@@ -9,7 +9,7 @@ import type {
 } from "./adapter.js";
 
 type SpawnOptions = {
-  stdio: ["ignore", "pipe", "pipe"];
+  stdio: ["pipe", "pipe", "pipe"];
   shell?: boolean;
   env?: NodeJS.ProcessEnv;
   windowsHide?: boolean;
@@ -20,6 +20,9 @@ type ProcessStreamLike = {
 };
 
 type ProcessChildLike = {
+  stdin?: {
+    end(chunk?: string): void;
+  };
   stdout?: ProcessStreamLike;
   stderr?: ProcessStreamLike;
   once(event: "error", listener: (error: Error) => void): void;
@@ -184,6 +187,7 @@ function combineInstructions(primary: string | null, secondary: string | null): 
 }
 
 export class ProcessCodexAdapter implements CodexAdapter {
+  readonly bridgeInstructionMode = "telegram-out-only" as const;
   private readonly childEnv: NodeJS.ProcessEnv;
   private readonly spawnCodex: SpawnCodex;
   private readonly instructionsPath: string | undefined;
@@ -306,9 +310,9 @@ export class ProcessCodexAdapter implements CodexAdapter {
           ? ["--full-auto"]
           : [];
     const args = isLogicalTelegramSessionId(sessionId)
-      ? ["exec", "--json", "--skip-git-repo-check", ...approvalFlags, prompt]
-      : ["exec", "resume", "--json", "--skip-git-repo-check", ...approvalFlags, sessionId, prompt];
-    const result = await this.runCodexJsonCommand(args);
+      ? ["exec", "--json", "--skip-git-repo-check", ...approvalFlags, "-"]
+      : ["exec", "resume", "--json", "--skip-git-repo-check", ...approvalFlags, sessionId, "-"];
+    const result = await this.runCodexJsonCommand(args, prompt);
     const events = parseJsonEvents(result.stdout);
     const lastAgentMessage = extractLastAgentMessage(events);
     const threadId = extractThreadId(events);
@@ -334,10 +338,10 @@ export class ProcessCodexAdapter implements CodexAdapter {
     };
   }
 
-  private async runCodexJsonCommand(args: string[]): Promise<{ stdout: string; stderr: string; exitCode: number | null }> {
+  private async runCodexJsonCommand(args: string[], prompt: string): Promise<{ stdout: string; stderr: string; exitCode: number | null }> {
     const invocation = buildCommandInvocation(this.codexExecutable, args);
     const child = this.spawnCodex(invocation.command, invocation.args, {
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: ["pipe", "pipe", "pipe"],
       shell: invocation.shell,
       env: this.childEnv,
       windowsHide: true,
@@ -355,6 +359,7 @@ export class ProcessCodexAdapter implements CodexAdapter {
         stderr += chunk.toString();
       });
 
+      child.stdin?.end(prompt);
       child.once("error", reject);
       child.once("close", (code) => {
         resolve({ stdout, stderr, exitCode: code });

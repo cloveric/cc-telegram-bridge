@@ -96,7 +96,13 @@ function buildCommandInvocation(command: string, args: string[]): { command: str
   return { command: normalizedCommand, args, shell: false };
 }
 
+function combineInstructions(primary: string | null, secondary: string | null): string | null {
+  const parts = [primary?.trim(), secondary?.trim()].filter((value): value is string => Boolean(value));
+  return parts.length > 0 ? parts.join("\n\n") : null;
+}
+
 export class CodexAppServerAdapter implements CodexAdapter {
+  readonly bridgeInstructionMode = "telegram-out-only" as const;
   private readonly childEnv: NodeJS.ProcessEnv;
   private readonly spawnCodex: SpawnCodex;
   private readonly instructionsPath: string | undefined;
@@ -149,7 +155,10 @@ export class CodexAppServerAdapter implements CodexAdapter {
   async sendUserMessage(sessionId: string, input: CodexUserMessageInput): Promise<CodexAdapterResponse> {
     await this.ensureInitialized();
 
-    const instructions = input.instructions ?? (this.instructionsPath ? await this.loadInstructions() : null);
+    const instructions = combineInstructions(
+      this.instructionsPath ? await this.loadInstructions() : null,
+      input.instructions ?? null,
+    );
     const prompt = this.buildPrompt(input, instructions);
     const threadId = isLogicalTelegramSessionId(sessionId)
       ? await this.startThread()

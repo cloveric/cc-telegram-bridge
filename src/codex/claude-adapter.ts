@@ -92,6 +92,7 @@ function combineInstructions(primary: string | null, secondary: string | null): 
 }
 
 export class ProcessClaudeAdapter implements CodexAdapter {
+  readonly bridgeInstructionMode = "generic-file-blocks" as const;
   private readonly childEnv: NodeJS.ProcessEnv;
   private readonly spawnClaude: SpawnClaude;
   private readonly instructionsPath: string | undefined;

@@ -44,6 +44,7 @@ describe("Bridge", () => {
       text: "hello",
       files: [],
       instructions: expect.stringContaining("Telegram chat bridge"),
+      requestOutputDir: undefined,
     });
     expect((adapter.sendUserMessage as ReturnType<typeof vi.fn>).mock.calls[0]?.[1]?.instructions).toContain(
       "```file:example.py",
@@ -315,9 +316,131 @@ describe("Bridge", () => {
       text: "answer this\n\n[Quoted message #99]\nquoted text",
       files: [],
       instructions: expect.stringContaining("Telegram chat bridge"),
+      requestOutputDir: undefined,
     });
     expect((adapter.sendUserMessage as ReturnType<typeof vi.fn>).mock.calls[0]?.[1]?.instructions).toContain(
       "deliver it as a Telegram document attachment",
     );
+  });
+
+  it("passes codex telegram-out instructions separately from user text", async () => {
+    const accessStore: AccessStoreLike = {
+      load: vi.fn().mockResolvedValue({
+        policy: "allowlist",
+        pairedUsers: [],
+        allowlist: [84],
+        pendingPairs: [],
+      }),
+      issuePairingCode: vi.fn(),
+    };
+    const sessionManager: SessionManagerLike = {
+      getOrCreateSession: vi.fn().mockResolvedValue({ sessionId: "telegram-84" }),
+      bindSession: vi.fn(),
+    };
+    const adapter: CodexAdapter = {
+      sendUserMessage: vi.fn().mockResolvedValue({ text: "done" }),
+      createSession: vi.fn(),
+    };
+
+    const bridge = new Bridge(accessStore, sessionManager, adapter);
+    await bridge.handleAuthorizedMessage({
+      chatId: 84,
+      userId: 42,
+      chatType: "private",
+      text: "generate a file",
+      replyContext: undefined,
+      files: [],
+      requestOutputDir: "C:\\tmp\\workspace\\.telegram-out\\req-123",
+    });
+
+    expect(adapter.sendUserMessage).toHaveBeenCalledWith(
+      "telegram-84",
+      expect.objectContaining({
+        text: "generate a file",
+        requestOutputDir: "C:\\tmp\\workspace\\.telegram-out\\req-123",
+        instructions: expect.stringContaining("[Codex Telegram-Out Contract]"),
+      }),
+    );
+    expect((adapter.sendUserMessage as ReturnType<typeof vi.fn>).mock.calls[0]?.[1]?.instructions).toContain(
+      "Files written there will be returned to the user after the task completes.",
+    );
+  });
+
+  it("does not inject generic file-block bridge instructions for codex adapters", async () => {
+    const accessStore: AccessStoreLike = {
+      load: vi.fn().mockResolvedValue({
+        policy: "allowlist",
+        pairedUsers: [],
+        allowlist: [84],
+        pendingPairs: [],
+      }),
+      issuePairingCode: vi.fn(),
+    };
+    const sessionManager: SessionManagerLike = {
+      getOrCreateSession: vi.fn().mockResolvedValue({ sessionId: "telegram-84" }),
+      bindSession: vi.fn(),
+    };
+    const adapter: CodexAdapter = {
+      bridgeInstructionMode: "telegram-out-only",
+      sendUserMessage: vi.fn().mockResolvedValue({ text: "done" }),
+      createSession: vi.fn(),
+    };
+
+    const bridge = new Bridge(accessStore, sessionManager, adapter);
+    await bridge.handleAuthorizedMessage({
+      chatId: 84,
+      userId: 42,
+      chatType: "private",
+      text: "文件在哪里",
+      replyContext: undefined,
+      files: [],
+    });
+
+    expect(adapter.sendUserMessage).toHaveBeenCalledWith(
+      "telegram-84",
+      expect.objectContaining({
+        text: "文件在哪里",
+        instructions: undefined,
+      }),
+    );
+  });
+
+  it("uses only the codex telegram-out contract for codex file delivery", async () => {
+    const accessStore: AccessStoreLike = {
+      load: vi.fn().mockResolvedValue({
+        policy: "allowlist",
+        pairedUsers: [],
+        allowlist: [84],
+        pendingPairs: [],
+      }),
+      issuePairingCode: vi.fn(),
+    };
+    const sessionManager: SessionManagerLike = {
+      getOrCreateSession: vi.fn().mockResolvedValue({ sessionId: "telegram-84" }),
+      bindSession: vi.fn(),
+    };
+    const adapter: CodexAdapter = {
+      bridgeInstructionMode: "telegram-out-only",
+      sendUserMessage: vi.fn().mockResolvedValue({ text: "done" }),
+      createSession: vi.fn(),
+    };
+
+    const bridge = new Bridge(accessStore, sessionManager, adapter);
+    await bridge.handleAuthorizedMessage({
+      chatId: 84,
+      userId: 42,
+      chatType: "private",
+      text: "生成一个文件并发给我",
+      replyContext: undefined,
+      files: [],
+      requestOutputDir: "C:\\tmp\\workspace\\.telegram-out\\req-123",
+    });
+
+    const call = (adapter.sendUserMessage as ReturnType<typeof vi.fn>).mock.calls[0]?.[1];
+    expect(call?.text).toBe("生成一个文件并发给我");
+    expect(call?.instructions).toContain("[Codex Telegram-Out Contract]");
+    expect(call?.instructions).toContain("For small text or code files, prefer returning exactly one fenced block");
+    expect(call?.instructions).toContain("```file:example.txt");
+    expect(call?.instructions).not.toContain("Telegram chat bridge");
   });
 });

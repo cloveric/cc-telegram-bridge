@@ -20,9 +20,11 @@ export interface CodexUserMessageInput {
   files: string[];
   instructions?: string;
   onProgress?: (partialText: string) => void;
+  requestOutputDir?: string;
 }
 
 export interface CodexAdapter {
+  bridgeInstructionMode?: "generic-file-blocks" | "telegram-out-only";
   /**
    * Creates a logical session binding for a Telegram chat.
    * Implementations may be stateless at first and should not imply

@@ -31,13 +31,13 @@ describe("ProcessCodexAdapter", () => {
     const calls: Array<{
       command: string;
       args: string[];
-      options: { stdio: ["ignore", "pipe", "pipe"]; shell?: boolean; env?: NodeJS.ProcessEnv; windowsHide?: boolean };
+      options: { stdio: ["pipe", "pipe", "pipe"]; shell?: boolean; env?: NodeJS.ProcessEnv; windowsHide?: boolean };
     }> = [];
     const child = new FakeChildProcess();
     const spawnCodex = (
       command: string,
       args: string[],
-      options: { stdio: ["ignore", "pipe", "pipe"]; shell?: boolean; env?: NodeJS.ProcessEnv; windowsHide?: boolean },
+      options: { stdio: ["pipe", "pipe", "pipe"]; shell?: boolean; env?: NodeJS.ProcessEnv; windowsHide?: boolean },
     ) => {
       calls.push({ command, args, options });
       return child;
@@ -58,9 +58,11 @@ describe("ProcessCodexAdapter", () => {
     expect(calls).toHaveLength(1);
     expect(calls[0]).toMatchObject({
       command: "codex",
-      args: ["exec", "--json", "--skip-git-repo-check", "Hello\nAttachment: a.png\nAttachment: b.pdf"],
-      options: { stdio: ["ignore", "pipe", "pipe"], shell: false, windowsHide: true },
+      args: ["exec", "--json", "--skip-git-repo-check", "-"],
+      options: { stdio: ["pipe", "pipe", "pipe"], shell: false, windowsHide: true },
     });
+    expect(child.stdin.writes.join("")).toBe("Hello\nAttachment: a.png\nAttachment: b.pdf");
+    expect(child.stdin.ended).toBe(true);
     expect(calls[0]?.options.env?.TELEGRAM_BOT_TOKEN).toBeUndefined();
   });
 
@@ -68,13 +70,13 @@ describe("ProcessCodexAdapter", () => {
     const calls: Array<{
       command: string;
       args: string[];
-      options: { stdio: ["ignore", "pipe", "pipe"]; shell?: boolean; env?: NodeJS.ProcessEnv; windowsHide?: boolean };
+      options: { stdio: ["pipe", "pipe", "pipe"]; shell?: boolean; env?: NodeJS.ProcessEnv; windowsHide?: boolean };
     }> = [];
     const child = new FakeChildProcess();
     const spawnCodex = (
       command: string,
       args: string[],
-      options: { stdio: ["ignore", "pipe", "pipe"]; shell?: boolean; env?: NodeJS.ProcessEnv; windowsHide?: boolean },
+      options: { stdio: ["pipe", "pipe", "pipe"]; shell?: boolean; env?: NodeJS.ProcessEnv; windowsHide?: boolean },
     ) => {
       calls.push({ command, args, options });
       return child;
@@ -99,7 +101,38 @@ describe("ProcessCodexAdapter", () => {
       "C:\\Users\\hangw\\AppData\\Roaming\\npm\\codex.cmd",
       "exec",
     ]);
+    expect(calls[0]?.args.at(-1)).toBe("-");
+    expect(child.stdin.writes.join("")).toBe("Hello");
     expect(calls[0]?.options.windowsHide).toBe(true);
+  });
+
+  it("pipes multiline prompts through stdin for PowerShell shim executables", async () => {
+    const { spawnCodex, child, calls } = createSpawnHarness();
+    const adapter = new ProcessCodexAdapter("C:\\Users\\hangw\\AppData\\Roaming\\npm\\codex.ps1", spawnCodex);
+
+    const promise = adapter.sendUserMessage("telegram-12345", {
+      text: "生成一个文件并传给我",
+      files: [],
+      instructions: "[Codex Telegram-Out Contract]\nWrite output files to C:\\tmp\\out",
+    });
+    await waitForSpawn(calls);
+
+    child.stdout.emitData('{"type":"thread.started","thread_id":"thread-123"}\n');
+    child.stdout.emitData('{"type":"item.completed","item":{"type":"agent_message","text":"ok"}}\n');
+    child.close(0);
+    await promise;
+
+    expect(calls[0]?.command.toLowerCase()).toContain("pwsh");
+    expect(calls[0]?.args.slice(0, 4)).toEqual([
+      "-NoProfile",
+      "-File",
+      "C:\\Users\\hangw\\AppData\\Roaming\\npm\\codex.ps1",
+      "exec",
+    ]);
+    expect(calls[0]?.args.at(-1)).toBe("-");
+    expect(child.stdin.writes.join("")).toContain("[Codex Telegram-Out Contract]");
+    expect(child.stdin.writes.join("")).toContain("生成一个文件并传给我");
+    expect(child.stdin.ended).toBe(true);
   });
 
   it("returns trimmed stdout when codex exits successfully", async () => {
@@ -224,7 +257,8 @@ describe("ProcessCodexAdapter", () => {
       child.close(0);
       await promise;
 
-      expect(calls[0]?.args[3]).toContain("You are bot alpha.\n---\nHello");
+      expect(calls[0]?.args[3]).toBe("-");
+      expect(child.stdin.writes.join("")).toContain("You are bot alpha.\n---\nHello");
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -251,8 +285,9 @@ describe("ProcessCodexAdapter", () => {
       child.close(0);
       await promise;
 
-      expect(calls[0]?.args[3]).toContain("You are bot alpha.");
-      expect(calls[0]?.args[3]).toContain("[Telegram Bridge Capabilities]");
+      expect(calls[0]?.args[3]).toBe("-");
+      expect(child.stdin.writes.join("")).toContain("You are bot alpha.");
+      expect(child.stdin.writes.join("")).toContain("[Telegram Bridge Capabilities]");
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -278,8 +313,9 @@ describe("ProcessCodexAdapter", () => {
       child.close(0);
       await promise;
 
-      expect(calls[0]?.args[3]).toContain("[Instructions truncated at 16000 characters]");
-      expect(calls[0]?.args[3].length).toBeLessThan(17_000);
+      expect(calls[0]?.args[3]).toBe("-");
+      expect(child.stdin.writes.join("")).toContain("[Instructions truncated at 16000 characters]");
+      expect(child.stdin.writes.join("").length).toBeLessThan(17_000);
 
       const { spawnCodex: secondSpawn, child: secondChild, calls: secondCalls } = createSpawnHarness();
       const brokenAdapter = new ProcessCodexAdapter("codex", undefined, secondSpawn, path.join(root, "missing.md"));
@@ -294,7 +330,8 @@ describe("ProcessCodexAdapter", () => {
       secondChild.close(0);
       await secondPromise;
 
-      expect(secondCalls[0]?.args[3]).toBe("Hello again");
+      expect(secondCalls[0]?.args[3]).toBe("-");
+      expect(secondChild.stdin.writes.join("")).toBe("Hello again");
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -308,6 +345,20 @@ class FakeStream extends EventEmitter {
 }
 
 class FakeChildProcess extends EventEmitter {
+  stdin = {
+    writes: [] as string[],
+    ended: false,
+    write: (chunk: string) => {
+      this.stdin.writes.push(chunk);
+      return true;
+    },
+    end: (chunk?: string) => {
+      if (chunk) {
+        this.stdin.writes.push(chunk);
+      }
+      this.stdin.ended = true;
+    },
+  };
   stdout = new FakeStream();
   stderr = new FakeStream();
 
@@ -321,12 +372,12 @@ function createSpawnHarness() {
   const calls: Array<{
     command: string;
     args: string[];
-    options: { stdio: ["ignore", "pipe", "pipe"]; shell?: boolean; env?: NodeJS.ProcessEnv; windowsHide?: boolean };
+    options: { stdio: ["pipe", "pipe", "pipe"]; shell?: boolean; env?: NodeJS.ProcessEnv; windowsHide?: boolean };
   }> = [];
   const spawnCodex = (
     command: string,
     args: string[],
-    options: { stdio: ["ignore", "pipe", "pipe"]; shell?: boolean; env?: NodeJS.ProcessEnv; windowsHide?: boolean },
+    options: { stdio: ["pipe", "pipe", "pipe"]; shell?: boolean; env?: NodeJS.ProcessEnv; windowsHide?: boolean },
   ) => {
     calls.push({ command, args, options });
     return child;

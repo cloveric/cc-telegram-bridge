@@ -7,6 +7,11 @@ import {
   prepareAttachmentWorkflow,
   type DownloadedAttachment,
 } from "../runtime/file-workflow.js";
+import {
+  applyTelegramOutLimits,
+  createTelegramOutDir,
+  describeTelegramOutFiles,
+} from "../runtime/telegram-out.js";
 import { appendAuditEvent } from "../state/audit-log.js";
 import { FileWorkflowStore } from "../state/file-workflow-store.js";
 import { UsageStore } from "../state/usage-store.js";
@@ -21,6 +26,16 @@ async function loadVerbosity(stateDir: string): Promise<number> {
     return 1;
   } catch {
     return 1;
+  }
+}
+
+async function loadEngine(stateDir: string): Promise<"codex" | "claude"> {
+  try {
+    const raw = await readFile(path.join(stateDir, "config.json"), "utf8");
+    const config = JSON.parse(raw) as { engine?: string };
+    return config.engine === "claude" ? "claude" : "codex";
+  } catch {
+    return "codex";
   }
 }
 import {
@@ -41,6 +56,10 @@ export interface TelegramDeliveryContext {
   inboxDir: string;
   instanceName?: string;
   updateId?: number;
+}
+
+function wantsTelegramOut(text: string): boolean {
+  return /(发.*文件|传.*文件|发送.*文件|导出.*文件|文件.*传|文件.*发|生成.*文件|generate.*file|send.*file|export.*file)/i.test(text);
 }
 
 function inferExtension(attachment: NormalizedTelegramAttachment, telegramFilePath: string): string {
@@ -141,6 +160,7 @@ export async function handleNormalizedTelegramMessage(
   let progressEditCounter = 0;
   let lastAllowedProgressEditCounter = Number.POSITIVE_INFINITY;
   let workflowRecordId: string | undefined;
+  let telegramOutDirPath: string | undefined;
   const stateDir = path.dirname(context.inboxDir);
   const workflowStore = new FileWorkflowStore(stateDir);
 
@@ -202,6 +222,11 @@ export async function handleNormalizedTelegramMessage(
             text: normalized.text,
           });
 
+    const engine = await loadEngine(stateDir);
+    if (engine === "codex" && wantsTelegramOut(normalized.text)) {
+      telegramOutDirPath = (await createTelegramOutDir(stateDir, `${Date.now()}-${normalized.chatId}`)).dirPath;
+    }
+
     if (workflowResult?.kind === "reply") {
       await context.api.editMessage(normalized.chatId, placeholderMessageId, workflowResult.text);
       await appendAuditEvent(stateDir, {
@@ -262,6 +287,7 @@ export async function handleNormalizedTelegramMessage(
       replyContext: normalized.replyContext,
       files: requestFiles,
       onProgress,
+      requestOutputDir: telegramOutDirPath,
     });
 
     progressEditsClosed = true;
@@ -287,6 +313,20 @@ export async function handleNormalizedTelegramMessage(
     await deliverTelegramResponse(context.api, normalized.chatId, placeholderMessageId, result.text, () => {
       placeholderShowsResponse = true;
     });
+
+    if (telegramOutDirPath) {
+      const describedFiles = await describeTelegramOutFiles(telegramOutDirPath);
+      const limitedFiles = applyTelegramOutLimits(describedFiles, {
+        maxFiles: 5,
+        maxFileBytes: 512_000,
+        maxTotalBytes: 1_500_000,
+      });
+
+      for (const file of limitedFiles.accepted) {
+        const contents = await readFile(file.path);
+        await context.api.sendDocument(normalized.chatId, file.name, contents);
+      }
+    }
     await appendAuditEvent(path.dirname(context.inboxDir), {
       type: "update.handle",
       instanceName: context.instanceName,

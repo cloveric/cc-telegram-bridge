@@ -180,6 +180,45 @@ describe("CodexAppServerAdapter", () => {
     }
   });
 
+  it("merges bridge instructions with instance agent instructions", async () => {
+    const { child, spawnFn } = createSpawnHarness();
+    const root = await mkdtemp(path.join(os.tmpdir(), "cc-telegram-bridge-"));
+    const instructionsPath = path.join(root, "agent.md");
+
+    try {
+      await writeFile(instructionsPath, "You are isolated.", "utf8");
+      const adapter = new CodexAppServerAdapter(
+        "codex",
+        process.cwd(),
+        undefined,
+        spawnFn,
+        instructionsPath,
+      );
+
+      const promise = adapter.sendUserMessage("telegram-12345", {
+        text: "Hello",
+        files: [],
+        instructions: "[Telegram Bridge Capabilities]\nUse file blocks.",
+      });
+
+      await waitFor(() => child.stdin.lines.length >= 1);
+      child.stdout.emitData('{"id":1,"result":{"platformOs":"windows"}}\n');
+      await waitFor(() => child.stdin.lines.length >= 2);
+      child.stdout.emitData('{"id":2,"result":{"thread":{"id":"thread-123"}}}\n');
+      await waitFor(() => child.stdin.lines.length >= 3);
+
+      const turnStart = JSON.parse(child.stdin.lines[2] ?? "{}");
+      expect(turnStart.params.input[0].text).toContain("You are isolated.");
+      expect(turnStart.params.input[0].text).toContain("[Telegram Bridge Capabilities]");
+
+      child.stdout.emitData('{"method":"item/completed","params":{"threadId":"thread-123","item":{"type":"agentMessage","text":"ok"}}}\n');
+      child.stdout.emitData('{"method":"turn/completed","params":{"threadId":"thread-123","turn":{"id":"turn-1","items":[],"status":"completed","error":null}}}\n');
+      await promise;
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("truncates oversized instructions and degrades safely on read failure", async () => {
     const { child, spawnFn } = createSpawnHarness();
     const root = await mkdtemp(path.join(os.tmpdir(), "cc-telegram-bridge-"));
