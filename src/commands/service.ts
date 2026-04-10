@@ -77,7 +77,8 @@ export interface ServiceStatus {
   lastFailureAt?: string;
   auditEvents: number;
   latestFailureCategory?: string;
-  unresolvedTasks: number;
+  unresolvedTasks: number | null;
+  unresolvedTasksWarning?: string;
 }
 
 export interface ServiceDoctorResult {
@@ -304,6 +305,25 @@ async function readLastNonEmptyLine(filePath: string): Promise<string | undefine
   }
 }
 
+async function summarizeUnresolvedTasks(stateDir: string): Promise<{
+  unresolvedTasks: number | null;
+  unresolvedTasksWarning?: string;
+}> {
+  try {
+    const workflowStore = new FileWorkflowStore(stateDir);
+    const records = await workflowStore.list();
+
+    return {
+      unresolvedTasks: records.filter((record) => record.status !== "completed").length,
+    };
+  } catch {
+    return {
+      unresolvedTasks: null,
+      unresolvedTasksWarning: "file workflow state unreadable",
+    };
+  }
+}
+
 function tailLines(text: string, maxLines = 40): string {
   const lines = text.split(/\r?\n/).filter((line) => line.length > 0);
   return lines.slice(-maxLines).join("\n");
@@ -477,8 +497,7 @@ export async function getServiceStatus(
       throw error;
     }
   }
-  const workflowStore = new FileWorkflowStore(paths.stateDir);
-  const unresolvedTasks = (await workflowStore.list()).filter((record) => record.status !== "completed").length;
+  const workflowSummary = await summarizeUnresolvedTasks(paths.stateDir);
 
   return {
     instanceName: paths.instanceName,
@@ -504,7 +523,8 @@ export async function getServiceStatus(
     lastFailureAt: auditSummary.lastErrorAt,
     auditEvents: auditSummary.totalEvents,
     latestFailureCategory,
-    unresolvedTasks,
+    unresolvedTasks: workflowSummary.unresolvedTasks,
+    unresolvedTasksWarning: workflowSummary.unresolvedTasksWarning,
   };
 }
 
@@ -555,7 +575,10 @@ export async function runServiceDoctor(
   checks.push({
     name: "tasks",
     ok: true,
-    detail: `unresolved tasks: ${status.unresolvedTasks}.`,
+    detail:
+      status.unresolvedTasksWarning !== undefined
+        ? `unresolved tasks: unknown (${status.unresolvedTasksWarning}).`
+        : `unresolved tasks: ${status.unresolvedTasks}.`,
   });
   checks.push({
     name: "stderr",

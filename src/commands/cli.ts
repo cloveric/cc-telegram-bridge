@@ -458,6 +458,9 @@ function formatServiceStatus(status: Awaited<ReturnType<typeof getServiceStatus>
     `Audit events: ${status.auditEvents}`,
     `Last success: ${status.lastSuccessAt ?? "none"}`,
     `Last failure: ${status.lastFailureAt ?? "none"}`,
+    status.unresolvedTasksWarning !== undefined
+      ? `Unresolved tasks: unknown (${status.unresolvedTasksWarning})`
+      : `Unresolved tasks: ${status.unresolvedTasks}`,
     `State dir: ${status.stateDir}`,
     `Stdout log: ${status.stdoutPath}`,
     `Stderr log: ${status.stderrPath}`,
