@@ -1140,6 +1140,44 @@ describe("polling helpers", () => {
     expect(api.editMessage).toHaveBeenCalledWith(123, 11, renderErrorMessage("boom"));
   });
 
+  it("records categorized failures in audit metadata", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
+    const inboxDir = path.join(root, "inbox");
+    const api = {
+      sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      getFile: vi.fn(),
+      downloadFile: vi.fn(),
+    };
+    const bridge = {
+      checkAccess: vi.fn().mockResolvedValue({ kind: "allow" }),
+      handleAuthorizedMessage: vi.fn().mockRejectedValue(new Error("Not logged in · Please run /login")),
+    };
+    const normalized = {
+      chatId: 123,
+      userId: 456,
+      chatType: "private" as const,
+      text: "hello",
+      replyContext: undefined,
+      attachments: [],
+    };
+
+    try {
+      await expect(
+        handleNormalizedTelegramMessage(normalized, {
+          api: api as never,
+          bridge: bridge as never,
+          inboxDir,
+        }),
+      ).rejects.toThrow();
+
+      const audit = await readFile(path.join(root, "audit.log.jsonl"), "utf8");
+      expect(audit).toContain('"failureCategory":"auth"');
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("chunks long responses by editing the placeholder with the first chunk and sending the rest", async () => {
     const api = {
       sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),

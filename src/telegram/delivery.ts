@@ -13,6 +13,7 @@ import {
   describeTelegramOutFiles,
 } from "../runtime/telegram-out.js";
 import { appendAuditEvent } from "../state/audit-log.js";
+import { classifyFailure } from "../runtime/error-classification.js";
 import { FileWorkflowStore } from "../state/file-workflow-store.js";
 import { UsageStore } from "../state/usage-store.js";
 import { readFile } from "node:fs/promises";
@@ -374,6 +375,7 @@ export async function handleNormalizedTelegramMessage(
       metadata: {
         durationMs: Date.now() - startedAt,
         attachments: normalized.attachments.length,
+        failureCategory: classifyFailure(error),
       },
     });
 

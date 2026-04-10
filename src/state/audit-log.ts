@@ -1,6 +1,8 @@
 import { appendFile, mkdir } from "node:fs/promises";
 import path from "node:path";
 
+import { classifyFailure, type FailureCategory } from "../runtime/error-classification.js";
+
 export interface AuditEvent {
   timestamp?: string;
   type: string;
@@ -24,6 +26,12 @@ export interface AuditSummary {
   totalEvents: number;
   lastSuccessAt?: string;
   lastErrorAt?: string;
+}
+
+export interface LatestFailureSummary {
+  timestamp: string;
+  category: FailureCategory;
+  detail?: string;
 }
 
 export function resolveAuditLogPath(stateDir: string): string {
@@ -106,4 +114,24 @@ export function summarizeAuditEvents(events: AuditEvent[]): AuditSummary {
   }
 
   return summary;
+}
+
+export function getLatestFailure(events: AuditEvent[]): LatestFailureSummary | undefined {
+  for (let index = events.length - 1; index >= 0; index--) {
+    const event = events[index];
+    if (event?.outcome !== "error") {
+      continue;
+    }
+
+    const metadataCategory =
+      event.metadata && typeof event.metadata.failureCategory === "string" ? event.metadata.failureCategory : undefined;
+
+    return {
+      timestamp: event.timestamp ?? new Date().toISOString(),
+      category: (metadataCategory ?? classifyFailure(event.detail ?? event.type)) as FailureCategory,
+      detail: event.detail,
+    };
+  }
+
+  return undefined;
 }

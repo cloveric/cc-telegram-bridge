@@ -4,7 +4,7 @@ import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { appendAuditEvent, resolveAuditLogPath } from "../src/state/audit-log.js";
+import { appendAuditEvent, getLatestFailure, parseAuditEvents, resolveAuditLogPath } from "../src/state/audit-log.js";
 
 describe("audit log", () => {
   it("appends jsonl events to the instance audit log", async () => {
@@ -45,5 +45,30 @@ describe("audit log", () => {
     } finally {
       await rm(tempDir, { recursive: true, force: true });
     }
+  });
+
+  it("returns the latest categorized failure from audit history", () => {
+    const events = parseAuditEvents([
+      JSON.stringify({
+        timestamp: "2026-04-10T00:00:00.000Z",
+        type: "update.handle",
+        outcome: "error",
+        detail: "Error: Not logged in",
+        metadata: { failureCategory: "auth" },
+      }),
+      JSON.stringify({
+        timestamp: "2026-04-10T00:01:00.000Z",
+        type: "update.handle",
+        outcome: "error",
+        detail: "Error: write access denied",
+        metadata: { failureCategory: "write-permission" },
+      }),
+    ].join("\n"));
+
+    expect(getLatestFailure(events)).toEqual({
+      timestamp: "2026-04-10T00:01:00.000Z",
+      category: "write-permission",
+      detail: "Error: write access denied",
+    });
   });
 });

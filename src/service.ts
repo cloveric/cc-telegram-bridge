@@ -19,6 +19,7 @@ import { normalizeUpdate } from "./telegram/update-normalizer.js";
 import { SessionManager } from "./runtime/session-manager.js";
 import { normalizeInstanceName } from "./instance.js";
 import { ChatQueue } from "./runtime/chat-queue.js";
+import { classifyFailure } from "./runtime/error-classification.js";
 
 export interface ServiceDependencies {
   api: TelegramApi;
@@ -518,6 +519,9 @@ export async function processTelegramUpdates(
         updateId,
         outcome: "error",
         detail: error instanceof Error ? error.message : String(error),
+        metadata: {
+          failureCategory: classifyFailure(error),
+        },
       });
       logger.error(formatErrorMessage("Failed to handle Telegram update", error));
       break;
