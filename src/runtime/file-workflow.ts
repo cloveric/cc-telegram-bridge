@@ -115,6 +115,15 @@ async function summarizeDocument(filePath: string): Promise<{ summaryText: strin
 
 function isContinueAnalysisCommand(text: string): { matches: boolean; extraInstructions: string } {
   const trimmed = text.trim();
+  const slashCommandPattern = /^\/continue(?:@\w+)?(?:[\s:：-]+(.*))?$/i;
+  const slashMatch = trimmed.match(slashCommandPattern);
+  if (slashMatch) {
+    return {
+      matches: true,
+      extraInstructions: slashMatch[1]?.trim() ?? "",
+    };
+  }
+
   const pattern = /^(继续分析|分析这个|继续|分析压缩包)(?:[\s:：-]+(.*))?$/i;
   const match = trimmed.match(pattern);
   if (!match) {

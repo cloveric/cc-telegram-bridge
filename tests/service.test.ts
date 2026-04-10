@@ -991,6 +991,80 @@ describe("polling helpers", () => {
     expect(normalized).toEqual(expect.objectContaining({ text: "/continue" }));
   });
 
+  it("uses the existing archive continuation flow for continue-latest-archive callbacks", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
+    const inboxDir = path.join(root, "inbox");
+    await writeFile(
+      path.join(root, "file-workflow.json"),
+      JSON.stringify({
+        records: [
+          {
+            uploadId: "archive-1",
+            chatId: 123,
+            userId: 456,
+            kind: "archive",
+            status: "awaiting_continue",
+            sourceFiles: ["repo.zip"],
+            derivedFiles: [],
+            summary: "archive summary",
+            extractedPath: "workspace/.telegram-files/archive-1/extracted",
+            createdAt: "2026-04-10T00:00:00.000Z",
+            updatedAt: "2026-04-10T00:00:00.000Z",
+          },
+        ],
+      }),
+      "utf8",
+    );
+    const api = {
+      sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      answerCallbackQuery: vi.fn().mockResolvedValue(undefined),
+      getFile: vi.fn(),
+      downloadFile: vi.fn(),
+    };
+    const bridge = {
+      checkAccess: vi.fn().mockResolvedValue({ kind: "allow" }),
+      handleAuthorizedMessage: vi.fn().mockResolvedValue({ text: "analysis done" }),
+    };
+    const normalized = normalizeUpdate({
+      update_id: 99,
+      callback_query: {
+        id: "cb-1",
+        from: { id: 456 },
+        message: { message_id: 11, chat: { id: 123, type: "private" }, text: "Archive summary" },
+        data: "continue-latest-archive",
+      },
+    });
+
+    try {
+      await handleNormalizedTelegramMessage(
+        normalized!,
+        {
+          api: api as never,
+          bridge: bridge as never,
+          inboxDir,
+        },
+      );
+
+      expect(api.answerCallbackQuery).toHaveBeenCalledWith("cb-1");
+      expect(bridge.handleAuthorizedMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          text: expect.stringContaining("[Archive Analysis Context]"),
+        }),
+      );
+      expect(bridge.handleAuthorizedMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          text: expect.stringContaining("archive summary"),
+        }),
+      );
+      expect(bridge.handleAuthorizedMessage).not.toHaveBeenCalledWith(
+        expect.objectContaining({ text: "/continue" }),
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("injects extracted text for supported document uploads", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
     const inboxDir = path.join(root, "inbox");
