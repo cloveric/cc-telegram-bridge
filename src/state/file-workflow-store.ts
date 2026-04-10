@@ -32,6 +32,15 @@ function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((entry) => typeof entry === "string");
 }
 
+function isIsoTimestamp(value: unknown): value is string {
+  if (typeof value !== "string") {
+    return false;
+  }
+
+  const parsed = new Date(value);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString() === value;
+}
+
 function isFileWorkflowRecord(value: unknown): value is FileWorkflowRecord {
   if (typeof value !== "object" || value === null) {
     return false;
@@ -51,8 +60,8 @@ function isFileWorkflowRecord(value: unknown): value is FileWorkflowRecord {
     isStringArray(record.derivedFiles) &&
     typeof record.summary === "string" &&
     (record.extractedPath === undefined || typeof record.extractedPath === "string") &&
-    typeof record.createdAt === "string" &&
-    typeof record.updatedAt === "string"
+    isIsoTimestamp(record.createdAt) &&
+    isIsoTimestamp(record.updatedAt)
   );
 }
 
@@ -76,6 +85,7 @@ export function resolveFileWorkflowStatePath(stateDir: string): string {
 
 export class FileWorkflowStore {
   private readonly store: JsonStore<FileWorkflowState>;
+  private pendingWrite: Promise<void> = Promise.resolve();
 
   constructor(stateDir: string) {
     this.store = new JsonStore<FileWorkflowState>(resolveFileWorkflowStatePath(stateDir), (value) => {
@@ -92,9 +102,11 @@ export class FileWorkflowStore {
   }
 
   async append(record: FileWorkflowRecord): Promise<void> {
-    const state = await this.load();
-    state.records.push(record);
-    await this.store.write(state);
+    await this.enqueueWrite(async () => {
+      const state = await this.load();
+      state.records.push(record);
+      await this.store.write(state);
+    });
   }
 
   async list(filter: FileWorkflowListFilter = {}): Promise<FileWorkflowRecord[]> {
@@ -120,34 +132,62 @@ export class FileWorkflowStore {
   }
 
   async remove(uploadId: string): Promise<boolean> {
-    const state = await this.load();
-    const nextRecords = state.records.filter((record) => record.uploadId !== uploadId);
+    let removed = false;
 
-    if (nextRecords.length === state.records.length) {
-      return false;
-    }
+    await this.enqueueWrite(async () => {
+      const state = await this.load();
+      const nextRecords = state.records.filter((record) => {
+        if (record.uploadId === uploadId) {
+          removed = true;
+          return false;
+        }
 
-    state.records = nextRecords;
-    await this.store.write(state);
-    return true;
+        return true;
+      });
+
+      if (!removed) {
+        return;
+      }
+
+      state.records = nextRecords;
+      await this.store.write(state);
+    });
+
+    return removed;
   }
 
   async update(uploadId: string, mutate: (record: FileWorkflowRecord) => void): Promise<FileWorkflowRecord | null> {
-    const state = await this.load();
-    const record = state.records.find((entry) => entry.uploadId === uploadId);
-    if (!record) {
-      return null;
-    }
+    let updated: FileWorkflowRecord | null = null;
 
-    mutate(record);
-    record.updatedAt = new Date().toISOString();
-    await this.store.write(state);
-    return record;
+    await this.enqueueWrite(async () => {
+      const state = await this.load();
+      const record = state.records.find((entry) => entry.uploadId === uploadId);
+      if (!record) {
+        return;
+      }
+
+      mutate(record);
+      record.updatedAt = new Date().toISOString();
+      await this.store.write(state);
+      updated = record;
+    });
+
+    return updated;
   }
 
   async getLatestAwaitingArchive(chatId: number): Promise<FileWorkflowRecord | null> {
     const state = await this.load();
     const candidates = state.records.filter((record) => record.chatId === chatId && record.kind === "archive" && record.status === "awaiting_continue");
     return candidates.at(-1) ?? null;
+  }
+
+  private enqueueWrite(task: () => Promise<void>): Promise<void> {
+    const run = this.pendingWrite.then(task, task);
+    this.pendingWrite = run.then(
+      () => undefined,
+      () => undefined,
+    );
+
+    return run;
   }
 }
