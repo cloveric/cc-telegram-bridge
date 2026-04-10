@@ -1364,7 +1364,11 @@ describe("polling helpers", () => {
       ),
     ).rejects.toThrow("boom");
 
-    expect(api.editMessage).toHaveBeenCalledWith(123, 11, renderErrorMessage("boom"));
+    expect(api.editMessage).toHaveBeenCalledWith(
+      123,
+      11,
+      "Error: An unexpected failure occurred. Reset the chat or retry the request.",
+    );
   });
 
   it("records categorized failures in audit metadata", async () => {
@@ -1476,7 +1480,11 @@ describe("polling helpers", () => {
     expect(api.editMessage).toHaveBeenNthCalledWith(2, 123, 11, "Working on your request...");
     expect(api.editMessage).toHaveBeenNthCalledWith(3, 123, 11, "a".repeat(4000));
     expect(api.sendMessage).toHaveBeenNthCalledWith(2, 123, "a".repeat(500));
-    expect(api.sendMessage).toHaveBeenNthCalledWith(3, 123, renderErrorMessage("send failed"));
+    expect(api.sendMessage).toHaveBeenNthCalledWith(
+      3,
+      123,
+      "Error: An unexpected failure occurred. Reset the chat or retry the request.",
+    );
   });
 
   it("passes quoted reply context to the bridge", async () => {

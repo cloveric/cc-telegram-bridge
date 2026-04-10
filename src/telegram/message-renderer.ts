@@ -55,6 +55,10 @@ export function renderCategorizedErrorMessage(category: FailureCategory, detail:
     return "Error: Session state is unavailable right now. Reset the chat and try again.";
   }
 
+  if (category === "unknown") {
+    return "Error: An unexpected failure occurred. Reset the chat or retry the request.";
+  }
+
   return renderErrorMessage(detail);
 }
 

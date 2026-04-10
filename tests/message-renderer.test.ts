@@ -84,7 +84,9 @@ describe("message rendering", () => {
     expect(renderCategorizedErrorMessage("session-state", "session store unavailable")).toBe(
       "Error: Session state is unavailable right now. Reset the chat and try again.",
     );
-    expect(renderCategorizedErrorMessage("unknown", "boom")).toBe("Error: boom");
+    expect(renderCategorizedErrorMessage("unknown", "boom")).toBe(
+      "Error: An unexpected failure occurred. Reset the chat or retry the request.",
+    );
   });
 });
 
