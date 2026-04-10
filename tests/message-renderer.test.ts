@@ -72,6 +72,18 @@ describe("message rendering", () => {
     expect(renderCategorizedErrorMessage("telegram-conflict", "409 conflict")).toBe(
       "Error: Another Telegram poller is using this bot token. Stop the duplicate service and retry.",
     );
+    expect(renderCategorizedErrorMessage("telegram-delivery", "sendMessage failed")).toBe(
+      "Error: Telegram delivery is temporarily unavailable. Retry the request or try again later.",
+    );
+    expect(renderCategorizedErrorMessage("engine-cli", "engine failed to start")).toBe(
+      "Error: The engine process failed to start. Restart the instance and retry.",
+    );
+    expect(renderCategorizedErrorMessage("file-workflow", "archive extraction failed")).toBe(
+      "Error: File handling failed while preparing your request. Retry with a smaller or different file.",
+    );
+    expect(renderCategorizedErrorMessage("session-state", "session store unavailable")).toBe(
+      "Error: Session state is unavailable right now. Reset the chat and try again.",
+    );
     expect(renderCategorizedErrorMessage("unknown", "boom")).toBe("Error: boom");
   });
 });

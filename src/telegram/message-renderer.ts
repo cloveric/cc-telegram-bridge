@@ -39,6 +39,22 @@ export function renderCategorizedErrorMessage(category: FailureCategory, detail:
     return "Error: Another Telegram poller is using this bot token. Stop the duplicate service and retry.";
   }
 
+  if (category === "telegram-delivery") {
+    return "Error: Telegram delivery is temporarily unavailable. Retry the request or try again later.";
+  }
+
+  if (category === "engine-cli") {
+    return "Error: The engine process failed to start. Restart the instance and retry.";
+  }
+
+  if (category === "file-workflow") {
+    return "Error: File handling failed while preparing your request. Retry with a smaller or different file.";
+  }
+
+  if (category === "session-state") {
+    return "Error: Session state is unavailable right now. Reset the chat and try again.";
+  }
+
   return renderErrorMessage(detail);
 }
 

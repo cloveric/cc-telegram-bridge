@@ -1107,7 +1107,7 @@ describe("polling helpers", () => {
     }
   });
 
-  it("resets the current chat session when /reset is sent", async () => {
+  it("resets only the current chat session when /reset is sent", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
     const inboxDir = path.join(root, "inbox");
     await writeFile(
@@ -1117,6 +1117,12 @@ describe("polling helpers", () => {
           {
             telegramChatId: 123,
             codexSessionId: "thread-old",
+            status: "idle",
+            updatedAt: "2026-04-10T00:00:00.000Z",
+          },
+          {
+            telegramChatId: 456,
+            codexSessionId: "thread-keep",
             status: "idle",
             updatedAt: "2026-04-10T00:00:00.000Z",
           },
@@ -1153,7 +1159,140 @@ describe("polling helpers", () => {
       );
 
       expect(api.editMessage).toHaveBeenLastCalledWith(123, 11, "Session reset for this chat.");
-      expect(JSON.parse(await readFile(path.join(root, "session.json"), "utf8"))).toEqual({ chats: [] });
+      expect(JSON.parse(await readFile(path.join(root, "session.json"), "utf8"))).toEqual({
+        chats: [
+          {
+            telegramChatId: 456,
+            codexSessionId: "thread-keep",
+            status: "idle",
+            updatedAt: "2026-04-10T00:00:00.000Z",
+          },
+        ],
+      });
+      expect(bridge.handleAuthorizedMessage).not.toHaveBeenCalled();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("does not reset session state when /reset is denied by access control", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
+    const inboxDir = path.join(root, "inbox");
+    await writeFile(
+      path.join(root, "session.json"),
+      JSON.stringify({
+        chats: [
+          {
+            telegramChatId: 123,
+            codexSessionId: "thread-old",
+            status: "idle",
+            updatedAt: "2026-04-10T00:00:00.000Z",
+          },
+        ],
+      }),
+      "utf8",
+    );
+    const api = {
+      sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      getFile: vi.fn(),
+      downloadFile: vi.fn(),
+    };
+    const bridge = {
+      checkAccess: vi.fn().mockResolvedValue({ kind: "deny", text: "This chat is not authorized for this instance." }),
+      handleAuthorizedMessage: vi.fn().mockResolvedValue({ text: "done" }),
+    };
+
+    try {
+      await handleNormalizedTelegramMessage(
+        {
+          chatId: 123,
+          userId: 456,
+          chatType: "private",
+          text: "/reset",
+          replyContext: undefined,
+          attachments: [],
+        },
+        {
+          api: api as never,
+          bridge: bridge as never,
+          inboxDir,
+        },
+      );
+
+      expect(api.editMessage).toHaveBeenLastCalledWith(123, 11, "This chat is not authorized for this instance.");
+      expect(JSON.parse(await readFile(path.join(root, "session.json"), "utf8"))).toEqual({
+        chats: [
+          {
+            telegramChatId: 123,
+            codexSessionId: "thread-old",
+            status: "idle",
+            updatedAt: "2026-04-10T00:00:00.000Z",
+          },
+        ],
+      });
+      expect(bridge.handleAuthorizedMessage).not.toHaveBeenCalled();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("does not reset session state when /reset is blocked by pairing access control", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
+    const inboxDir = path.join(root, "inbox");
+    await writeFile(
+      path.join(root, "session.json"),
+      JSON.stringify({
+        chats: [
+          {
+            telegramChatId: 123,
+            codexSessionId: "thread-old",
+            status: "idle",
+            updatedAt: "2026-04-10T00:00:00.000Z",
+          },
+        ],
+      }),
+      "utf8",
+    );
+    const api = {
+      sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      getFile: vi.fn(),
+      downloadFile: vi.fn(),
+    };
+    const bridge = {
+      checkAccess: vi.fn().mockResolvedValue({ kind: "reply", text: "Pair this private chat with code ABC123" }),
+      handleAuthorizedMessage: vi.fn().mockResolvedValue({ text: "done" }),
+    };
+
+    try {
+      await handleNormalizedTelegramMessage(
+        {
+          chatId: 123,
+          userId: 456,
+          chatType: "private",
+          text: "/reset",
+          replyContext: undefined,
+          attachments: [],
+        },
+        {
+          api: api as never,
+          bridge: bridge as never,
+          inboxDir,
+        },
+      );
+
+      expect(api.editMessage).toHaveBeenLastCalledWith(123, 11, "Pair this private chat with code ABC123");
+      expect(JSON.parse(await readFile(path.join(root, "session.json"), "utf8"))).toEqual({
+        chats: [
+          {
+            telegramChatId: 123,
+            codexSessionId: "thread-old",
+            status: "idle",
+            updatedAt: "2026-04-10T00:00:00.000Z",
+          },
+        ],
+      });
       expect(bridge.handleAuthorizedMessage).not.toHaveBeenCalled();
     } finally {
       await rm(root, { recursive: true, force: true });

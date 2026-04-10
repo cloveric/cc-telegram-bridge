@@ -178,27 +178,6 @@ export async function handleNormalizedTelegramMessage(
     placeholderMessageId = placeholder.message_id;
     await context.api.editMessage(normalized.chatId, placeholderMessageId, renderAccessCheckMessage());
 
-    if (isResetCommand(normalized.text)) {
-      const resetMessage = renderSessionResetMessage();
-      await sessionStore.removeByChatId(normalized.chatId);
-      await context.api.editMessage(normalized.chatId, placeholderMessageId, resetMessage);
-      await appendAuditEvent(path.dirname(context.inboxDir), {
-        type: "update.handle",
-        instanceName: context.instanceName,
-        chatId: normalized.chatId,
-        userId: normalized.userId,
-        updateId: context.updateId,
-        outcome: "success",
-        metadata: {
-          durationMs: Date.now() - startedAt,
-          attachments: normalized.attachments.length,
-          responseChars: resetMessage.length,
-          chunkCount: chunkTelegramMessage(resetMessage).length,
-        },
-      });
-      return;
-    }
-
     const accessDecision = await context.bridge.checkAccess({
       chatId: normalized.chatId,
       userId: normalized.userId,
@@ -222,6 +201,27 @@ export async function handleNormalizedTelegramMessage(
         metadata: {
           durationMs: Date.now() - startedAt,
           attachments: normalized.attachments.length,
+        },
+        });
+      return;
+    }
+
+    if (isResetCommand(normalized.text)) {
+      const resetMessage = renderSessionResetMessage();
+      await sessionStore.removeByChatId(normalized.chatId);
+      await context.api.editMessage(normalized.chatId, placeholderMessageId, resetMessage);
+      await appendAuditEvent(path.dirname(context.inboxDir), {
+        type: "update.handle",
+        instanceName: context.instanceName,
+        chatId: normalized.chatId,
+        userId: normalized.userId,
+        updateId: context.updateId,
+        outcome: "success",
+        metadata: {
+          durationMs: Date.now() - startedAt,
+          attachments: normalized.attachments.length,
+          responseChars: resetMessage.length,
+          chunkCount: chunkTelegramMessage(resetMessage).length,
         },
       });
       return;
