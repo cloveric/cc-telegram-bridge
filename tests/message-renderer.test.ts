@@ -13,6 +13,8 @@ import {
   renderCategorizedErrorMessage,
   renderErrorMessage,
   renderExecutionMessage,
+  renderTelegramHelpMessage,
+  renderTelegramStatusMessage,
   renderPairingMessage,
   renderPrivateChatRequiredMessage,
   renderSessionResetMessage,
@@ -87,6 +89,38 @@ describe("message rendering", () => {
     expect(renderCategorizedErrorMessage("unknown", "boom")).toBe(
       "Error: An unexpected failure occurred. Reset the chat or retry the request.",
     );
+  });
+
+  it("renders Telegram help text", () => {
+    expect(renderTelegramHelpMessage()).toContain("/status");
+    expect(renderTelegramHelpMessage()).toContain("/reset");
+    expect(renderTelegramHelpMessage()).toContain("/tasks");
+    expect(renderTelegramHelpMessage()).toContain("/continue");
+    expect(renderTelegramHelpMessage()).toContain("/help");
+  });
+
+  it("renders Telegram status text", () => {
+    expect(
+      renderTelegramStatusMessage({
+        engine: "codex",
+        sessionBound: true,
+        pendingTasks: 2,
+      }),
+    ).toContain("Engine: codex");
+    expect(
+      renderTelegramStatusMessage({
+        engine: "codex",
+        sessionBound: true,
+        pendingTasks: 2,
+      }),
+    ).toContain("Session bound: yes");
+    expect(
+      renderTelegramStatusMessage({
+        engine: "codex",
+        sessionBound: true,
+        pendingTasks: 2,
+      }),
+    ).toContain("Pending file tasks: 2");
   });
 });
 

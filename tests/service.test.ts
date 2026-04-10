@@ -1175,6 +1175,148 @@ describe("polling helpers", () => {
     }
   });
 
+  it("returns a concise status message for /status", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
+    const inboxDir = path.join(root, "inbox");
+    await writeFile(path.join(root, "config.json"), JSON.stringify({ engine: "codex" }) + "\n", "utf8");
+    await writeFile(
+      path.join(root, "session.json"),
+      JSON.stringify({
+        chats: [
+          {
+            telegramChatId: 123,
+            codexSessionId: "thread-bound",
+            status: "idle",
+            updatedAt: "2026-04-10T00:00:00.000Z",
+          },
+        ],
+      }),
+      "utf8",
+    );
+    await writeFile(
+      path.join(root, "file-workflow.json"),
+      JSON.stringify({
+        records: [
+          {
+            uploadId: "one",
+            chatId: 123,
+            userId: 456,
+            kind: "document",
+            status: "processing",
+            sourceFiles: ["a.txt"],
+            derivedFiles: [],
+            summary: "first",
+            createdAt: "2026-04-10T00:00:00.000Z",
+            updatedAt: "2026-04-10T00:00:00.000Z",
+          },
+          {
+            uploadId: "two",
+            chatId: 123,
+            userId: 456,
+            kind: "archive",
+            status: "awaiting_continue",
+            sourceFiles: ["b.zip"],
+            derivedFiles: [],
+            summary: "second",
+            createdAt: "2026-04-10T00:01:00.000Z",
+            updatedAt: "2026-04-10T00:01:00.000Z",
+          },
+          {
+            uploadId: "three",
+            chatId: 123,
+            userId: 456,
+            kind: "document",
+            status: "completed",
+            sourceFiles: ["c.txt"],
+            derivedFiles: [],
+            summary: "third",
+            createdAt: "2026-04-10T00:02:00.000Z",
+            updatedAt: "2026-04-10T00:02:00.000Z",
+          },
+        ],
+      }),
+      "utf8",
+    );
+    const api = {
+      sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      getFile: vi.fn(),
+      downloadFile: vi.fn(),
+    };
+    const bridge = {
+      checkAccess: vi.fn().mockResolvedValue({ kind: "allow" }),
+      handleAuthorizedMessage: vi.fn().mockResolvedValue({ text: "done" }),
+    };
+
+    try {
+      await handleNormalizedTelegramMessage(
+        {
+          chatId: 123,
+          userId: 456,
+          chatType: "private",
+          text: "/status",
+          replyContext: undefined,
+          attachments: [],
+        },
+        {
+          api: api as never,
+          bridge: bridge as never,
+          inboxDir,
+        },
+      );
+
+      expect(api.editMessage).toHaveBeenLastCalledWith(
+        123,
+        11,
+        expect.stringContaining("Engine: codex"),
+      );
+      expect(api.editMessage).toHaveBeenLastCalledWith(
+        123,
+        11,
+        expect.stringContaining("Pending file tasks:"),
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("returns help text for /help", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
+    const inboxDir = path.join(root, "inbox");
+    const api = {
+      sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      getFile: vi.fn(),
+      downloadFile: vi.fn(),
+    };
+    const bridge = {
+      checkAccess: vi.fn().mockResolvedValue({ kind: "allow" }),
+      handleAuthorizedMessage: vi.fn().mockResolvedValue({ text: "done" }),
+    };
+
+    try {
+      await handleNormalizedTelegramMessage(
+        {
+          chatId: 123,
+          userId: 456,
+          chatType: "private",
+          text: "/help",
+          replyContext: undefined,
+          attachments: [],
+        },
+        {
+          api: api as never,
+          bridge: bridge as never,
+          inboxDir,
+        },
+      );
+
+      expect(api.editMessage).toHaveBeenLastCalledWith(123, 11, expect.stringContaining("/continue"));
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("does not reset session state when /reset is denied by access control", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
     const inboxDir = path.join(root, "inbox");

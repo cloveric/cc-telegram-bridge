@@ -47,6 +47,8 @@ import {
   renderCategorizedErrorMessage,
   renderErrorMessage,
   renderExecutionMessage,
+  renderTelegramHelpMessage,
+  renderTelegramStatusMessage,
   renderUnauthorizedMessage,
   renderSessionResetMessage,
   renderWorkingMessage,
@@ -68,6 +70,14 @@ function wantsTelegramOut(text: string): boolean {
 
 function isResetCommand(text: string): boolean {
   return /^\/reset(?:@\w+)?(?:\s|$)/i.test(text.trim());
+}
+
+function isHelpCommand(text: string): boolean {
+  return /^\/help(?:@\w+)?(?:\s|$)/i.test(text.trim());
+}
+
+function isStatusCommand(text: string): boolean {
+  return /^\/status(?:@\w+)?(?:\s|$)/i.test(text.trim());
 }
 
 function inferExtension(attachment: NormalizedTelegramAttachment, telegramFilePath: string): string {
@@ -222,6 +232,54 @@ export async function handleNormalizedTelegramMessage(
           attachments: normalized.attachments.length,
           responseChars: resetMessage.length,
           chunkCount: chunkTelegramMessage(resetMessage).length,
+        },
+      });
+      return;
+    }
+
+    if (isHelpCommand(normalized.text)) {
+      const helpMessage = renderTelegramHelpMessage();
+      await context.api.editMessage(normalized.chatId, placeholderMessageId, helpMessage);
+      await appendAuditEvent(path.dirname(context.inboxDir), {
+        type: "update.handle",
+        instanceName: context.instanceName,
+        chatId: normalized.chatId,
+        userId: normalized.userId,
+        updateId: context.updateId,
+        outcome: "success",
+        metadata: {
+          durationMs: Date.now() - startedAt,
+          attachments: normalized.attachments.length,
+          responseChars: helpMessage.length,
+          chunkCount: chunkTelegramMessage(helpMessage).length,
+        },
+      });
+      return;
+    }
+
+    if (isStatusCommand(normalized.text)) {
+      const session = await sessionStore.findByChatId(normalized.chatId);
+      const pendingTasks = (await workflowStore.list({ chatId: normalized.chatId })).filter((record) =>
+        record.status === "processing" || record.status === "awaiting_continue",
+      ).length;
+      const statusMessage = renderTelegramStatusMessage({
+        engine: await loadEngine(stateDir),
+        sessionBound: session !== null,
+        pendingTasks,
+      });
+      await context.api.editMessage(normalized.chatId, placeholderMessageId, statusMessage);
+      await appendAuditEvent(path.dirname(context.inboxDir), {
+        type: "update.handle",
+        instanceName: context.instanceName,
+        chatId: normalized.chatId,
+        userId: normalized.userId,
+        updateId: context.updateId,
+        outcome: "success",
+        metadata: {
+          durationMs: Date.now() - startedAt,
+          attachments: normalized.attachments.length,
+          responseChars: statusMessage.length,
+          chunkCount: chunkTelegramMessage(statusMessage).length,
         },
       });
       return;

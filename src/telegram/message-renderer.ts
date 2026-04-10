@@ -26,6 +26,31 @@ export function renderSessionResetMessage(): string {
   return "Session reset for this chat.";
 }
 
+export function renderTelegramHelpMessage(): string {
+  return [
+    "Telegram commands:",
+    "/status - show engine, session, and file task state",
+    "/reset - clear the current chat session",
+    "/tasks - list pending file tasks",
+    "/continue - resume the latest file task",
+    "/help - show this help",
+  ].join("\n");
+}
+
+export function renderTelegramStatusMessage(input: {
+  engine: "codex" | "claude";
+  sessionBound: boolean;
+  pendingTasks: number;
+}): string {
+  const pendingTasks = Number.isFinite(input.pendingTasks) ? Math.max(0, Math.trunc(input.pendingTasks)) : 0;
+
+  return [
+    `Engine: ${input.engine}`,
+    `Session bound: ${input.sessionBound ? "yes" : "no"}`,
+    `Pending file tasks: ${pendingTasks}`,
+  ].join("\n");
+}
+
 export function renderCategorizedErrorMessage(category: FailureCategory, detail: string): string {
   if (category === "write-permission") {
     return "Error: File creation is blocked by the current write policy. Reset the chat or retry in a writable mode.";
