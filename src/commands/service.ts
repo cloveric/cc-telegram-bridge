@@ -7,7 +7,14 @@ import { resolveInstanceStateDir, type EnvSource } from "../config.js";
 import { normalizeInstanceName } from "../instance.js";
 import { resolveInstanceLockPath, type InstanceLockRecord } from "../state/instance-lock.js";
 import { AccessStore } from "../state/access-store.js";
-import { parseAuditEvents, resolveAuditLogPath, summarizeAuditEvents, type AuditSummary } from "../state/audit-log.js";
+import {
+  getLatestFailure,
+  parseAuditEvents,
+  resolveAuditLogPath,
+  summarizeAuditEvents,
+  type AuditSummary,
+} from "../state/audit-log.js";
+import { FileWorkflowStore } from "../state/file-workflow-store.js";
 import { TelegramApi } from "../telegram/api.js";
 import {
   getLastHandledUpdateId,
@@ -69,6 +76,8 @@ export interface ServiceStatus {
   lastSuccessAt?: string;
   lastFailureAt?: string;
   auditEvents: number;
+  latestFailureCategory?: string;
+  unresolvedTasks: number;
 }
 
 export interface ServiceDoctorResult {
@@ -452,9 +461,12 @@ export async function getServiceStatus(
 
   const lastErrorLine = await readLastNonEmptyLine(paths.stderrPath);
   let auditSummary: AuditSummary = { totalEvents: 0 };
+  let latestFailureCategory: string | undefined;
   try {
     const rawAudit = await readFile(resolveAuditLogPath(paths.stateDir), "utf8");
-    auditSummary = summarizeAuditEvents(parseAuditEvents(rawAudit));
+    const auditEvents = parseAuditEvents(rawAudit);
+    auditSummary = summarizeAuditEvents(auditEvents);
+    latestFailureCategory = getLatestFailure(auditEvents)?.category;
   } catch (error) {
     if (
       typeof error !== "object" ||
@@ -465,6 +477,8 @@ export async function getServiceStatus(
       throw error;
     }
   }
+  const workflowStore = new FileWorkflowStore(paths.stateDir);
+  const unresolvedTasks = (await workflowStore.list()).filter((record) => record.status !== "completed").length;
 
   return {
     instanceName: paths.instanceName,
@@ -489,6 +503,8 @@ export async function getServiceStatus(
     lastSuccessAt: auditSummary.lastSuccessAt,
     lastFailureAt: auditSummary.lastErrorAt,
     auditEvents: auditSummary.totalEvents,
+    latestFailureCategory,
+    unresolvedTasks,
   };
 }
 
@@ -534,7 +550,12 @@ export async function runServiceDoctor(
   checks.push({
     name: "audit",
     ok: true,
-    detail: `Audit events: ${status.auditEvents}. Last success: ${status.lastSuccessAt ?? "none"}. Last failure: ${status.lastFailureAt ?? "none"}.`,
+    detail: `Audit events: ${status.auditEvents}. Last success: ${status.lastSuccessAt ?? "none"}. Last failure: ${status.lastFailureAt ?? "none"}. latest failure category: ${status.latestFailureCategory ?? "none"}.`,
+  });
+  checks.push({
+    name: "tasks",
+    ok: true,
+    detail: `unresolved tasks: ${status.unresolvedTasks}.`,
   });
   checks.push({
     name: "stderr",

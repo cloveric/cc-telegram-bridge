@@ -299,6 +299,94 @@ describe("telegram service commands", () => {
     }
   });
 
+  it("reports latest failure category and unresolved tasks in doctor output", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
+    const messages: string[] = [];
+    const stateDir = path.join(tempDir, ".codex", "channels", "telegram", "alpha");
+    const lockPath = resolveInstanceLockPath(stateDir);
+
+    try {
+      await mkdir(stateDir, { recursive: true });
+      await writeFile(
+        lockPath,
+        JSON.stringify({
+          pid: 12345,
+          token: "token",
+          acquiredAt: new Date().toISOString(),
+        }),
+        "utf8",
+      );
+      await writeFile(
+        path.join(stateDir, "audit.log.jsonl"),
+        [
+          '{"timestamp":"2026-04-08T10:00:00.000Z","type":"update.handle","outcome":"success"}',
+          '{"timestamp":"2026-04-08T10:01:00.000Z","type":"update.handle","outcome":"error","metadata":{"failureCategory":"write-permission"}}',
+        ].join("\n") + "\n",
+        "utf8",
+      );
+      await writeFile(
+        path.join(stateDir, "file-workflow.json"),
+        JSON.stringify({
+          records: [
+            {
+              uploadId: "one",
+              chatId: 100,
+              userId: 100,
+              kind: "document",
+              status: "processing",
+              sourceFiles: ["a.txt"],
+              derivedFiles: [],
+              summary: "first",
+              createdAt: "2026-04-08T09:00:00.000Z",
+              updatedAt: "2026-04-08T09:00:00.000Z",
+            },
+            {
+              uploadId: "two",
+              chatId: 100,
+              userId: 100,
+              kind: "document",
+              status: "awaiting_continue",
+              sourceFiles: ["b.txt"],
+              derivedFiles: [],
+              summary: "second",
+              createdAt: "2026-04-08T09:01:00.000Z",
+              updatedAt: "2026-04-08T09:01:00.000Z",
+            },
+            {
+              uploadId: "three",
+              chatId: 100,
+              userId: 100,
+              kind: "document",
+              status: "completed",
+              sourceFiles: ["c.txt"],
+              derivedFiles: [],
+              summary: "third",
+              createdAt: "2026-04-08T09:02:00.000Z",
+              updatedAt: "2026-04-08T09:02:00.000Z",
+            },
+          ],
+        }),
+        "utf8",
+      );
+
+      const handled = await runCli(["telegram", "service", "doctor", "--instance", "alpha"], {
+        env: { USERPROFILE: tempDir },
+        logger: { log: (message) => messages.push(message) },
+        serviceDeps: {
+          cwd: REPO_ROOT,
+          isProcessAlive: (pid) => pid === 12345,
+          isExpectedServiceProcess: (pid) => pid === 12345,
+        },
+      });
+
+      expect(handled).toBe(true);
+      expect(messages[0]).toContain("latest failure category: write-permission");
+      expect(messages[0]).toContain("unresolved tasks: 2");
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
   it("stops a running instance through the CLI", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
     const messages: string[] = [];

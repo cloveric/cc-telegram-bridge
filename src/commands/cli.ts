@@ -482,10 +482,12 @@ function formatServiceStatus(status: Awaited<ReturnType<typeof getServiceStatus>
 }
 
 function formatServiceDoctor(result: Awaited<ReturnType<typeof runServiceDoctor>>): string {
+  const checkLines = result.checks.map((check) => `- ${check.ok ? "ok" : "fail"} ${check.name}: ${check.detail}`);
+
   return [
     `Instance: ${result.instanceName}`,
     `Healthy: ${result.healthy ? "yes" : "no"}`,
-    ...result.checks.map((check) => `- ${check.ok ? "ok" : "fail"} ${check.name}: ${check.detail}`),
+    ...checkLines,
   ].join("\n");
 }
 
