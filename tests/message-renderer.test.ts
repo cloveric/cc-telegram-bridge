@@ -92,11 +92,14 @@ describe("message rendering", () => {
   });
 
   it("renders Telegram help text", () => {
-    expect(renderTelegramHelpMessage()).toContain("/status");
-    expect(renderTelegramHelpMessage()).toContain("/reset");
-    expect(renderTelegramHelpMessage()).toContain("/tasks");
-    expect(renderTelegramHelpMessage()).toContain("/continue");
-    expect(renderTelegramHelpMessage()).toContain("/help");
+    expect(renderTelegramHelpMessage()).toBe(
+      [
+        "Telegram commands:",
+        "/status - show engine, session, and file task state",
+        "/reset - clear the current chat session",
+        "/help - show this help",
+      ].join("\n"),
+    );
   });
 
   it("renders Telegram status text", () => {

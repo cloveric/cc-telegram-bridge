@@ -31,8 +31,6 @@ export function renderTelegramHelpMessage(): string {
     "Telegram commands:",
     "/status - show engine, session, and file task state",
     "/reset - clear the current chat session",
-    "/tasks - list pending file tasks",
-    "/continue - resume the latest file task",
     "/help - show this help",
   ].join("\n");
 }

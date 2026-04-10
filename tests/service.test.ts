@@ -1268,13 +1268,13 @@ describe("polling helpers", () => {
       expect(api.editMessage).toHaveBeenLastCalledWith(
         123,
         11,
-        expect.stringContaining("Engine: codex"),
+        [
+          "Engine: codex",
+          "Session bound: yes",
+          "Pending file tasks: 2",
+        ].join("\n"),
       );
-      expect(api.editMessage).toHaveBeenLastCalledWith(
-        123,
-        11,
-        expect.stringContaining("Pending file tasks:"),
-      );
+      expect(bridge.handleAuthorizedMessage).not.toHaveBeenCalled();
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -1311,7 +1311,19 @@ describe("polling helpers", () => {
         },
       );
 
-      expect(api.editMessage).toHaveBeenLastCalledWith(123, 11, expect.stringContaining("/continue"));
+      expect(api.editMessage).toHaveBeenLastCalledWith(
+        123,
+        11,
+        [
+          "Telegram commands:",
+          "/status - show engine, session, and file task state",
+          "/reset - clear the current chat session",
+          "/help - show this help",
+        ].join("\n"),
+      );
+      expect(api.editMessage).not.toHaveBeenCalledWith(123, 11, expect.stringContaining("/tasks"));
+      expect(api.editMessage).not.toHaveBeenCalledWith(123, 11, expect.stringContaining("/continue"));
+      expect(bridge.handleAuthorizedMessage).not.toHaveBeenCalled();
     } finally {
       await rm(root, { recursive: true, force: true });
     }
