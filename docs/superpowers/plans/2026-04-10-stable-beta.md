@@ -628,7 +628,7 @@ it("returns help text for /help", async () => {
   expect(api.editMessage).toHaveBeenLastCalledWith(
     123,
     11,
-    expect.stringContaining("/continue"),
+    expect.stringContaining("/help"),
   );
 });
 ```
@@ -648,8 +648,6 @@ export function renderTelegramHelpMessage(): string {
     "Commands:",
     "/status - show engine and task state",
     "/reset - clear this chat session",
-    "/tasks - show recent file workflows",
-    "/continue - continue the latest archive analysis",
     "/help - show this message",
   ].join("\n");
 }
@@ -722,7 +720,7 @@ it("shows a continue-analysis shortcut button after archive summary", async () =
   expect(api.editMessage).toHaveBeenCalledWith(
     123,
     11,
-    expect.stringContaining('Reply "/continue"'),
+    expect.stringContaining("Continue Analysis"),
     expect.objectContaining({
       inlineKeyboard: [[{ text: "Continue Analysis", callbackData: "continue-latest-archive" }]],
     }),
@@ -841,8 +839,6 @@ Telegram users can also use:
 
 - `/status`
 - `/reset`
-- `/tasks`
-- `/continue`
 - `/help`
 ```
 

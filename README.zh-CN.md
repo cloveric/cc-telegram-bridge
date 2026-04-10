@@ -337,6 +337,20 @@ Telegram 消息 → 标准化 → 访问检查 → 聊天队列（串行）
 
 所有命令支持 `--instance <name>` 指定目标 bot。
 
+## 稳定 Beta 命令
+
+- `telegram service doctor --instance <name>`
+- `telegram session inspect --instance <name> <chat-id>`
+- `telegram session reset --instance <name> <chat-id>`
+- `telegram task list --instance <name>`
+- `telegram task clear --instance <name> <upload-id>`
+
+Telegram 用户也可以使用：
+
+- `/status`
+- `/reset`
+- `/help`
+
 ### Shell 辅助脚本
 
 **Windows (PowerShell):**
@@ -374,8 +388,8 @@ npm run dev -- telegram status [--instance work]
 ## 会话检视
 
 ```bash
-npm run dev -- telegram session list [--instance work]
-npm run dev -- telegram session show [--instance work] <chat-id>
+npm run dev -- telegram session inspect [--instance work] <chat-id>
+npm run dev -- telegram session reset [--instance work] <chat-id>
 ```
 
 ---
