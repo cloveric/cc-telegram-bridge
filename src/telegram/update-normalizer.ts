@@ -9,6 +9,7 @@ export interface NormalizedTelegramMessage {
   userId: number;
   chatType: string;
   text: string;
+  callbackQueryId?: string;
   replyContext?: {
     messageId: number;
     text: string;
@@ -77,6 +78,28 @@ function normalizePhotoAttachment(message: any): NormalizedTelegramAttachment[] 
 }
 
 export function normalizeUpdate(update: any): NormalizedTelegramMessage | null {
+  const callbackQuery = update?.callback_query;
+  if (typeof callbackQuery?.data === "string" && callbackQuery.data === "continue-latest-archive") {
+    const message = callbackQuery.message;
+    const chatId = message?.chat?.id;
+    const userId = callbackQuery?.from?.id;
+    const chatType = message?.chat?.type;
+
+    if (typeof chatId !== "number" || typeof userId !== "number" || typeof chatType !== "string") {
+      return null;
+    }
+
+    return {
+      chatId,
+      userId,
+      chatType,
+      text: "/continue",
+      callbackQueryId: typeof callbackQuery.id === "string" ? callbackQuery.id : undefined,
+      replyContext: normalizeReplyContext(message),
+      attachments: [],
+    };
+  }
+
   const message = update?.message;
   const chatId = message?.chat?.id;
   const userId = message?.from?.id;

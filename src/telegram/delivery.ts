@@ -110,6 +110,12 @@ function buildInboxFileName(attachment: NormalizedTelegramAttachment, telegramFi
   return `${attachment.fileId}${extension}`;
 }
 
+function buildContinueAnalysisKeyboard() {
+  return {
+    inlineKeyboard: [[{ text: "Continue Analysis", callbackData: "continue-latest-archive" }]],
+  };
+}
+
 async function ensureInboxDirExists(inboxDir: string): Promise<void> {
   await mkdir(inboxDir, { recursive: true });
 }
@@ -187,6 +193,9 @@ export async function handleNormalizedTelegramMessage(
     const placeholder = await context.api.sendMessage(normalized.chatId, renderWorkingMessage());
     placeholderMessageId = placeholder.message_id;
     await context.api.editMessage(normalized.chatId, placeholderMessageId, renderAccessCheckMessage());
+    if (normalized.callbackQueryId) {
+      await context.api.answerCallbackQuery(normalized.callbackQueryId);
+    }
 
     const accessDecision = await context.bridge.checkAccess({
       chatId: normalized.chatId,
@@ -316,7 +325,12 @@ export async function handleNormalizedTelegramMessage(
     }
 
     if (workflowResult?.kind === "reply") {
-      await context.api.editMessage(normalized.chatId, placeholderMessageId, workflowResult.text);
+      await context.api.editMessage(
+        normalized.chatId,
+        placeholderMessageId,
+        workflowResult.text,
+        downloadedAttachments.length > 0 ? buildContinueAnalysisKeyboard() : undefined,
+      );
       await appendAuditEvent(stateDir, {
         type: "update.handle",
         instanceName: context.instanceName,

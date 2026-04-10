@@ -15,6 +15,7 @@ import {
 } from "../src/service.js";
 import { ChatQueue } from "../src/runtime/chat-queue.js";
 import { handleNormalizedTelegramMessage } from "../src/telegram/delivery.js";
+import { normalizeUpdate } from "../src/telegram/update-normalizer.js";
 import { renderErrorMessage, renderWorkingMessage } from "../src/telegram/message-renderer.js";
 import { CodexAppServerAdapter } from "../src/codex/app-server-adapter.js";
 import { ProcessCodexAdapter } from "../src/codex/process-adapter.js";
@@ -832,6 +833,9 @@ describe("polling helpers", () => {
         123,
         11,
         expect.stringContaining("Reply \"继续分析\" to continue with this archive."),
+        expect.objectContaining({
+          inlineKeyboard: [[{ text: "Continue Analysis", callbackData: "continue-latest-archive" }]],
+        }),
       );
 
       const workflowState = JSON.parse(await readFile(path.join(root, "file-workflow.json"), "utf8")) as {
@@ -841,6 +845,56 @@ describe("polling helpers", () => {
       expect(workflowState.records[0]?.kind).toBe("archive");
       expect(workflowState.records[0]?.status).toBe("awaiting_continue");
       expect(workflowState.records[0]?.summary).toContain("README.md");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("shows a continue-analysis shortcut button after archive summary", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
+    const inboxDir = path.join(root, "inbox");
+    const zipBuffer = createZipBuffer({
+      "README.md": "# hello",
+      "src/index.ts": "console.log('hi')",
+    });
+    const api = {
+      sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      getFile: vi.fn().mockResolvedValue({ file_path: "uploads/repo.zip" }),
+      downloadFile: vi.fn().mockImplementation(async (_filePath: string, destinationPath: string) => {
+        await writeFile(destinationPath, zipBuffer);
+      }),
+    };
+    const bridge = {
+      checkAccess: vi.fn().mockResolvedValue({ kind: "allow" }),
+      handleAuthorizedMessage: vi.fn(),
+    };
+
+    try {
+      await handleNormalizedTelegramMessage(
+        {
+          chatId: 123,
+          userId: 456,
+          chatType: "private",
+          text: "",
+          replyContext: undefined,
+          attachments: [{ fileId: "zip-1", fileName: "repo.zip", kind: "document" }],
+        },
+        {
+          api: api as never,
+          bridge: bridge as never,
+          inboxDir,
+        },
+      );
+
+      expect(api.editMessage).toHaveBeenCalledWith(
+        123,
+        11,
+        expect.stringContaining('Reply "继续分析"'),
+        expect.objectContaining({
+          inlineKeyboard: [[{ text: "Continue Analysis", callbackData: "continue-latest-archive" }]],
+        }),
+      );
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -921,6 +975,20 @@ describe("polling helpers", () => {
     } finally {
       await rm(root, { recursive: true, force: true });
     }
+  });
+
+  it("maps continue-latest-archive callback queries to the /continue flow", async () => {
+    const normalized = normalizeUpdate({
+      update_id: 99,
+      callback_query: {
+        id: "cb-1",
+        from: { id: 456 },
+        message: { message_id: 11, chat: { id: 123, type: "private" }, text: "Archive summary" },
+        data: "continue-latest-archive",
+      },
+    });
+
+    expect(normalized).toEqual(expect.objectContaining({ text: "/continue" }));
   });
 
   it("injects extracted text for supported document uploads", async () => {

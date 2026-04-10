@@ -58,6 +58,11 @@ export interface TelegramMessage {
   text?: string;
 }
 
+export interface InlineKeyboardButton {
+  text: string;
+  callbackData: string;
+}
+
 export interface TelegramFile {
   file_id?: string;
   file_path: string;
@@ -84,6 +89,10 @@ function isTelegramBotIdentity(value: unknown): value is TelegramBotIdentity {
     typeof value.first_name === "string" &&
     (!("username" in value) || typeof value.username === "string")
   );
+}
+
+interface TelegramMessageOptions {
+  inlineKeyboard?: InlineKeyboardButton[][];
 }
 
 function isTelegramUpdateArray(value: unknown): value is unknown[] {
@@ -168,10 +177,22 @@ export class TelegramApi {
     return payload.result;
   }
 
-  async sendMessage(chatId: number, text: string): Promise<TelegramMessage> {
+  async sendMessage(chatId: number, text: string, options?: TelegramMessageOptions): Promise<TelegramMessage> {
     return this.postJson("sendMessage", {
       chat_id: chatId,
       text,
+      ...(options?.inlineKeyboard
+        ? {
+            reply_markup: {
+              inline_keyboard: options.inlineKeyboard.map((row) =>
+                row.map((button) => ({
+                  text: button.text,
+                  callback_data: button.callbackData,
+                })),
+              ),
+            },
+          }
+        : {}),
     }, isTelegramMessage);
   }
 
@@ -214,12 +235,35 @@ export class TelegramApi {
     return json.result;
   }
 
-  async editMessage(chatId: number, messageId: number, text: string): Promise<TelegramMessage> {
+  async editMessage(
+    chatId: number,
+    messageId: number,
+    text: string,
+    options?: TelegramMessageOptions,
+  ): Promise<TelegramMessage> {
     return this.postJson("editMessageText", {
       chat_id: chatId,
       message_id: messageId,
       text,
+      ...(options?.inlineKeyboard
+        ? {
+            reply_markup: {
+              inline_keyboard: options.inlineKeyboard.map((row) =>
+                row.map((button) => ({
+                  text: button.text,
+                  callback_data: button.callbackData,
+                })),
+              ),
+            },
+          }
+        : {}),
     }, isTelegramMessage);
+  }
+
+  async answerCallbackQuery(callbackQueryId: string): Promise<void> {
+    await this.postJson("answerCallbackQuery", {
+      callback_query_id: callbackQueryId,
+    });
   }
 
   async getFile(fileId: string): Promise<TelegramFile> {
