@@ -813,9 +813,11 @@ Commands:
   access <pair|policy|allow|revoke> [--instance <name>]
                                               Manage access control
   status [--instance <name>]                  Show access policy and paired users
-  session <list|show|inspect|reset> [--instance <name>]
-                                              Inspect or reset chat-to-thread bindings
-  task <list|clear> [--instance <name>]       Inspect or clear file workflow records
+  session inspect <chat-id> [--instance <name>]
+  session reset <chat-id> [--instance <name>]
+  session <list|show> [--instance <name>]     Inspect chat-to-thread bindings
+  task list [--instance <name>]               Inspect file workflow records
+  task clear <upload-id> [--instance <name>]  Clear a file workflow record
   audit [count] [--instance <name>] [--type <type>] [--chat <id>] [--outcome <outcome>]
                                               View audit trail
   instructions <show|set|path> [--instance <name>]

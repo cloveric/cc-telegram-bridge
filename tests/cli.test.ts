@@ -267,7 +267,10 @@ describe("runCli", () => {
     try {
       const stateDir = path.join(tempDir, ".codex", "channels", "telegram", "alpha");
       const workflowPath = path.join(stateDir, "file-workflow.json");
+      const uploadWorkspaceDir = path.join(stateDir, "workspace", ".telegram-files", "upload-123");
       await mkdir(stateDir, { recursive: true });
+      await mkdir(uploadWorkspaceDir, { recursive: true });
+      await writeFile(path.join(uploadWorkspaceDir, "artifact.txt"), "payload", "utf8");
       await writeFile(
         workflowPath,
         JSON.stringify({
@@ -296,6 +299,28 @@ describe("runCli", () => {
 
       expect(handled).toBe(true);
       expect(messages[0]).toContain('Cleared task "upload-123"');
+      const workflowState = JSON.parse(await readFile(workflowPath, "utf8")) as { records: unknown[] };
+      expect(workflowState.records).toEqual([]);
+      await expect(readFile(path.join(uploadWorkspaceDir, "artifact.txt"), "utf8")).rejects.toMatchObject({
+        code: "ENOENT",
+      });
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("reports when a file workflow upload is missing", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
+    const messages: string[] = [];
+
+    try {
+      const handled = await runCli(["telegram", "task", "clear", "--instance", "alpha", "missing-upload"], {
+        env: { USERPROFILE: tempDir },
+        logger: { log: (message) => messages.push(message) },
+      });
+
+      expect(handled).toBe(true);
+      expect(messages[0]).toContain('No task found for "missing-upload"');
     } finally {
       await rm(tempDir, { recursive: true, force: true });
     }
