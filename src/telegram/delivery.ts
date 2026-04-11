@@ -300,26 +300,18 @@ export async function handleNormalizedTelegramMessage(
     }
 
     if (isResetCommand(normalized.text)) {
-      let resetResult: Awaited<ReturnType<SessionStore["removeByChatIdRecovering"]>>;
-      try {
-        resetResult = await sessionStore.removeByChatIdRecovering(normalized.chatId);
-      } catch (error) {
-        if (
-          typeof error === "object" &&
-          error !== null &&
-          "code" in error &&
-          (((error as NodeJS.ErrnoException).code === "EACCES") || (error as NodeJS.ErrnoException).code === "EPERM")
-        ) {
-          throw new SessionStateError(
-            "Session state is unavailable right now. The operator needs to restore read access and retry.",
-            false,
-          );
-        }
-
-        throw error;
+      const inspectedState = await sessionStore.inspect();
+      if (inspectedState.warning) {
+        throw new SessionStateError(
+          inspectedState.repairable
+            ? "Session state is unreadable right now. The operator needs to repair session state and retry."
+            : "Session state is unavailable right now. The operator needs to restore read access and retry.",
+          inspectedState.repairable ?? false,
+        );
       }
 
-      const resetMessage = renderSessionResetMessage(resetResult.repaired);
+      await sessionStore.removeByChatId(normalized.chatId);
+      const resetMessage = renderSessionResetMessage(false);
       await context.api.editMessage(normalized.chatId, placeholderMessageId, resetMessage);
       placeholderShowsResponse = true;
       await appendAuditEventBestEffort(path.dirname(context.inboxDir), {
@@ -501,12 +493,18 @@ export async function handleNormalizedTelegramMessage(
         .catch(() => {});
     };
 
+    const replyContext =
+      workflowResult?.kind === "direct" &&
+      (workflowResult.suppressReplyContext || workflowResult.text.includes("[Archive Analysis Context]"))
+        ? undefined
+        : normalized.replyContext;
+
     const result = await context.bridge.handleAuthorizedMessage({
       chatId: normalized.chatId,
       userId: normalized.userId,
       chatType: normalized.chatType,
       text: requestText,
-      replyContext: normalized.replyContext,
+      replyContext,
       files: requestFiles,
       onProgress,
       requestOutputDir: telegramOutDirPath,

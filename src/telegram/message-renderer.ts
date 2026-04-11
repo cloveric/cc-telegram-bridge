@@ -24,13 +24,13 @@ export function renderErrorMessage(error: string): string {
 
 export function renderSessionResetMessage(repaired = false): string {
   return repaired
-    ? "Session reset. Previous session state was unreadable, so the instance-wide session bindings were cleared and reset."
+    ? "Session state was unreadable. An operator needs to repair the instance session state before this chat can be reset."
     : "Session reset for this chat.";
 }
 
 export function renderSessionStateErrorMessage(repairable: boolean): string {
   return repairable
-    ? "Error: Session state is unavailable right now. Reset the chat and try again."
+    ? "Error: Session state is unreadable right now. The operator needs to repair session state and retry."
     : "Error: Session state is unavailable right now. The operator needs to restore read access and retry.";
 }
 
@@ -103,7 +103,7 @@ export function renderCategorizedErrorMessage(category: FailureCategory, detail:
   }
 
   if (category === "session-state") {
-    return "Error: Session state is unavailable right now. Reset the chat and try again.";
+    return "Error: Session state is unavailable right now. The operator needs to repair session state and retry.";
   }
 
   if (category === "unknown") {

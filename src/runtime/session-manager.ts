@@ -12,7 +12,7 @@ export class SessionStateError extends Error {
 }
 
 const REPAIRABLE_SESSION_STATE_ERROR =
-  "Session state is unreadable right now. Reset the chat and try again.";
+  "Session state is unreadable right now. The operator needs to repair session state and retry.";
 const NON_REPAIRABLE_SESSION_STATE_ERROR =
   "Session state is unavailable right now. The operator needs to restore read access and retry.";
 

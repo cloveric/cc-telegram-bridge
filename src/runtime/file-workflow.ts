@@ -22,6 +22,7 @@ export interface FileWorkflowDirectResult {
   files: string[];
   workflowRecordId?: string;
   failureHint?: string;
+  suppressReplyContext?: boolean;
 }
 
 export interface FileWorkflowReplyResult {
@@ -493,5 +494,6 @@ export async function prepareArchiveContinueWorkflow(input: {
     files: [],
     workflowRecordId: archiveRecord.uploadId,
     failureHint: explicitTarget ? TARGETED_ARCHIVE_RETRY_HINT : undefined,
+    suppressReplyContext: input.replyContext?.messageId !== undefined,
   };
 }

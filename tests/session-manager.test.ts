@@ -67,7 +67,7 @@ describe("SessionManager", () => {
       await expect(sessionPromise).rejects.toMatchObject({
         name: "SessionStateError",
         repairable: true,
-        message: "Session state is unreadable right now. Reset the chat and try again.",
+        message: "Session state is unreadable right now. The operator needs to repair session state and retry.",
       });
       await expect(sessionPromise).rejects.toBeInstanceOf(SessionStateError);
     } finally {
