@@ -27,6 +27,7 @@ import { ProcessCodexAdapter } from "../src/codex/process-adapter.js";
 import { ClaudeStreamAdapter } from "../src/codex/claude-stream-adapter.js";
 import { parseAuditEvents } from "../src/state/audit-log.js";
 import * as auditLog from "../src/state/audit-log.js";
+import { FileWorkflowStore } from "../src/state/file-workflow-store.js";
 
 function createDeferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
@@ -627,6 +628,36 @@ describe("polling helpers", () => {
     }
   });
 
+  it("keeps generic poll failures best-effort when audit writing fails", async () => {
+    const logger = {
+      error: vi.fn(),
+    };
+    const appendSpy = vi.spyOn(auditLog, "appendAuditEvent").mockRejectedValue(new Error("audit write failed"));
+    const api = {
+      getUpdates: vi.fn().mockRejectedValue(new Error("temporary Telegram API failure")),
+    };
+    const bridge = {
+      checkAccess: vi.fn().mockResolvedValue({ kind: "allow" }),
+      handleAuthorizedMessage: vi.fn(),
+    };
+
+    try {
+      await expect(
+        pollTelegramUpdatesOnce(api as never, bridge as never, path.join(os.tmpdir(), "ignored"), logger, 7),
+      ).resolves.toEqual({
+        offset: 7,
+        hadFetchError: true,
+        hadUpdates: false,
+        conflict: false,
+      });
+
+      expect(logger.error).toHaveBeenCalledWith("Failed to fetch Telegram updates: temporary Telegram API failure");
+      expect(bridge.handleAuthorizedMessage).not.toHaveBeenCalled();
+    } finally {
+      appendSpy.mockRestore();
+    }
+  });
+
   it("treats aborted polling as a clean shutdown instead of a fetch failure", async () => {
     const logger = {
       error: vi.fn(),
@@ -686,6 +717,38 @@ describe("polling helpers", () => {
       ]);
     } finally {
       await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps poll conflicts best-effort when audit writing fails", async () => {
+    const logger = {
+      error: vi.fn(),
+    };
+    const appendSpy = vi.spyOn(auditLog, "appendAuditEvent").mockRejectedValue(new Error("audit write failed"));
+    const api = {
+      getUpdates: vi.fn().mockRejectedValue(new Error("409 Conflict: terminated by other getUpdates request")),
+    };
+    const bridge = {
+      checkAccess: vi.fn().mockResolvedValue({ kind: "allow" }),
+      handleAuthorizedMessage: vi.fn(),
+    };
+
+    try {
+      await expect(
+        pollTelegramUpdatesOnce(api as never, bridge as never, path.join(os.tmpdir(), "ignored"), logger, 7),
+      ).resolves.toEqual({
+        offset: 7,
+        hadFetchError: true,
+        hadUpdates: false,
+        conflict: true,
+      });
+
+      expect(logger.error).toHaveBeenCalledWith(
+        "409 Conflict: another process is polling this bot token. Shutting down to avoid duplicate replies.",
+      );
+      expect(bridge.handleAuthorizedMessage).not.toHaveBeenCalled();
+    } finally {
+      appendSpy.mockRestore();
     }
   });
 
@@ -2170,6 +2233,61 @@ describe("polling helpers", () => {
         "Error: Telegram delivery is temporarily unavailable. Retry the request or try again later.",
       );
     } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("repairs archive workflow state when summary preparation fails before returning its workflow id", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
+    const inboxDir = path.join(root, "inbox");
+    const invalidZipBuffer = Buffer.from("not a zip archive", "utf8");
+    const updateSpy = vi.spyOn(FileWorkflowStore.prototype, "update");
+    updateSpy.mockRejectedValueOnce(new Error("workflow state write failed"));
+    const api = {
+      sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      getFile: vi.fn().mockResolvedValue({ file_path: "documents/repo.zip" }),
+      downloadFile: vi.fn().mockImplementation(async (_filePath: string, destinationPath: string) => {
+        await mkdir(path.dirname(destinationPath), { recursive: true });
+        await writeFile(destinationPath, invalidZipBuffer);
+      }),
+    };
+    const bridge = {
+      checkAccess: vi.fn().mockResolvedValue({ kind: "allow" }),
+      handleAuthorizedMessage: vi.fn(),
+    };
+
+    try {
+      await expect(
+        handleNormalizedTelegramMessage(
+          {
+            chatId: 123,
+            userId: 456,
+            chatType: "private",
+            text: "",
+            replyContext: undefined,
+            attachments: [{ fileId: "zip-1", fileName: "repo.zip", kind: "document" }],
+          },
+          {
+            api: api as never,
+            bridge: bridge as never,
+            inboxDir,
+          },
+        ),
+      ).rejects.toThrow();
+
+      const workflowState = JSON.parse(await readFile(path.join(root, "file-workflow.json"), "utf8")) as {
+        records: Array<{ status: string; summary: string }>;
+      };
+      expect(workflowState.records[0]?.status).toBe("failed");
+      expect(workflowState.records[0]?.summary).toContain("Preparing archive summary");
+      expect(api.editMessage).toHaveBeenLastCalledWith(
+        123,
+        11,
+        renderCategorizedErrorMessage("file-workflow", "ignored"),
+      );
+    } finally {
+      updateSpy.mockRestore();
       await rm(root, { recursive: true, force: true });
     }
   });

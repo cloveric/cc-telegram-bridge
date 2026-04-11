@@ -3,6 +3,7 @@ import path from "node:path";
 
 import { Bridge } from "../runtime/bridge.js";
 import {
+  FileWorkflowPreparationError,
   boundArchiveSummaryForTelegram,
   prepareArchiveContinueWorkflow,
   prepareAttachmentWorkflow,
@@ -479,8 +480,13 @@ export async function handleNormalizedTelegramMessage(
       },
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    const failureCategory = classifyFailure(error);
+    if (workflowRecordId === undefined && error instanceof FileWorkflowPreparationError) {
+      workflowRecordId = error.workflowRecordId;
+    }
+
+    const classifiedError = error instanceof FileWorkflowPreparationError ? error.cause : error;
+    const message = classifiedError instanceof Error ? classifiedError.message : String(classifiedError);
+    const failureCategory = classifyFailure(classifiedError);
     let workflowCleanupError: unknown;
     progressEditsClosed = true;
     lastAllowedProgressEditCounter = progressEditCounter;

@@ -453,6 +453,18 @@ async function appendPollFetchFailureAuditEvent(inboxDir: string, error: unknown
   });
 }
 
+async function appendPollFetchFailureAuditEventBestEffort(
+  inboxDir: string,
+  error: unknown,
+  offset?: number,
+): Promise<void> {
+  try {
+    await appendPollFetchFailureAuditEvent(inboxDir, error, offset);
+  } catch {
+    // Poll fetch failures must still back off or terminate cleanly even if audit persistence fails.
+  }
+}
+
 export async function processTelegramUpdates(
   updates: unknown[],
   context: TelegramServiceContext,
@@ -576,7 +588,7 @@ export async function pollTelegramUpdatesOnce(
     }
 
     if (isConflictError(error)) {
-      await appendPollFetchFailureAuditEvent(inboxDir, error, offset);
+      await appendPollFetchFailureAuditEventBestEffort(inboxDir, error, offset);
       logger.error("409 Conflict: another process is polling this bot token. Shutting down to avoid duplicate replies.");
       return {
         offset,
@@ -586,7 +598,7 @@ export async function pollTelegramUpdatesOnce(
       };
     }
 
-    await appendPollFetchFailureAuditEvent(inboxDir, error, offset);
+    await appendPollFetchFailureAuditEventBestEffort(inboxDir, error, offset);
     logger.error(formatErrorMessage("Failed to fetch Telegram updates", error));
     return {
       offset,

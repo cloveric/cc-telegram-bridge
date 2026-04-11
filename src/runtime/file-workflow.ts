@@ -31,6 +31,17 @@ export interface FileWorkflowReplyResult {
 
 export type FileWorkflowResult = FileWorkflowDirectResult | FileWorkflowReplyResult;
 
+export class FileWorkflowPreparationError extends Error {
+  readonly workflowRecordId: string;
+
+  constructor(workflowRecordId: string, cause: unknown) {
+    super(cause instanceof Error ? cause.message : String(cause));
+    this.name = "FileWorkflowPreparationError";
+    this.workflowRecordId = workflowRecordId;
+    this.cause = cause;
+  }
+}
+
 const TEXT_DOCUMENT_EXTENSIONS = new Set([".txt", ".md"]);
 const IMAGE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".webp"]);
 const ARCHIVE_EXTENSIONS = new Set([".zip"]);
@@ -343,11 +354,16 @@ export async function prepareAttachmentWorkflow(input: {
         workflowRecordId: uploadId,
       };
     } catch (error) {
-      await store.update(uploadId, (current) => {
-        current.status = "failed";
-        current.summary = createArchiveFailureSummary(stagedFiles[0]!, extractedRoot, error);
-      });
-      throw error;
+      try {
+        await store.update(uploadId, (current) => {
+          current.status = "failed";
+          current.summary = createArchiveFailureSummary(stagedFiles[0]!, extractedRoot, error);
+        });
+      } catch {
+        throw new FileWorkflowPreparationError(uploadId, error);
+      }
+
+      throw new FileWorkflowPreparationError(uploadId, error);
     }
   }
 
