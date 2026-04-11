@@ -1482,7 +1482,7 @@ describe("polling helpers", () => {
       expect(api.editMessage).toHaveBeenLastCalledWith(
         123,
         11,
-        "Malformed continue command. Use /continue --upload <archive-id> [instructions].",
+        'Malformed continue command. Use the Continue Analysis button or reply "继续分析" to the archive summary.',
         undefined,
       );
     } finally {
@@ -2453,7 +2453,7 @@ describe("polling helpers", () => {
       expect(api.editMessage).toHaveBeenLastCalledWith(
         123,
         11,
-        "Session reset. Previous session state was unreadable, so the repaired instance-wide session bindings were restored.",
+        "Session reset. Previous session state was unreadable, so the instance-wide session bindings were reset, cleared, and rebuilt.",
       );
       expect(JSON.parse(await readFile(path.join(root, "session.json"), "utf8"))).toEqual({ chats: [] });
       expect(await readdir(root)).toEqual(

@@ -418,7 +418,7 @@ export async function prepareArchiveContinueWorkflow(input: {
   if (malformedTarget) {
     return {
       kind: "reply",
-      text: "Malformed continue command. Use /continue --upload <archive-id> [instructions].",
+      text: 'Malformed continue command. Use the Continue Analysis button or reply "继续分析" to the archive summary.',
     };
   }
 
