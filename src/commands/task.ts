@@ -127,7 +127,20 @@ export async function clearTaskWithRecovery(
     await rm(workspaceDir, { recursive: true, force: true });
   });
 
-  const cleared = await removeRecord(store, uploadId);
+  let cleared: boolean;
+  try {
+    cleared = await removeRecord(store, uploadId);
+  } catch (error) {
+    if (!isRepairableFileWorkflowStateError(error)) {
+      throw error;
+    }
+
+    await store.removeRecovering(uploadId);
+    return {
+      cleared: false,
+      repaired: true,
+    };
+  }
   if (!cleared) {
     return {
       cleared: false,

@@ -541,6 +541,12 @@ function formatServiceStatus(status: Awaited<ReturnType<typeof getServiceStatus>
     status.unresolvedTasksWarning !== undefined
       ? `Unresolved tasks: unknown (${status.unresolvedTasksWarning})`
       : `Unresolved tasks: ${status.unresolvedTasks}`,
+    status.unresolvedTasksWarning !== undefined
+      ? `Blocking tasks: unknown (${status.unresolvedTasksWarning})`
+      : `Blocking tasks: ${status.blockingTasks}`,
+    status.unresolvedTasksWarning !== undefined
+      ? `Awaiting continue tasks: unknown (${status.unresolvedTasksWarning})`
+      : `Awaiting continue tasks: ${status.awaitingContinueTasks}`,
     `State dir: ${status.stateDir}`,
     `Stdout log: ${status.stdoutPath}`,
     `Stderr log: ${status.stderrPath}`,

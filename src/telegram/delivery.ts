@@ -193,7 +193,11 @@ export async function handleNormalizedTelegramMessage(
 
   try {
     if (normalized.callbackQueryId) {
-      await context.api.answerCallbackQuery(normalized.callbackQueryId);
+      try {
+        await context.api.answerCallbackQuery(normalized.callbackQueryId);
+      } catch {
+        // Callback acks are advisory; continuation should still proceed.
+      }
     }
     const placeholder = await context.api.sendMessage(normalized.chatId, renderWorkingMessage());
     placeholderMessageId = placeholder.message_id;

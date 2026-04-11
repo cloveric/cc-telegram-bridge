@@ -244,4 +244,53 @@ describe("task commands", () => {
       await rm(homeDir, { recursive: true, force: true });
     }
   });
+
+  it("repairs unreadable workflow state when record removal hits a repairable error", async () => {
+    const homeDir = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
+    const stateDir = path.join(homeDir, ".codex", "channels", "telegram", "alpha");
+    const workflowPath = path.join(stateDir, "file-workflow.json");
+    const removeWorkspaceDir = vi.fn();
+
+    try {
+      await mkdir(stateDir, { recursive: true });
+      await writeFile(
+        workflowPath,
+        JSON.stringify({
+          records: [
+            {
+              uploadId: "upload-123",
+              chatId: 84,
+              userId: 42,
+              kind: "archive",
+              status: "awaiting_continue",
+              sourceFiles: ["repo.zip"],
+              derivedFiles: [],
+              summary: "pending",
+              createdAt: "2026-04-08T12:00:00.000Z",
+              updatedAt: "2026-04-08T12:00:00.000Z",
+            },
+          ],
+        }) + "\n",
+        "utf8",
+      );
+
+      await expect(
+        clearTaskWithRecovery({ USERPROFILE: homeDir }, "alpha", "upload-123", {
+          removeRecord: async () => {
+            throw new SyntaxError("corrupt workflow state");
+          },
+          removeWorkspaceDir,
+        }),
+      ).resolves.toEqual({
+        cleared: false,
+        repaired: true,
+      });
+
+      expect(JSON.parse(await readFile(workflowPath, "utf8"))).toEqual({ records: [] });
+      await expect(access(workflowPath)).resolves.toBeUndefined();
+      expect(removeWorkspaceDir).not.toHaveBeenCalled();
+    } finally {
+      await rm(homeDir, { recursive: true, force: true });
+    }
+  });
 });
