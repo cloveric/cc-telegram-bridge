@@ -353,6 +353,8 @@ Telegram users can also use:
 - `/reset`
 - `/help`
 
+For archive summaries, the intended continuation path is to reply to that summary or press its Continue Analysis button; bare `/continue` only resumes the latest waiting archive.
+
 Recovery behavior on unreadable state:
 
 - `telegram service status` and `telegram service doctor` degrade to `unknown (...)` warnings instead of crashing when `session.json` or `file-workflow.json` is unreadable.

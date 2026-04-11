@@ -335,7 +335,7 @@ export async function prepareAttachmentWorkflow(input: {
       chatId: input.chatId,
       userId: input.userId,
       kind: "archive",
-      status: "processing",
+      status: "preparing",
       sourceFiles: stagedFiles,
       derivedFiles: [],
       summary: `Preparing archive summary for ${path.basename(stagedFiles[0]!)}`,

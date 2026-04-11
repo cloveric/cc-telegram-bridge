@@ -5,7 +5,7 @@ import { JsonStore } from "./json-store.js";
 export const FILE_WORKFLOW_STATE_UNREADABLE_WARNING = "file workflow state unreadable";
 
 export type FileWorkflowKind = "image" | "document" | "archive";
-export type FileWorkflowStatus = "processing" | "awaiting_continue" | "completed" | "failed";
+export type FileWorkflowStatus = "preparing" | "processing" | "awaiting_continue" | "completed" | "failed";
 
 export interface FileWorkflowRecord {
   uploadId: string;
@@ -55,7 +55,8 @@ function isFileWorkflowRecord(value: unknown): value is FileWorkflowRecord {
     typeof record.chatId === "number" &&
     typeof record.userId === "number" &&
     (record.kind === "image" || record.kind === "document" || record.kind === "archive") &&
-    (record.status === "processing" ||
+    (record.status === "preparing" ||
+      record.status === "processing" ||
       record.status === "awaiting_continue" ||
       record.status === "completed" ||
       record.status === "failed") &&

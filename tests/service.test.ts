@@ -2444,6 +2444,59 @@ describe("polling helpers", () => {
     }
   });
 
+  it("does not append an archive summary record in processing state before delivery succeeds", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
+    const inboxDir = path.join(root, "inbox");
+    const zipBuffer = createZipBuffer({
+      "README.md": "# hello",
+      "src/index.ts": "console.log('hi')",
+    });
+    const appendSpy = vi.spyOn(FileWorkflowStore.prototype, "append");
+    const api = {
+      sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      editMessage: vi
+        .fn()
+        .mockResolvedValueOnce({ message_id: 11 })
+        .mockResolvedValueOnce({ message_id: 11 })
+        .mockRejectedValueOnce(new Error("message is too long"))
+        .mockResolvedValueOnce({ message_id: 11 }),
+      getFile: vi.fn().mockResolvedValue({ file_path: "documents/repo.zip" }),
+      downloadFile: vi.fn().mockImplementation(async (_filePath: string, destinationPath: string) => {
+        await mkdir(path.dirname(destinationPath), { recursive: true });
+        await writeFile(destinationPath, zipBuffer);
+      }),
+    };
+    const bridge = {
+      checkAccess: vi.fn().mockResolvedValue({ kind: "allow" }),
+      handleAuthorizedMessage: vi.fn(),
+    };
+
+    try {
+      await expect(
+        handleNormalizedTelegramMessage(
+          {
+            chatId: 123,
+            userId: 456,
+            chatType: "private",
+            text: "",
+            replyContext: undefined,
+            attachments: [{ fileId: "zip-1", fileName: "repo.zip", kind: "document" }],
+          },
+          {
+            api: api as never,
+            bridge: bridge as never,
+            inboxDir,
+          },
+        ),
+      ).rejects.toThrow("message is too long");
+
+      expect(appendSpy).not.toHaveBeenCalledWith(expect.objectContaining({ status: "processing" }));
+    } finally {
+      appendSpy.mockRestore();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("renders unreadable file-workflow state during upload as an internal recovery error", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
     const inboxDir = path.join(root, "inbox");
@@ -3386,6 +3439,53 @@ describe("polling helpers", () => {
       );
       expect(bridge.handleAuthorizedMessage).not.toHaveBeenCalled();
     } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("shows operator guidance when /reset hits non-repairable session-state read failures", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
+    const inboxDir = path.join(root, "inbox");
+    const readSpy = vi.spyOn(JsonStore.prototype, "read");
+    readSpy.mockRejectedValue(Object.assign(new Error("permission denied"), { code: "EACCES" }));
+    const api = {
+      sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      getFile: vi.fn(),
+      downloadFile: vi.fn(),
+    };
+    const bridge = {
+      checkAccess: vi.fn().mockResolvedValue({ kind: "allow" }),
+      handleAuthorizedMessage: vi.fn().mockResolvedValue({ text: "done" }),
+    };
+
+    try {
+      await expect(
+        handleNormalizedTelegramMessage(
+          {
+            chatId: 123,
+            userId: 456,
+            chatType: "private",
+            text: "/reset",
+            replyContext: undefined,
+            attachments: [],
+          },
+          {
+            api: api as never,
+            bridge: bridge as never,
+            inboxDir,
+          },
+        ),
+      ).rejects.toThrow("The operator needs to restore read access and retry.");
+
+      expect(api.editMessage).toHaveBeenLastCalledWith(
+        123,
+        11,
+        "Error: Session state is unavailable right now. The operator needs to restore read access and retry.",
+      );
+      expect(bridge.handleAuthorizedMessage).not.toHaveBeenCalled();
+    } finally {
+      readSpy.mockRestore();
       await rm(root, { recursive: true, force: true });
     }
   });

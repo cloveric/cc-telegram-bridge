@@ -257,7 +257,25 @@ export async function handleNormalizedTelegramMessage(
     }
 
     if (isResetCommand(normalized.text)) {
-      const resetResult = await sessionStore.removeByChatIdRecovering(normalized.chatId);
+      let resetResult: Awaited<ReturnType<SessionStore["removeByChatIdRecovering"]>>;
+      try {
+        resetResult = await sessionStore.removeByChatIdRecovering(normalized.chatId);
+      } catch (error) {
+        if (
+          typeof error === "object" &&
+          error !== null &&
+          "code" in error &&
+          (((error as NodeJS.ErrnoException).code === "EACCES") || (error as NodeJS.ErrnoException).code === "EPERM")
+        ) {
+          throw new SessionStateError(
+            "Session state is unavailable right now. The operator needs to restore read access and retry.",
+            false,
+          );
+        }
+
+        throw error;
+      }
+
       const resetMessage = renderSessionResetMessage(resetResult.repaired);
       await context.api.editMessage(normalized.chatId, placeholderMessageId, resetMessage);
       placeholderShowsResponse = true;
@@ -525,7 +543,11 @@ export async function handleNormalizedTelegramMessage(
       try {
         if (!archiveSummaryDelivered) {
           await workflowStore.update(workflowRecordId, (record) => {
-            if (record.status === "processing" || record.status === "awaiting_continue") {
+            if (
+              record.status === "preparing" ||
+              record.status === "processing" ||
+              record.status === "awaiting_continue"
+            ) {
               record.status = "failed";
             }
           });

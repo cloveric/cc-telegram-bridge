@@ -354,6 +354,8 @@ Telegram 用户也可以使用：
 - `/reset`
 - `/help`
 
+针对压缩包摘要，推荐直接回复该摘要或点击其中的 Continue Analysis 按钮继续；裸 `/continue` 只会恢复最近一个等待中的压缩包。
+
 状态文件损坏时的恢复行为：
 
 - 当 `session.json` 或 `file-workflow.json` 不可读时，`telegram service status` 和 `telegram service doctor` 会降级为 `unknown (...)` 警告，而不是直接崩溃。
