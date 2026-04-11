@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import { describe, expect, it, vi } from "vitest";
@@ -233,6 +233,48 @@ describe("SessionStore", () => {
       await expect(store.inspect()).resolves.toEqual({
         state: { chats: [] },
         warning: SESSION_STATE_UNREADABLE_WARNING,
+      });
+    } finally {
+      readSpy.mockRestore();
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("quarantines unreadable session state before resetting during targeted recovery", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
+    const filePath = path.join(tempDir, "session.json");
+    const store = new SessionStore(filePath);
+    const unreadableContents = "{not valid json";
+
+    try {
+      await writeFile(filePath, unreadableContents, "utf8");
+
+      await expect(store.removeByChatIdRecovering(123)).resolves.toEqual({
+        removed: false,
+        repaired: true,
+      });
+
+      await expect(readFile(filePath, "utf8")).resolves.toBe(JSON.stringify({ chats: [] }, null, 2));
+      const backups = (await readdir(tempDir)).filter((entry) => entry.startsWith("session.json.") && !entry.endsWith(".tmp"));
+      expect(backups).toHaveLength(1);
+      await expect(readFile(path.join(tempDir, backups[0]!), "utf8")).resolves.toBe(unreadableContents);
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("does not treat permission-denied targeted recovery as self-healing", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
+    const filePath = path.join(tempDir, "session.json");
+    const store = new SessionStore(filePath);
+    const permissionError = Object.assign(new Error("permission denied"), { code: "EACCES" });
+    const readSpy = vi.spyOn((store as unknown as { store: JsonStore<SessionState> }).store, "read");
+
+    readSpy.mockRejectedValue(permissionError);
+
+    try {
+      await expect(store.removeByChatIdRecovering(123)).rejects.toMatchObject({
+        code: "EACCES",
       });
     } finally {
       readSpy.mockRestore();

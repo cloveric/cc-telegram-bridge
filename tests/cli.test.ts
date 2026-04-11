@@ -1,8 +1,8 @@
-import { mkdtemp, readFile, rm, mkdir, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, mkdir, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { AccessStore } from "../src/state/access-store.js";
 import { runCli } from "../src/commands/cli.js";
@@ -366,7 +366,29 @@ describe("runCli", () => {
       expect(handled).toBe(true);
       expect(messages[0]).toContain('Session state was unreadable and has been reset for instance "alpha".');
       expect(JSON.parse(await readFile(sessionPath, "utf8"))).toEqual({ chats: [] });
+      expect(await readdir(path.dirname(sessionPath))).toEqual(
+        expect.arrayContaining([expect.stringMatching(/^session\.json\.corrupt\..+\.bak$/)]),
+      );
     } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("does not self-heal permission-denied session reset", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
+    const removeSpy = vi.spyOn(SessionStore.prototype, "removeByChatIdRecovering");
+    removeSpy.mockRejectedValueOnce(Object.assign(new Error("permission denied"), { code: "EACCES" }));
+
+    try {
+      await expect(
+        runCli(["telegram", "session", "reset", "--instance", "alpha", "84"], {
+          env: { USERPROFILE: tempDir },
+        }),
+      ).rejects.toMatchObject({
+        code: "EACCES",
+      });
+    } finally {
+      removeSpy.mockRestore();
       await rm(tempDir, { recursive: true, force: true });
     }
   });
@@ -584,7 +606,29 @@ describe("runCli", () => {
       expect(handled).toBe(true);
       expect(messages[0]).toContain('Task state was unreadable and has been reset for instance "alpha".');
       expect(JSON.parse(await readFile(workflowPath, "utf8"))).toEqual({ records: [] });
+      expect(await readdir(path.dirname(workflowPath))).toEqual(
+        expect.arrayContaining([expect.stringMatching(/^file-workflow\.json\.corrupt\..+\.bak$/)]),
+      );
     } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("does not self-heal permission-denied task clear", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
+    const findSpy = vi.spyOn((await import("../src/state/file-workflow-store.js")).FileWorkflowStore.prototype, "find");
+    findSpy.mockRejectedValueOnce(Object.assign(new Error("permission denied"), { code: "EPERM" }));
+
+    try {
+      await expect(
+        runCli(["telegram", "task", "clear", "--instance", "alpha", "upload-123"], {
+          env: { USERPROFILE: tempDir },
+        }),
+      ).rejects.toMatchObject({
+        code: "EPERM",
+      });
+    } finally {
+      findSpy.mockRestore();
       await rm(tempDir, { recursive: true, force: true });
     }
   });

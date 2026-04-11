@@ -64,7 +64,7 @@ export class SessionStore {
     try {
       return { state: await this.load() };
     } catch (error) {
-      if (isRecoverableSessionStateError(error)) {
+      if (isUnreadableSessionStateError(error)) {
         return {
           state: createDefaultSessionState(),
           warning: SESSION_STATE_UNREADABLE_WARNING,
@@ -135,10 +135,11 @@ export class SessionStore {
         repaired: false,
       };
     } catch (error) {
-      if (!isRecoverableSessionStateError(error)) {
+      if (!isRepairableSessionStateError(error)) {
         throw error;
       }
 
+      await this.store.quarantineCurrentFile("corrupt");
       await this.reset();
       return { removed: false, repaired: true };
     }
@@ -159,13 +160,19 @@ export class SessionStore {
   }
 }
 
-function isRecoverableSessionStateError(error: unknown): boolean {
+function isUnreadableSessionStateError(error: unknown): boolean {
   return (
-    error instanceof SyntaxError ||
-    (error instanceof Error && error.message === "invalid session state") ||
+    isRepairableSessionStateError(error) ||
     (typeof error === "object" &&
       error !== null &&
       "code" in error &&
       (((error as NodeJS.ErrnoException).code === "EACCES") || (error as NodeJS.ErrnoException).code === "EPERM"))
+  );
+}
+
+function isRepairableSessionStateError(error: unknown): boolean {
+  return (
+    error instanceof SyntaxError ||
+    (error instanceof Error && error.message === "invalid session state")
   );
 }

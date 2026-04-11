@@ -107,7 +107,7 @@ export class FileWorkflowStore {
     try {
       return { state: await this.load() };
     } catch (error) {
-      if (isRecoverableFileWorkflowStateError(error)) {
+      if (isUnreadableFileWorkflowStateError(error)) {
         return {
           state: createDefaultState(),
           warning: FILE_WORKFLOW_STATE_UNREADABLE_WARNING,
@@ -188,10 +188,11 @@ export class FileWorkflowStore {
         repaired: false,
       };
     } catch (error) {
-      if (!isRecoverableFileWorkflowStateError(error)) {
+      if (!isRepairableFileWorkflowStateError(error)) {
         throw error;
       }
 
+      await this.store.quarantineCurrentFile("corrupt");
       await this.reset();
       return { removed: false, repaired: true };
     }
@@ -247,10 +248,16 @@ export class FileWorkflowStore {
   }
 }
 
-function isRecoverableFileWorkflowStateError(error: unknown): boolean {
+export function isRepairableFileWorkflowStateError(error: unknown): boolean {
   return (
     error instanceof SyntaxError ||
-    (error instanceof Error && error.message === "invalid file workflow state") ||
+    (error instanceof Error && error.message === "invalid file workflow state")
+  );
+}
+
+function isUnreadableFileWorkflowStateError(error: unknown): boolean {
+  return (
+    isRepairableFileWorkflowStateError(error) ||
     (typeof error === "object" &&
       error !== null &&
       "code" in error &&

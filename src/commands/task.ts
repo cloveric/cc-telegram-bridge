@@ -6,6 +6,7 @@ import { normalizeInstanceName } from "../instance.js";
 import {
   FILE_WORKFLOW_STATE_UNREADABLE_WARNING,
   FileWorkflowStore,
+  isRepairableFileWorkflowStateError,
   type FileWorkflowRecord,
 } from "../state/file-workflow-store.js";
 
@@ -98,10 +99,16 @@ export async function clearTaskWithRecovery(
 ): Promise<ClearTaskResult> {
   const stateDir = resolveTaskStateDir(env, instanceName);
   const store = new FileWorkflowStore(stateDir);
-  const { record, warning } = await store.findSafe(uploadId);
+  let record: FileWorkflowRecord | null;
 
-  if (warning === FILE_WORKFLOW_STATE_UNREADABLE_WARNING) {
-    await store.reset();
+  try {
+    record = await store.find(uploadId);
+  } catch (error) {
+    if (!isRepairableFileWorkflowStateError(error)) {
+      throw error;
+    }
+
+    await store.removeRecovering(uploadId);
     return {
       cleared: false,
       repaired: true,

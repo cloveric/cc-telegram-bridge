@@ -354,8 +354,8 @@ Telegram users can also use:
 Recovery behavior on unreadable state:
 
 - `telegram service status` and `telegram service doctor` degrade to `unknown (...)` warnings instead of crashing when `session.json` or `file-workflow.json` is unreadable.
-- `telegram session inspect` and `telegram task inspect` report unreadable state, then continue with an empty/default view.
-- `telegram session reset`, `telegram task clear`, and Telegram `/reset` repair unreadable state files back to their default empty shape before continuing.
+- `telegram session inspect` and `telegram task inspect` report unreadable state and stop instead of pretending the record is missing.
+- `telegram session reset`, `telegram task clear`, and Telegram `/reset` only self-heal corruption/schema-invalid state. Before writing a default empty file, the unreadable original is quarantined as a backup beside the state file.
 - Telegram `/status` shows `unknown (...)` for session/task state when the backing JSON is unreadable.
 
 ### Shell Helpers

@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -223,6 +223,47 @@ describe("FileWorkflowStore", () => {
       await expect(store.inspect()).resolves.toEqual({
         state: { records: [] },
         warning: FILE_WORKFLOW_STATE_UNREADABLE_WARNING,
+      });
+    } finally {
+      readSpy.mockRestore();
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("quarantines unreadable workflow state before resetting during targeted recovery", async () => {
+    const stateDir = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
+    const store = new FileWorkflowStore(stateDir);
+    const filePath = path.join(stateDir, "file-workflow.json");
+    const unreadableContents = "{not valid json";
+
+    try {
+      await writeFile(filePath, unreadableContents, "utf8");
+
+      await expect(store.removeRecovering("upload-123")).resolves.toEqual({
+        removed: false,
+        repaired: true,
+      });
+
+      await expect(readFile(filePath, "utf8")).resolves.toBe(JSON.stringify({ records: [] }, null, 2));
+      const backups = (await readdir(stateDir)).filter((entry) => entry.startsWith("file-workflow.json.") && !entry.endsWith(".tmp"));
+      expect(backups).toHaveLength(1);
+      await expect(readFile(path.join(stateDir, backups[0]!), "utf8")).resolves.toBe(unreadableContents);
+    } finally {
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("does not treat permission-denied targeted recovery as self-healing", async () => {
+    const stateDir = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
+    const store = new FileWorkflowStore(stateDir);
+    const permissionError = Object.assign(new Error("permission denied"), { code: "EPERM" });
+    const readSpy = vi.spyOn((store as unknown as { store: JsonStore<unknown> }).store, "read");
+
+    readSpy.mockRejectedValue(permissionError);
+
+    try {
+      await expect(store.removeRecovering("upload-123")).rejects.toMatchObject({
+        code: "EPERM",
       });
     } finally {
       readSpy.mockRestore();

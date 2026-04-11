@@ -355,8 +355,8 @@ Telegram 用户也可以使用：
 状态文件损坏时的恢复行为：
 
 - 当 `session.json` 或 `file-workflow.json` 不可读时，`telegram service status` 和 `telegram service doctor` 会降级为 `unknown (...)` 警告，而不是直接崩溃。
-- `telegram session inspect` 和 `telegram task inspect` 会先提示状态不可读，再以空/默认视图继续输出。
-- `telegram session reset`、`telegram task clear` 以及 Telegram `/reset` 会先把不可读状态文件修复为默认空结构，再继续执行。
+- `telegram session inspect` 和 `telegram task inspect` 会提示状态不可读并直接停止，不会假装记录不存在。
+- `telegram session reset`、`telegram task clear` 以及 Telegram `/reset` 只会在文件损坏或结构非法时自愈；写入默认空状态前，会先把原始不可读文件隔离备份到同目录。
 - Telegram `/status` 在底层 JSON 不可读时，会把 session/task 状态显示为 `unknown (...)`。
 
 ### Shell 辅助脚本
