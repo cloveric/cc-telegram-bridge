@@ -150,7 +150,7 @@ export class FileWorkflowStore {
       return true;
     });
 
-    return [...records].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    return [...records].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   }
 
   async find(uploadId: string): Promise<FileWorkflowRecord | null> {

@@ -66,7 +66,7 @@ describe("message rendering", () => {
   it("renders categorized error and reset messages", () => {
     expect(renderSessionResetMessage()).toBe("Session reset for this chat.");
     expect(renderSessionResetMessage(true)).toBe(
-      "Session reset. Previous session state was unreadable, so all chat bindings were repaired.",
+      "Session reset. Previous session state was unreadable, so the repaired instance-wide session bindings were restored.",
     );
     expect(renderCategorizedErrorMessage("write-permission", "write access denied")).toBe(
       "Error: File creation is blocked by the current write policy. Retry in a writable mode.",

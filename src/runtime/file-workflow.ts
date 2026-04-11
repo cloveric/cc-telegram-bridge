@@ -36,6 +36,8 @@ const IMAGE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".webp"]);
 const ARCHIVE_EXTENSIONS = new Set([".zip"]);
 const MAX_DOCUMENT_TEXT_CHARS = 12_000;
 const MAX_TREE_LINES = 40;
+const ARCHIVE_CONTINUE_HINT = 'Reply "继续分析" or press the Continue Analysis button to continue with this archive.';
+const MAX_ARCHIVE_SUMMARY_DELIVERY_CHARS = 3900;
 
 function resolveWorkspaceUploadsDir(stateDir: string): string {
   return path.join(stateDir, "workspace", ".telegram-files");
@@ -244,13 +246,32 @@ async function summarizeArchive(archivePath: string, extractedRoot: string): Pro
     "Tree:",
     ...treeLines,
     "",
-    "Reply \"继续分析\" or press the Continue Analysis button to continue with this archive.",
+    ARCHIVE_CONTINUE_HINT,
   ];
 
   return {
     summary: summaryLines.join("\n"),
     topExtensions,
   };
+}
+
+export function boundArchiveSummaryForTelegram(
+  summary: string,
+  limit = MAX_ARCHIVE_SUMMARY_DELIVERY_CHARS,
+): string {
+  if (summary.length <= limit) {
+    return summary;
+  }
+
+  const truncationNotice = "[Archive summary truncated for Telegram delivery.]";
+  const suffix = `\n\n${truncationNotice}\n${ARCHIVE_CONTINUE_HINT}`;
+  const prefixLimit = limit - suffix.length;
+
+  if (prefixLimit <= 0) {
+    return suffix.slice(suffix.length - limit);
+  }
+
+  return `${summary.slice(0, prefixLimit).trimEnd()}${suffix}`;
 }
 
 function createArchiveFailureSummary(archivePath: string, extractedRoot: string, error: unknown): string {

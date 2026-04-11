@@ -24,7 +24,7 @@ export function renderErrorMessage(error: string): string {
 
 export function renderSessionResetMessage(repaired = false): string {
   return repaired
-    ? "Session reset. Previous session state was unreadable, so all chat bindings were repaired."
+    ? "Session reset. Previous session state was unreadable, so the repaired instance-wide session bindings were restored."
     : "Session reset for this chat.";
 }
 

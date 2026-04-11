@@ -71,6 +71,7 @@ export function classifyFailure(error: unknown): FailureCategory {
     text.includes("senddocument") ||
     text.includes("sendmessage") ||
     text.includes("editmessage") ||
+    text.includes("message is too long") ||
     text.includes("telegram api") ||
     text.includes("telegram delivery") ||
     text.includes("message to edit not found") ||

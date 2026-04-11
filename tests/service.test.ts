@@ -1473,6 +1473,123 @@ describe("polling helpers", () => {
     }
   });
 
+  it("bounds a long archive summary before sending it with the continue keyboard", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
+    const inboxDir = path.join(root, "inbox");
+    const manyFiles = Object.fromEntries(
+      Array.from({ length: 500 }, (_, index) => [
+        `src/feature-${String(index).padStart(3, "0")}/component-${String(index).padStart(3, "0")}.ts`,
+        `export const value${index} = ${index};`,
+      ]),
+    );
+    const zipBuffer = createZipBuffer({
+      "README.md": "# hello",
+      ...manyFiles,
+    });
+    const api = {
+      sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      getFile: vi.fn().mockResolvedValue({ file_path: "documents/repo.zip" }),
+      downloadFile: vi.fn().mockImplementation(async (_filePath: string, destinationPath: string) => {
+        await mkdir(path.dirname(destinationPath), { recursive: true });
+        await writeFile(destinationPath, zipBuffer);
+      }),
+    };
+    const bridge = {
+      checkAccess: vi.fn().mockResolvedValue({ kind: "allow" }),
+      handleAuthorizedMessage: vi.fn(),
+    };
+
+    try {
+      await handleNormalizedTelegramMessage(
+        {
+          chatId: 123,
+          userId: 456,
+          chatType: "private",
+          text: "",
+          replyContext: undefined,
+          attachments: [{ fileId: "zip-1", fileName: "repo.zip", kind: "document" }],
+        },
+        {
+          api: api as never,
+          bridge: bridge as never,
+          inboxDir,
+        },
+      );
+
+      const summaryDelivery = (api.editMessage as ReturnType<typeof vi.fn>).mock.calls.at(-1);
+      expect(summaryDelivery?.[2]).toContain("Continue Analysis button");
+      expect((summaryDelivery?.[2] as string).length).toBeLessThanOrEqual(3900);
+      expect(summaryDelivery?.[3]).toEqual(
+        expect.objectContaining({
+          inlineKeyboard: [[{ text: "Continue Analysis", callbackData: expect.stringMatching(/^continue-archive:/) }]],
+        }),
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("does not leave an archive waiting for continue when summary delivery fails", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
+    const inboxDir = path.join(root, "inbox");
+    const zipBuffer = createZipBuffer({
+      "README.md": "# hello",
+      "src/index.ts": "console.log('hi')",
+    });
+    const api = {
+      sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      editMessage: vi
+        .fn()
+        .mockResolvedValueOnce({ message_id: 11 })
+        .mockResolvedValueOnce({ message_id: 11 })
+        .mockRejectedValueOnce(new Error("message is too long"))
+        .mockResolvedValueOnce({ message_id: 11 }),
+      getFile: vi.fn().mockResolvedValue({ file_path: "documents/repo.zip" }),
+      downloadFile: vi.fn().mockImplementation(async (_filePath: string, destinationPath: string) => {
+        await mkdir(path.dirname(destinationPath), { recursive: true });
+        await writeFile(destinationPath, zipBuffer);
+      }),
+    };
+    const bridge = {
+      checkAccess: vi.fn().mockResolvedValue({ kind: "allow" }),
+      handleAuthorizedMessage: vi.fn(),
+    };
+
+    try {
+      await expect(
+        handleNormalizedTelegramMessage(
+          {
+            chatId: 123,
+            userId: 456,
+            chatType: "private",
+            text: "",
+            replyContext: undefined,
+            attachments: [{ fileId: "zip-1", fileName: "repo.zip", kind: "document" }],
+          },
+          {
+            api: api as never,
+            bridge: bridge as never,
+            inboxDir,
+          },
+        ),
+      ).rejects.toThrow("message is too long");
+
+      const workflowState = JSON.parse(await readFile(path.join(root, "file-workflow.json"), "utf8")) as {
+        records: Array<{ status: string; summaryMessageId?: number }>;
+      };
+      expect(workflowState.records[0]?.status).toBe("failed");
+      expect(workflowState.records[0]?.summaryMessageId).toBeUndefined();
+      expect(api.editMessage).toHaveBeenLastCalledWith(
+        123,
+        11,
+        "Error: Telegram delivery is temporarily unavailable. Retry the request or try again later.",
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("renders unreadable file-workflow state during upload as an internal recovery error", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
     const inboxDir = path.join(root, "inbox");
@@ -2133,7 +2250,7 @@ describe("polling helpers", () => {
       expect(api.editMessage).toHaveBeenLastCalledWith(
         123,
         11,
-        "Session reset. Previous session state was unreadable, so all chat bindings were repaired.",
+        "Session reset. Previous session state was unreadable, so the repaired instance-wide session bindings were restored.",
       );
       expect(JSON.parse(await readFile(path.join(root, "session.json"), "utf8"))).toEqual({ chats: [] });
       expect(await readdir(root)).toEqual(

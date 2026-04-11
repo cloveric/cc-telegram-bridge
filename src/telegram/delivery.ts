@@ -3,6 +3,7 @@ import path from "node:path";
 
 import { Bridge } from "../runtime/bridge.js";
 import {
+  boundArchiveSummaryForTelegram,
   prepareArchiveContinueWorkflow,
   prepareAttachmentWorkflow,
   type DownloadedAttachment,
@@ -336,10 +337,12 @@ export async function handleNormalizedTelegramMessage(
     }
 
     if (workflowResult?.kind === "reply") {
+      workflowRecordId = workflowResult.workflowRecordId;
+      const deliveryText = workflowRecordId ? boundArchiveSummaryForTelegram(workflowResult.text) : workflowResult.text;
       await context.api.editMessage(
         normalized.chatId,
         placeholderMessageId,
-        workflowResult.text,
+        deliveryText,
         downloadedAttachments.length > 0 && workflowResult.workflowRecordId
           ? buildContinueAnalysisKeyboard(workflowResult.workflowRecordId)
           : undefined,
@@ -359,8 +362,8 @@ export async function handleNormalizedTelegramMessage(
         metadata: {
           durationMs: Date.now() - startedAt,
           attachments: normalized.attachments.length,
-          responseChars: workflowResult.text.length,
-          chunkCount: chunkTelegramMessage(workflowResult.text).length,
+          responseChars: deliveryText.length,
+          chunkCount: chunkTelegramMessage(deliveryText).length,
         },
       });
       return;
@@ -469,7 +472,7 @@ export async function handleNormalizedTelegramMessage(
 
     if (workflowRecordId) {
       await workflowStore.update(workflowRecordId, (record) => {
-        if (record.status === "processing") {
+        if (record.status === "processing" || record.status === "awaiting_continue") {
           record.status = "failed";
         }
       });

@@ -68,7 +68,7 @@ export async function listTasks(
   const store = new FileWorkflowStore(resolveTaskStateDir(env, instanceName));
   const { state, warning } = await store.inspect();
   return {
-    tasks: [...state.records].sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+    tasks: [...state.records].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
     warning,
   };
 }

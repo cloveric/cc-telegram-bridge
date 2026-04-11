@@ -442,7 +442,7 @@ describe("runCli", () => {
               derivedFiles: [],
               summary: "pending",
               createdAt: "2026-04-08T12:00:00.000Z",
-              updatedAt: "2026-04-08T12:00:00.000Z",
+              updatedAt: "2026-04-08T14:00:00.000Z",
             },
             {
               uploadId: "upload-456",
@@ -468,8 +468,7 @@ describe("runCli", () => {
 
       expect(handled).toBe(true);
       expect(messages[0]).toContain("Recent file workflow records: 2");
-      expect(messages[0]).toContain("upload-456");
-      expect(messages[0]).toContain("upload-123");
+      expect(messages[0].indexOf("upload-123")).toBeLessThan(messages[0].indexOf("upload-456"));
     } finally {
       await rm(tempDir, { recursive: true, force: true });
     }
@@ -535,8 +534,43 @@ describe("runCli", () => {
       expect(handled).toBe(true);
       expect(messages[0]).toContain("session inspect [--instance <name>] <chat-id>");
       expect(messages[0]).not.toContain("session <list|inspect>");
+      expect(messages[0]).not.toContain("session <list|show|inspect|reset>");
       expect(messages[0]).toContain("task inspect [--instance <name>] <upload-id>");
       expect(messages[0]).toContain("task clear [--instance <name>] <upload-id>");
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("uses inspect-first usage text for session command errors", async () => {
+    await expect(
+      runCli(["telegram", "session"], {
+        env: { USERPROFILE: "C:\\Users\\hangw" },
+      }),
+    ).rejects.toThrow("Usage: telegram session <list|inspect|reset> ...");
+  });
+
+  it("keeps session parser compatibility for show while inspect remains the canonical help surface", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
+    const messages: string[] = [];
+
+    try {
+      const sessionPath = path.join(tempDir, ".codex", "channels", "telegram", "default", "session.json");
+      const store = new SessionStore(sessionPath);
+      await store.upsert({
+        telegramChatId: 84,
+        codexSessionId: "thread-abc",
+        status: "idle",
+        updatedAt: "2026-04-08T12:00:00.000Z",
+      });
+
+      const handled = await runCli(["telegram", "session", "show", "84"], {
+        env: { USERPROFILE: tempDir },
+        logger: { log: (message) => messages.push(message) },
+      });
+
+      expect(handled).toBe(true);
+      expect(messages[0]).toContain("Thread: thread-abc");
     } finally {
       await rm(tempDir, { recursive: true, force: true });
     }

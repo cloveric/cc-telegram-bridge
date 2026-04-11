@@ -397,7 +397,7 @@ async function runAuditCommand(argv: string[], env: InstanceTokenEnv, logger: Cl
 
 async function runSessionCommand(argv: string[], env: InstanceTokenEnv, logger: CliLogger): Promise<boolean> {
   if (argv.length < 2) {
-    throw new Error("Usage: telegram session <list|show|inspect|reset> ...");
+    throw new Error("Usage: telegram session <list|inspect|reset> ...");
   }
 
   const subcommand = argv[1];
@@ -451,7 +451,7 @@ async function runSessionCommand(argv: string[], env: InstanceTokenEnv, logger: 
     return true;
   }
 
-  throw new Error("Usage: telegram session <list|show|inspect|reset> ...");
+  throw new Error("Usage: telegram session <list|inspect|reset> ...");
 }
 
 async function runTaskCommand(argv: string[], env: InstanceTokenEnv, logger: CliLogger): Promise<boolean> {
