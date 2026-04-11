@@ -1863,6 +1863,74 @@ describe("polling helpers", () => {
     }
   });
 
+  it("guides targeted archive retries back to the same summary after continuation fails", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
+    const inboxDir = path.join(root, "inbox");
+    await writeFile(
+      path.join(root, "file-workflow.json"),
+      JSON.stringify({
+        records: [
+          {
+            uploadId: "archive-1",
+            chatId: 123,
+            userId: 456,
+            kind: "archive",
+            status: "awaiting_continue",
+            sourceFiles: ["repo.zip"],
+            derivedFiles: [],
+            summary: "archive summary one",
+            summaryMessageId: 41,
+            extractedPath: "workspace/.telegram-files/archive-1/extracted",
+            createdAt: "2026-04-10T00:00:00.000Z",
+            updatedAt: "2026-04-10T00:00:00.000Z",
+          },
+        ],
+      }),
+      "utf8",
+    );
+    const api = {
+      sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      answerCallbackQuery: vi.fn().mockResolvedValue(undefined),
+      getFile: vi.fn(),
+      downloadFile: vi.fn(),
+    };
+    const bridge = {
+      checkAccess: vi.fn().mockResolvedValue({ kind: "allow" }),
+      handleAuthorizedMessage: vi.fn().mockRejectedValue(new Error("transient failure")),
+    };
+    const normalized = normalizeUpdate({
+      update_id: 99,
+      callback_query: {
+        id: "cb-1",
+        from: { id: 456 },
+        message: { message_id: 41, chat: { id: 123, type: "private" }, text: "Archive summary" },
+        data: "continue-archive:archive-1",
+      },
+    });
+
+    try {
+      await expect(
+        handleNormalizedTelegramMessage(normalized!, {
+          api: api as never,
+          bridge: bridge as never,
+          inboxDir,
+        }),
+      ).rejects.toThrow("transient failure");
+
+      expect(api.editMessage).toHaveBeenLastCalledWith(
+        123,
+        11,
+        [
+          "Error: An unexpected failure occurred. Reset the chat or retry the request.",
+          "Retry this specific archive from its original summary: press Continue Analysis again there or reply \"继续分析\" to that summary.",
+        ].join("\n"),
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("fails closed for malformed targeted /continue --upload syntax instead of resuming the latest archive", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
     const inboxDir = path.join(root, "inbox");
@@ -2104,7 +2172,7 @@ describe("polling helpers", () => {
             inboxDir,
           },
         ),
-      ).rejects.toThrow("audit write failed");
+      ).resolves.toBeUndefined();
 
       expect(api.editMessage).toHaveBeenLastCalledWith(
         123,
@@ -2122,6 +2190,78 @@ describe("polling helpers", () => {
       expect(workflowState.records[0]?.summaryMessageId).toBe(11);
     } finally {
       appendSpy.mockRestore();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("does not replay a delivered continuation when the completed-state write fails late", async () => {
+    const logger = {
+      error: vi.fn(),
+    };
+    const root = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
+    const inboxDir = path.join(root, "inbox");
+    await writeFile(
+      path.join(root, "file-workflow.json"),
+      JSON.stringify({
+        records: [
+          {
+            uploadId: "archive-1",
+            chatId: 123,
+            userId: 456,
+            kind: "archive",
+            status: "awaiting_continue",
+            sourceFiles: ["repo.zip"],
+            derivedFiles: [],
+            summary: "archive summary one",
+            extractedPath: "workspace/.telegram-files/archive-1/extracted",
+            createdAt: "2026-04-10T00:00:00.000Z",
+            updatedAt: "2026-04-10T00:00:00.000Z",
+          },
+        ],
+      }),
+      "utf8",
+    );
+    const updateSpy = vi.spyOn(FileWorkflowStore.prototype, "update").mockRejectedValue(new Error("workflow write failed"));
+    const api = {
+      getUpdates: vi.fn().mockResolvedValue([
+        {
+          update_id: 10,
+          message: {
+            chat: { id: 123, type: "private" },
+            from: { id: 456 },
+            text: "/continue",
+          },
+        },
+      ]),
+      sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      getFile: vi.fn(),
+      downloadFile: vi.fn(),
+    };
+    const bridge = {
+      checkAccess: vi.fn().mockResolvedValue({ kind: "allow" }),
+      handleAuthorizedMessage: vi.fn().mockResolvedValue({ text: "continuation complete" }),
+    };
+
+    try {
+      await expect(
+        pollTelegramUpdatesOnce(api as never, bridge as never, inboxDir, logger, 7),
+      ).resolves.toEqual({
+        offset: 11,
+        hadFetchError: false,
+        hadUpdates: true,
+        conflict: false,
+      });
+
+      expect(api.editMessage).toHaveBeenCalledWith(123, 11, "continuation complete");
+      expect(logger.error).not.toHaveBeenCalled();
+
+      const workflowState = JSON.parse(await readFile(path.join(root, "file-workflow.json"), "utf8")) as {
+        records: Array<{ status: string }>;
+      };
+      expect(workflowState.records[0]?.status).toBe("processing");
+    } finally {
+      updateSpy.mockRestore();
       await rm(root, { recursive: true, force: true });
     }
   });

@@ -21,12 +21,14 @@ export interface FileWorkflowDirectResult {
   text: string;
   files: string[];
   workflowRecordId?: string;
+  failureHint?: string;
 }
 
 export interface FileWorkflowReplyResult {
   kind: "reply";
   text: string;
   workflowRecordId?: string;
+  failureHint?: string;
 }
 
 export type FileWorkflowResult = FileWorkflowDirectResult | FileWorkflowReplyResult;
@@ -48,6 +50,7 @@ const ARCHIVE_EXTENSIONS = new Set([".zip"]);
 const MAX_DOCUMENT_TEXT_CHARS = 12_000;
 const MAX_TREE_LINES = 40;
 const ARCHIVE_CONTINUE_HINT = 'Reply "继续分析", run /continue, or press the Continue Analysis button to continue with this archive.';
+const TARGETED_ARCHIVE_RETRY_HINT = 'Retry this specific archive from its original summary: press Continue Analysis again there or reply "继续分析" to that summary.';
 const MAX_ARCHIVE_SUMMARY_DELIVERY_CHARS = 3900;
 
 function resolveWorkspaceUploadsDir(stateDir: string): string {
@@ -440,13 +443,13 @@ export async function prepareArchiveContinueWorkflow(input: {
 
   const store = new FileWorkflowStore(input.stateDir);
   const hasReplyTarget = targetUploadId === undefined && input.replyContext?.messageId !== undefined;
+  const explicitTarget = targetUploadId !== undefined || hasReplyTarget;
   const archiveRecord = await store.beginArchiveContinuation({
     chatId: input.chatId,
     uploadId: targetUploadId,
     summaryMessageId: targetUploadId ? undefined : input.replyContext?.messageId,
   });
   if (!archiveRecord) {
-    const explicitTarget = targetUploadId !== undefined || hasReplyTarget;
     if (explicitTarget) {
       const targetedRecord = await store.getArchiveContinuationTarget({
         chatId: input.chatId,
@@ -488,5 +491,6 @@ export async function prepareArchiveContinueWorkflow(input: {
     text: prompt,
     files: [],
     workflowRecordId: archiveRecord.uploadId,
+    failureHint: explicitTarget ? TARGETED_ARCHIVE_RETRY_HINT : undefined,
   };
 }

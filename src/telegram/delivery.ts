@@ -51,6 +51,18 @@ async function appendAuditEventBestEffort(stateDir: string, event: Parameters<ty
   }
 }
 
+async function updateWorkflowBestEffort(
+  workflowStore: FileWorkflowStore,
+  workflowRecordId: string,
+  mutate: Parameters<FileWorkflowStore["update"]>[1],
+): Promise<void> {
+  try {
+    await workflowStore.update(workflowRecordId, mutate);
+  } catch {
+    // Visible Telegram delivery already succeeded; workflow persistence is bookkeeping-only now.
+  }
+}
+
 import {
   chunkTelegramMessage,
   renderAccessCheckMessage,
@@ -197,6 +209,7 @@ export async function handleNormalizedTelegramMessage(
   let workflowRecordId: string | undefined;
   let archiveSummaryDelivered = false;
   let telegramOutDirPath: string | undefined;
+  let failureHint: string | undefined;
   const stateDir = path.dirname(context.inboxDir);
   const workflowStore = new FileWorkflowStore(stateDir);
   const sessionStore = new SessionStore(path.join(stateDir, "session.json"));
@@ -348,6 +361,7 @@ export async function handleNormalizedTelegramMessage(
             text: normalized.text,
             replyContext: normalized.replyContext,
           });
+    failureHint = workflowResult?.failureHint;
 
     const engine = await loadEngine(stateDir);
     if (engine === "codex" && wantsTelegramOut(normalized.text)) {
@@ -374,7 +388,7 @@ export async function handleNormalizedTelegramMessage(
         archiveSummaryDelivered = true;
         placeholderShowsResponse = true;
       }
-      await appendAuditEvent(stateDir, {
+      await appendAuditEventBestEffort(stateDir, {
         type: "update.handle",
         instanceName: context.instanceName,
         chatId: normalized.chatId,
@@ -468,12 +482,12 @@ export async function handleNormalizedTelegramMessage(
     }
 
     if (workflowRecordId) {
-      await workflowStore.update(workflowRecordId, (record) => {
+      await updateWorkflowBestEffort(workflowStore, workflowRecordId, (record) => {
         record.status = "completed";
       });
     }
 
-    await appendAuditEvent(path.dirname(context.inboxDir), {
+    await appendAuditEventBestEffort(path.dirname(context.inboxDir), {
       type: "update.handle",
       instanceName: context.instanceName,
       chatId: normalized.chatId,
@@ -495,6 +509,9 @@ export async function handleNormalizedTelegramMessage(
     const classifiedError = error instanceof FileWorkflowPreparationError ? error.cause : error;
     const message = classifiedError instanceof Error ? classifiedError.message : String(classifiedError);
     const failureCategory = classifyFailure(classifiedError);
+    const errorMessage = failureHint
+      ? `${renderCategorizedErrorMessage(failureCategory, message)}\n${failureHint}`
+      : renderCategorizedErrorMessage(failureCategory, message);
     let workflowCleanupError: unknown;
     progressEditsClosed = true;
     lastAllowedProgressEditCounter = progressEditCounter;
@@ -517,18 +534,18 @@ export async function handleNormalizedTelegramMessage(
     if (placeholderShowsResponse && !archiveSummaryDelivered) {
       await context.api.sendMessage(
         normalized.chatId,
-        renderCategorizedErrorMessage(failureCategory, message),
+        errorMessage,
       );
     } else if (!archiveSummaryDelivered && placeholderMessageId !== undefined) {
       await context.api.editMessage(
         normalized.chatId,
         placeholderMessageId,
-        renderCategorizedErrorMessage(failureCategory, message),
+        errorMessage,
       );
     } else if (!archiveSummaryDelivered) {
       await context.api.sendMessage(
         normalized.chatId,
-        renderCategorizedErrorMessage(failureCategory, message),
+        errorMessage,
       );
     }
 
