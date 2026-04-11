@@ -84,6 +84,18 @@ function createDefaultState(): FileWorkflowState {
   return { records: [] };
 }
 
+function selectLatestRecord(records: FileWorkflowRecord[]): FileWorkflowRecord | null {
+  let latest: FileWorkflowRecord | null = null;
+
+  for (const record of records) {
+    if (latest === null || record.updatedAt.localeCompare(latest.updatedAt) > 0) {
+      latest = record;
+    }
+  }
+
+  return latest;
+}
+
 export function resolveFileWorkflowStatePath(stateDir: string): string {
   return path.join(stateDir, "file-workflow.json");
 }
@@ -231,7 +243,7 @@ export class FileWorkflowStore {
   async getLatestAwaitingArchive(chatId: number): Promise<FileWorkflowRecord | null> {
     const state = await this.load();
     const candidates = state.records.filter((record) => record.chatId === chatId && record.kind === "archive" && record.status === "awaiting_continue");
-    return candidates.at(-1) ?? null;
+    return selectLatestRecord(candidates);
   }
 
   async getAwaitingArchive(chatId: number, uploadId: string): Promise<FileWorkflowRecord | null> {
@@ -298,7 +310,7 @@ export class FileWorkflowStore {
           ? matchingRecords.find((entry) => entry.uploadId === input.uploadId)
           : input.summaryMessageId !== undefined
             ? matchingRecords.find((entry) => entry.summaryMessageId === input.summaryMessageId) ?? null
-            : matchingRecords.at(-1);
+            : selectLatestRecord(matchingRecords);
 
       if (!record) {
         return;

@@ -465,6 +465,28 @@ async function appendPollFetchFailureAuditEventBestEffort(
   }
 }
 
+async function appendUpdateHandleFailureAuditEventBestEffort(
+  inboxDir: string,
+  instanceName: string | undefined,
+  error: unknown,
+  updateId?: number,
+): Promise<void> {
+  try {
+    await appendAuditEvent(path.dirname(inboxDir), {
+      type: "update.handle",
+      instanceName,
+      updateId,
+      outcome: "error",
+      detail: error instanceof Error ? error.message : String(error),
+      metadata: {
+        failureCategory: classifyFailure(error),
+      },
+    });
+  } catch {
+    // Update handling errors still need to surface and stop processing even if audit persistence fails.
+  }
+}
+
 export async function processTelegramUpdates(
   updates: unknown[],
   context: TelegramServiceContext,
@@ -537,16 +559,7 @@ export async function processTelegramUpdates(
       }
       nextOffset = advanceOffset(nextOffset, completedOffset);
     } catch (error) {
-      await appendAuditEvent(path.dirname(context.inboxDir), {
-        type: "update.handle",
-        instanceName: context.instanceName,
-        updateId,
-        outcome: "error",
-        detail: error instanceof Error ? error.message : String(error),
-        metadata: {
-          failureCategory: classifyFailure(error),
-        },
-      });
+      await appendUpdateHandleFailureAuditEventBestEffort(context.inboxDir, context.instanceName, error, updateId);
       logger.error(formatErrorMessage("Failed to handle Telegram update", error));
       break;
     }

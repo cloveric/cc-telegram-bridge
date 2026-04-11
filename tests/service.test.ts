@@ -1296,6 +1296,97 @@ describe("polling helpers", () => {
     }
   });
 
+  it("resumes the most recently updated waiting archive even when records are out of order", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
+    const inboxDir = path.join(root, "inbox");
+    await writeFile(
+      path.join(root, "file-workflow.json"),
+      JSON.stringify({
+        records: [
+          {
+            uploadId: "archive-new",
+            chatId: 123,
+            userId: 456,
+            kind: "archive",
+            status: "awaiting_continue",
+            sourceFiles: ["repo-new.zip"],
+            derivedFiles: [],
+            summary: "archive summary new",
+            extractedPath: "workspace/.telegram-files/archive-new/extracted",
+            createdAt: "2026-04-10T00:05:00.000Z",
+            updatedAt: "2026-04-10T00:05:00.000Z",
+          },
+          {
+            uploadId: "archive-old",
+            chatId: 123,
+            userId: 456,
+            kind: "archive",
+            status: "awaiting_continue",
+            sourceFiles: ["repo-old.zip"],
+            derivedFiles: [],
+            summary: "archive summary old",
+            extractedPath: "workspace/.telegram-files/archive-old/extracted",
+            createdAt: "2026-04-10T00:00:00.000Z",
+            updatedAt: "2026-04-10T00:00:00.000Z",
+          },
+        ],
+      }),
+      "utf8",
+    );
+    const api = {
+      sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      getFile: vi.fn(),
+      downloadFile: vi.fn(),
+    };
+    const bridge = {
+      checkAccess: vi.fn().mockResolvedValue({ kind: "allow" }),
+      handleAuthorizedMessage: vi.fn().mockResolvedValue({ text: "analysis done" }),
+    };
+
+    try {
+      await handleNormalizedTelegramMessage(
+        {
+          chatId: 123,
+          userId: 456,
+          chatType: "private",
+          text: "/continue",
+          replyContext: undefined,
+          attachments: [],
+        },
+        {
+          api: api as never,
+          bridge: bridge as never,
+          inboxDir,
+        },
+      );
+
+      expect(bridge.handleAuthorizedMessage).toHaveBeenCalledTimes(1);
+      expect(bridge.handleAuthorizedMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          text: expect.stringContaining("archive summary new"),
+        }),
+      );
+      expect(bridge.handleAuthorizedMessage).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          text: expect.stringContaining("archive summary old"),
+        }),
+      );
+
+      const workflowState = JSON.parse(await readFile(path.join(root, "file-workflow.json"), "utf8")) as {
+        records: Array<{ uploadId: string; status: string }>;
+      };
+      expect(workflowState.records).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ uploadId: "archive-new", status: "completed" }),
+          expect.objectContaining({ uploadId: "archive-old", status: "awaiting_continue" }),
+        ]),
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("marks a continued archive as failed when engine execution fails", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
     const inboxDir = path.join(root, "inbox");
@@ -3770,6 +3861,48 @@ describe("polling helpers", () => {
       11,
       "Error: An unexpected failure occurred. Reset the chat or retry the request.",
     );
+  });
+
+  it("keeps the original request error when error-path audit persistence fails", async () => {
+    const appendSpy = vi.spyOn(auditLog, "appendAuditEvent").mockRejectedValue(new Error("audit write failed"));
+    const api = {
+      sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      getFile: vi.fn(),
+      downloadFile: vi.fn(),
+    };
+    const bridge = {
+      checkAccess: vi.fn().mockResolvedValue({ kind: "allow" }),
+      handleAuthorizedMessage: vi.fn().mockRejectedValue(new Error("boom")),
+    };
+
+    try {
+      await expect(
+        handleNormalizedTelegramMessage(
+          {
+            chatId: 123,
+            userId: 456,
+            chatType: "private",
+            text: "hello",
+            replyContext: undefined,
+            attachments: [],
+          },
+          {
+            api: api as never,
+            bridge: bridge as never,
+            inboxDir: path.join(os.tmpdir(), "ignored"),
+          },
+        ),
+      ).rejects.toThrow("boom");
+
+      expect(api.editMessage).toHaveBeenLastCalledWith(
+        123,
+        11,
+        "Error: An unexpected failure occurred. Reset the chat or retry the request.",
+      );
+    } finally {
+      appendSpy.mockRestore();
+    }
   });
 
   it("records categorized failures in audit metadata", async () => {

@@ -620,7 +620,7 @@ export async function handleNormalizedTelegramMessage(
       );
     }
 
-    await appendAuditEvent(path.dirname(context.inboxDir), {
+    await appendAuditEventBestEffort(path.dirname(context.inboxDir), {
       type: "update.handle",
       instanceName: context.instanceName,
       chatId: normalized.chatId,
