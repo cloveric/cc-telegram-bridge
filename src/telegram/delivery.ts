@@ -186,6 +186,7 @@ export async function handleNormalizedTelegramMessage(
   let progressEditCounter = 0;
   let lastAllowedProgressEditCounter = Number.POSITIVE_INFINITY;
   let workflowRecordId: string | undefined;
+  let archiveSummaryDelivered = false;
   let telegramOutDirPath: string | undefined;
   const stateDir = path.dirname(context.inboxDir);
   const workflowStore = new FileWorkflowStore(stateDir);
@@ -355,6 +356,10 @@ export async function handleNormalizedTelegramMessage(
           ? buildContinueAnalysisKeyboard(workflowResult.workflowRecordId)
           : undefined,
       );
+      if (workflowRecordId) {
+        archiveSummaryDelivered = true;
+        placeholderShowsResponse = true;
+      }
       if (downloadedAttachments.length > 0 && workflowResult.workflowRecordId) {
         await workflowStore.update(workflowResult.workflowRecordId, (record) => {
           record.summaryMessageId = placeholderMessageId;
@@ -483,28 +488,30 @@ export async function handleNormalizedTelegramMessage(
 
     if (workflowRecordId) {
       try {
-        await workflowStore.update(workflowRecordId, (record) => {
-          if (record.status === "processing" || record.status === "awaiting_continue") {
-            record.status = "failed";
-          }
-        });
+        if (!archiveSummaryDelivered) {
+          await workflowStore.update(workflowRecordId, (record) => {
+            if (record.status === "processing" || record.status === "awaiting_continue") {
+              record.status = "failed";
+            }
+          });
+        }
       } catch (cleanupError) {
         workflowCleanupError = cleanupError;
       }
     }
 
-    if (placeholderShowsResponse) {
+    if (placeholderShowsResponse && !archiveSummaryDelivered) {
       await context.api.sendMessage(
         normalized.chatId,
         renderCategorizedErrorMessage(failureCategory, message),
       );
-    } else if (placeholderMessageId !== undefined) {
+    } else if (!archiveSummaryDelivered && placeholderMessageId !== undefined) {
       await context.api.editMessage(
         normalized.chatId,
         placeholderMessageId,
         renderCategorizedErrorMessage(failureCategory, message),
       );
-    } else {
+    } else if (!archiveSummaryDelivered) {
       await context.api.sendMessage(
         normalized.chatId,
         renderCategorizedErrorMessage(failureCategory, message),

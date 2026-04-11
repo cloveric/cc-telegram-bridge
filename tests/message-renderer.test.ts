@@ -66,7 +66,7 @@ describe("message rendering", () => {
   it("renders categorized error and reset messages", () => {
     expect(renderSessionResetMessage()).toBe("Session reset for this chat.");
     expect(renderSessionResetMessage(true)).toBe(
-      "Session reset. Previous session state was unreadable, so the instance-wide session bindings were reset, cleared, and rebuilt.",
+      "Session reset. Previous session state was unreadable, so the instance-wide session bindings were cleared and reset.",
     );
     expect(renderCategorizedErrorMessage("write-permission", "write access denied")).toBe(
       "Error: File creation is blocked by the current write policy. Retry in a writable mode.",
@@ -103,7 +103,7 @@ describe("message rendering", () => {
         "Telegram commands:",
         "/status - show engine, session, and file task state",
         "Send files directly to analyze them in chat.",
-        "Archives pause after summary; reply \"继续分析\" or press Continue Analysis to keep going.",
+        "Archives pause after summary; reply \"继续分析\", run /continue, or press Continue Analysis to keep going.",
         "/reset - clear the current chat session",
         "/help - show this help",
       ].join("\n"),

@@ -349,6 +349,7 @@ All commands accept `--instance <name>` to target a specific bot.
 Telegram users can also use:
 
 - `/status`
+- `/continue`
 - `/reset`
 - `/help`
 

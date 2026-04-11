@@ -26,6 +26,7 @@ import { CodexAppServerAdapter } from "../src/codex/app-server-adapter.js";
 import { ProcessCodexAdapter } from "../src/codex/process-adapter.js";
 import { ClaudeStreamAdapter } from "../src/codex/claude-stream-adapter.js";
 import { parseAuditEvents } from "../src/state/audit-log.js";
+import * as auditLog from "../src/state/audit-log.js";
 
 function createDeferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
@@ -917,7 +918,7 @@ describe("polling helpers", () => {
       expect(api.editMessage).toHaveBeenLastCalledWith(
         123,
         11,
-        expect.stringContaining("Reply \"继续分析\" or press the Continue Analysis button to continue with this archive."),
+        expect.stringContaining("Reply \"继续分析\", run /continue, or press the Continue Analysis button to continue with this archive."),
         expect.objectContaining({
           inlineKeyboard: [[{ text: "Continue Analysis", callbackData: expect.stringMatching(/^continue-archive:/) }]],
         }),
@@ -1852,7 +1853,7 @@ describe("polling helpers", () => {
       expect(api.editMessage).toHaveBeenLastCalledWith(
         123,
         11,
-        'Malformed continue command. Use the Continue Analysis button or reply "继续分析" to the archive summary.',
+        'Malformed continue command. Use /continue, the Continue Analysis button, or reply "继续分析" to the archive summary.',
         undefined,
       );
     } finally {
@@ -1994,6 +1995,67 @@ describe("polling helpers", () => {
     }
   });
 
+  it("keeps a delivered archive summary visible when late bookkeeping fails", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
+    const inboxDir = path.join(root, "inbox");
+    const zipBuffer = createZipBuffer({
+      "README.md": "# hello",
+      "src/index.ts": "console.log('hi')",
+    });
+    const appendSpy = vi.spyOn(auditLog, "appendAuditEvent").mockRejectedValue(new Error("audit write failed"));
+    const api = {
+      sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      getFile: vi.fn().mockResolvedValue({ file_path: "documents/repo.zip" }),
+      downloadFile: vi.fn().mockImplementation(async (_filePath: string, destinationPath: string) => {
+        await mkdir(path.dirname(destinationPath), { recursive: true });
+        await writeFile(destinationPath, zipBuffer);
+      }),
+    };
+    const bridge = {
+      checkAccess: vi.fn().mockResolvedValue({ kind: "allow" }),
+      handleAuthorizedMessage: vi.fn().mockResolvedValue({ text: "done" }),
+    };
+
+    try {
+      await expect(
+        handleNormalizedTelegramMessage(
+          {
+            chatId: 123,
+            userId: 456,
+            chatType: "private",
+            text: "",
+            replyContext: undefined,
+            attachments: [{ fileId: "zip-1", fileName: "repo.zip", kind: "document" }],
+          },
+          {
+            api: api as never,
+            bridge: bridge as never,
+            inboxDir,
+          },
+        ),
+      ).rejects.toThrow("audit write failed");
+
+      expect(api.editMessage).toHaveBeenLastCalledWith(
+        123,
+        11,
+        expect.stringContaining("Archive summary:"),
+        expect.objectContaining({
+          inlineKeyboard: [[{ text: "Continue Analysis", callbackData: expect.stringMatching(/^continue-archive:/) }]],
+        }),
+      );
+
+      const workflowState = JSON.parse(await readFile(path.join(root, "file-workflow.json"), "utf8")) as {
+        records: Array<{ status: string; summaryMessageId?: number }>;
+      };
+      expect(workflowState.records[0]?.status).toBe("awaiting_continue");
+      expect(workflowState.records[0]?.summaryMessageId).toBe(11);
+    } finally {
+      appendSpy.mockRestore();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("bounds a long archive summary before sending it with the continue keyboard", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
     const inboxDir = path.join(root, "inbox");
@@ -2040,6 +2102,7 @@ describe("polling helpers", () => {
 
       const summaryDelivery = (api.editMessage as ReturnType<typeof vi.fn>).mock.calls.at(-1);
       expect(summaryDelivery?.[2]).toContain("Continue Analysis button");
+      expect(summaryDelivery?.[2]).toContain("run /continue");
       expect((summaryDelivery?.[2] as string).length).toBeLessThanOrEqual(3900);
       expect(summaryDelivery?.[3]).toEqual(
         expect.objectContaining({
@@ -2661,13 +2724,12 @@ describe("polling helpers", () => {
           "Telegram commands:",
           "/status - show engine, session, and file task state",
           "Send files directly to analyze them in chat.",
-          "Archives pause after summary; reply \"继续分析\" or press Continue Analysis to keep going.",
+          "Archives pause after summary; reply \"继续分析\", run /continue, or press Continue Analysis to keep going.",
           "/reset - clear the current chat session",
           "/help - show this help",
         ].join("\n"),
       );
       expect(api.editMessage).not.toHaveBeenCalledWith(123, 11, expect.stringContaining("/tasks"));
-      expect(api.editMessage).not.toHaveBeenCalledWith(123, 11, expect.stringContaining("/continue"));
       expect(bridge.handleAuthorizedMessage).not.toHaveBeenCalled();
     } finally {
       await rm(root, { recursive: true, force: true });
@@ -2714,7 +2776,7 @@ describe("polling helpers", () => {
         "Telegram commands:",
         "/status - show engine, session, and file task state",
         "Send files directly to analyze them in chat.",
-        "Archives pause after summary; reply \"继续分析\" or press Continue Analysis to keep going.",
+        "Archives pause after summary; reply \"继续分析\", run /continue, or press Continue Analysis to keep going.",
         "/reset - clear the current chat session",
         "/help - show this help",
       ].join("\n"),
@@ -2823,7 +2885,7 @@ describe("polling helpers", () => {
       expect(api.editMessage).toHaveBeenLastCalledWith(
         123,
         11,
-        "Session reset. Previous session state was unreadable, so the instance-wide session bindings were reset, cleared, and rebuilt.",
+        "Session reset. Previous session state was unreadable, so the instance-wide session bindings were cleared and reset.",
       );
       expect(JSON.parse(await readFile(path.join(root, "session.json"), "utf8"))).toEqual({ chats: [] });
       expect(await readdir(root)).toEqual(

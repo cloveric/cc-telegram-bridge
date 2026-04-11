@@ -36,7 +36,7 @@ const IMAGE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".webp"]);
 const ARCHIVE_EXTENSIONS = new Set([".zip"]);
 const MAX_DOCUMENT_TEXT_CHARS = 12_000;
 const MAX_TREE_LINES = 40;
-const ARCHIVE_CONTINUE_HINT = 'Reply "继续分析" or press the Continue Analysis button to continue with this archive.';
+const ARCHIVE_CONTINUE_HINT = 'Reply "继续分析", run /continue, or press the Continue Analysis button to continue with this archive.';
 const MAX_ARCHIVE_SUMMARY_DELIVERY_CHARS = 3900;
 
 function resolveWorkspaceUploadsDir(stateDir: string): string {
@@ -418,7 +418,7 @@ export async function prepareArchiveContinueWorkflow(input: {
   if (malformedTarget) {
     return {
       kind: "reply",
-      text: 'Malformed continue command. Use the Continue Analysis button or reply "继续分析" to the archive summary.',
+      text: 'Malformed continue command. Use /continue, the Continue Analysis button, or reply "继续分析" to the archive summary.',
     };
   }
 

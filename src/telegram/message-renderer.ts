@@ -24,7 +24,7 @@ export function renderErrorMessage(error: string): string {
 
 export function renderSessionResetMessage(repaired = false): string {
   return repaired
-    ? "Session reset. Previous session state was unreadable, so the instance-wide session bindings were reset, cleared, and rebuilt."
+    ? "Session reset. Previous session state was unreadable, so the instance-wide session bindings were cleared and reset."
     : "Session reset for this chat.";
 }
 
@@ -33,7 +33,7 @@ export function renderTelegramHelpMessage(): string {
     "Telegram commands:",
     "/status - show engine, session, and file task state",
     "Send files directly to analyze them in chat.",
-    "Archives pause after summary; reply \"继续分析\" or press Continue Analysis to keep going.",
+    "Archives pause after summary; reply \"继续分析\", run /continue, or press Continue Analysis to keep going.",
     "/reset - clear the current chat session",
     "/help - show this help",
   ].join("\n");

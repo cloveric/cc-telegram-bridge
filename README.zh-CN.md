@@ -350,6 +350,7 @@ Telegram 消息 → 标准化 → 访问检查 → 聊天队列（串行）
 Telegram 用户也可以使用：
 
 - `/status`
+- `/continue`
 - `/reset`
 - `/help`
 
