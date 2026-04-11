@@ -349,6 +349,11 @@ export async function handleNormalizedTelegramMessage(
     if (workflowResult?.kind === "reply") {
       workflowRecordId = workflowResult.workflowRecordId;
       const deliveryText = workflowRecordId ? boundArchiveSummaryForTelegram(workflowResult.text) : workflowResult.text;
+      if (downloadedAttachments.length > 0 && workflowResult.workflowRecordId) {
+        await workflowStore.update(workflowResult.workflowRecordId, (record) => {
+          record.summaryMessageId = placeholderMessageId;
+        });
+      }
       await context.api.editMessage(
         normalized.chatId,
         placeholderMessageId,
@@ -360,11 +365,6 @@ export async function handleNormalizedTelegramMessage(
       if (workflowRecordId) {
         archiveSummaryDelivered = true;
         placeholderShowsResponse = true;
-      }
-      if (downloadedAttachments.length > 0 && workflowResult.workflowRecordId) {
-        await workflowStore.update(workflowResult.workflowRecordId, (record) => {
-          record.summaryMessageId = placeholderMessageId;
-        });
       }
       await appendAuditEvent(stateDir, {
         type: "update.handle",

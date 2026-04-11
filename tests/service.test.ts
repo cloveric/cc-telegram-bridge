@@ -2017,6 +2017,7 @@ describe("polling helpers", () => {
       "README.md": "# hello",
       "src/index.ts": "console.log('hi')",
     });
+    const updateSpy = vi.spyOn(FileWorkflowStore.prototype, "update");
     const api = {
       sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
       editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
@@ -2053,7 +2054,9 @@ describe("polling helpers", () => {
       };
       expect(workflowState.records[0]?.status).toBe("awaiting_continue");
       expect(workflowState.records[0]?.summaryMessageId).toBe(11);
+      expect(updateSpy.mock.invocationCallOrder[0]).toBeLessThan(api.editMessage.mock.invocationCallOrder.at(-1)!);
     } finally {
+      updateSpy.mockRestore();
       await rm(root, { recursive: true, force: true });
     }
   });
@@ -2177,7 +2180,7 @@ describe("polling helpers", () => {
     }
   });
 
-  it("does not leave an archive waiting for continue when summary delivery fails", async () => {
+  it("persists the archive summary message id even when summary delivery fails", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
     const inboxDir = path.join(root, "inbox");
     const zipBuffer = createZipBuffer({
@@ -2226,7 +2229,7 @@ describe("polling helpers", () => {
         records: Array<{ status: string; summaryMessageId?: number }>;
       };
       expect(workflowState.records[0]?.status).toBe("failed");
-      expect(workflowState.records[0]?.summaryMessageId).toBeUndefined();
+      expect(workflowState.records[0]?.summaryMessageId).toBe(11);
       expect(api.editMessage).toHaveBeenLastCalledWith(
         123,
         11,
