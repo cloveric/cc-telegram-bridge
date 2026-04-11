@@ -67,10 +67,10 @@ describe("message rendering", () => {
   it("renders categorized error and reset messages", () => {
     expect(renderSessionResetMessage()).toBe("Session reset for this chat.");
     expect(renderSessionResetMessage(true)).toBe(
-      "Session reset. Previous session state was unreadable, so the instance-wide session bindings were cleared and reset.",
+      "Session state was unreadable. An operator needs to repair the instance session state before this chat can be reset.",
     );
     expect(renderSessionStateErrorMessage(true)).toBe(
-      "Error: Session state is unavailable right now. Reset the chat and try again.",
+      "Error: Session state is unreadable right now. The operator needs to repair session state and retry.",
     );
     expect(renderSessionStateErrorMessage(false)).toBe(
       "Error: Session state is unavailable right now. The operator needs to restore read access and retry.",
@@ -97,7 +97,7 @@ describe("message rendering", () => {
       "Error: Internal workflow state is unavailable right now. Retry the request later or ask the operator to inspect the service state.",
     );
     expect(renderCategorizedErrorMessage("session-state", "session store unavailable")).toBe(
-      "Error: Session state is unavailable right now. Reset the chat and try again.",
+      "Error: Session state is unavailable right now. The operator needs to repair session state and retry.",
     );
     expect(renderCategorizedErrorMessage("unknown", "boom")).toBe(
       "Error: An unexpected failure occurred. Reset the chat or retry the request.",

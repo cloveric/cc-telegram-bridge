@@ -1879,10 +1879,7 @@ describe("polling helpers", () => {
       expect(bridge.handleAuthorizedMessage).toHaveBeenCalledWith(
         expect.objectContaining({
           text: expect.stringContaining("archive summary one"),
-          replyContext: {
-            messageId: 41,
-            text: "archive summary one",
-          },
+          replyContext: undefined,
         }),
       );
       expect(bridge.handleAuthorizedMessage).not.toHaveBeenCalledWith(
@@ -3242,7 +3239,7 @@ describe("polling helpers", () => {
       expect(api.editMessage).toHaveBeenLastCalledWith(
         123,
         11,
-        "Error: Session state is unavailable right now. Reset the chat and try again.",
+        "Error: Session state is unreadable right now. The operator needs to repair session state and retry.",
       );
       expect(adapter.sendUserMessage).not.toHaveBeenCalled();
     } finally {
@@ -3583,7 +3580,7 @@ describe("polling helpers", () => {
     }
   });
 
-  it("repairs unreadable session state when /reset is sent", async () => {
+  it("shows operator guidance when unreadable session state is encountered on /reset", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
     const inboxDir = path.join(root, "inbox");
     await writeFile(path.join(root, "session.json"), "{not valid json", "utf8");
@@ -3599,31 +3596,30 @@ describe("polling helpers", () => {
     };
 
     try {
-      await handleNormalizedTelegramMessage(
-        {
-          chatId: 123,
-          userId: 456,
-          chatType: "private",
-          text: "/reset",
-          replyContext: undefined,
-          attachments: [],
-        },
-        {
-          api: api as never,
-          bridge: bridge as never,
-          inboxDir,
-        },
-      );
+      await expect(
+        handleNormalizedTelegramMessage(
+          {
+            chatId: 123,
+            userId: 456,
+            chatType: "private",
+            text: "/reset",
+            replyContext: undefined,
+            attachments: [],
+          },
+          {
+            api: api as never,
+            bridge: bridge as never,
+            inboxDir,
+          },
+        ),
+      ).rejects.toThrow("The operator needs to repair session state and retry.");
 
       expect(api.editMessage).toHaveBeenLastCalledWith(
         123,
         11,
-        "Session reset. Previous session state was unreadable, so the instance-wide session bindings were cleared and reset.",
+        "Error: Session state is unreadable right now. The operator needs to repair session state and retry.",
       );
-      expect(JSON.parse(await readFile(path.join(root, "session.json"), "utf8"))).toEqual({ chats: [] });
-      expect(await readdir(root)).toEqual(
-        expect.arrayContaining([expect.stringMatching(/^session\.json\.corrupt\..+\.bak$/)]),
-      );
+      await expect(readFile(path.join(root, "session.json"), "utf8")).resolves.toBe("{not valid json");
       expect(bridge.handleAuthorizedMessage).not.toHaveBeenCalled();
     } finally {
       await rm(root, { recursive: true, force: true });
@@ -3680,8 +3676,12 @@ describe("polling helpers", () => {
   it("keeps /reset on explicit session-state guidance when wrapped permission failures lose errno metadata", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
     const inboxDir = path.join(root, "inbox");
-    const resetSpy = vi.spyOn(SessionStore.prototype, "removeByChatIdRecovering");
-    resetSpy.mockRejectedValueOnce(new Error("Session state permission denied while reading bindings"));
+    const inspectSpy = vi.spyOn(SessionStore.prototype, "inspect");
+    inspectSpy.mockResolvedValueOnce({
+      state: { chats: [] },
+      warning: "session state unreadable",
+      repairable: false,
+    });
     const api = {
       sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
       editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
@@ -3710,7 +3710,7 @@ describe("polling helpers", () => {
             inboxDir,
           },
         ),
-      ).rejects.toThrow("Session state permission denied while reading bindings");
+      ).rejects.toThrow("The operator needs to restore read access and retry.");
 
       expect(api.editMessage).toHaveBeenLastCalledWith(
         123,
@@ -3724,7 +3724,7 @@ describe("polling helpers", () => {
       );
       expect(bridge.handleAuthorizedMessage).not.toHaveBeenCalled();
     } finally {
-      resetSpy.mockRestore();
+      inspectSpy.mockRestore();
       await rm(root, { recursive: true, force: true });
     }
   });
