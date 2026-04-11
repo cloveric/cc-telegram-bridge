@@ -339,6 +339,7 @@ All commands accept `--instance <name>` to target a specific bot.
 ## Stable Beta Commands
 
 - `telegram service doctor --instance <name>`
+- `telegram session list --instance <name>`
 - `telegram session inspect --instance <name> <chat-id>`
 - `telegram session reset --instance <name> <chat-id>`
 - `telegram task list --instance <name>`

@@ -340,6 +340,7 @@ Telegram 消息 → 标准化 → 访问检查 → 聊天队列（串行）
 ## 稳定 Beta 命令
 
 - `telegram service doctor --instance <name>`
+- `telegram session list --instance <name>`
 - `telegram session inspect --instance <name> <chat-id>`
 - `telegram session reset --instance <name> <chat-id>`
 - `telegram task list --instance <name>`

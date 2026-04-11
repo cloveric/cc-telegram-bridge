@@ -182,6 +182,48 @@ describe("FileWorkflowStore", () => {
     }
   });
 
+  it("does not fall back to the latest archive when a reply-targeted summary message id is stale", async () => {
+    const stateDir = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
+    const store = new FileWorkflowStore(stateDir);
+
+    try {
+      await store.append({
+        uploadId: "one",
+        chatId: 100,
+        userId: 100,
+        kind: "archive",
+        status: "awaiting_continue",
+        sourceFiles: ["a.zip"],
+        derivedFiles: [],
+        summary: "first",
+        summaryMessageId: 41,
+        extractedPath: "workspace/.telegram-files/one/extracted",
+        createdAt: "2026-04-10T00:00:00.000Z",
+        updatedAt: "2026-04-10T00:00:00.000Z",
+      });
+      await store.append({
+        uploadId: "two",
+        chatId: 100,
+        userId: 100,
+        kind: "archive",
+        status: "awaiting_continue",
+        sourceFiles: ["b.zip"],
+        derivedFiles: [],
+        summary: "second",
+        summaryMessageId: 42,
+        extractedPath: "workspace/.telegram-files/two/extracted",
+        createdAt: "2026-04-10T00:01:00.000Z",
+        updatedAt: "2026-04-10T00:01:00.000Z",
+      });
+
+      await expect(store.beginArchiveContinuation({ chatId: 100, summaryMessageId: 99 })).resolves.toBeNull();
+      await expect(store.find("one")).resolves.toEqual(expect.objectContaining({ status: "awaiting_continue" }));
+      await expect(store.find("two")).resolves.toEqual(expect.objectContaining({ status: "awaiting_continue" }));
+    } finally {
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  });
+
   it("rejects non-canonical workflow timestamps", async () => {
     const stateDir = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
     const store = new FileWorkflowStore(stateDir);

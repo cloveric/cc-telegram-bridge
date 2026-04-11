@@ -382,6 +382,7 @@ export async function prepareArchiveContinueWorkflow(input: {
   }
 
   const store = new FileWorkflowStore(input.stateDir);
+  const hasReplyTarget = targetUploadId === undefined && input.replyContext?.messageId !== undefined;
   const archiveRecord = await store.beginArchiveContinuation({
     chatId: input.chatId,
     uploadId: targetUploadId,
@@ -390,7 +391,7 @@ export async function prepareArchiveContinueWorkflow(input: {
   if (!archiveRecord) {
     return {
       kind: "reply",
-      text: targetUploadId
+      text: targetUploadId || hasReplyTarget
         ? "That archive is no longer waiting for continued analysis in this chat."
         : "There is no archive waiting for continued analysis in this chat.",
     };

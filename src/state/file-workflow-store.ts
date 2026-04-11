@@ -272,7 +272,7 @@ export class FileWorkflowStore {
         input.uploadId
           ? matchingRecords.find((entry) => entry.uploadId === input.uploadId)
           : input.summaryMessageId !== undefined
-            ? matchingRecords.find((entry) => entry.summaryMessageId === input.summaryMessageId) ?? matchingRecords.at(-1)
+            ? matchingRecords.find((entry) => entry.summaryMessageId === input.summaryMessageId) ?? null
             : matchingRecords.at(-1);
 
       if (!record) {

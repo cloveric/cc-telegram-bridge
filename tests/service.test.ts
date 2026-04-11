@@ -1342,6 +1342,89 @@ describe("polling helpers", () => {
     }
   });
 
+  it("replies with a targeted archive-stale message when a replied summary no longer matches any awaiting archive", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
+    const inboxDir = path.join(root, "inbox");
+    await writeFile(
+      path.join(root, "file-workflow.json"),
+      JSON.stringify({
+        records: [
+          {
+            uploadId: "archive-1",
+            chatId: 123,
+            userId: 456,
+            kind: "archive",
+            status: "completed",
+            sourceFiles: ["repo.zip"],
+            derivedFiles: [],
+            summary: "archive summary one",
+            summaryMessageId: 41,
+            extractedPath: "workspace/.telegram-files/archive-1/extracted",
+            createdAt: "2026-04-10T00:00:00.000Z",
+            updatedAt: "2026-04-10T00:02:00.000Z",
+          },
+          {
+            uploadId: "archive-2",
+            chatId: 123,
+            userId: 456,
+            kind: "archive",
+            status: "awaiting_continue",
+            sourceFiles: ["repo-2.zip"],
+            derivedFiles: [],
+            summary: "archive summary two",
+            summaryMessageId: 42,
+            extractedPath: "workspace/.telegram-files/archive-2/extracted",
+            createdAt: "2026-04-10T00:01:00.000Z",
+            updatedAt: "2026-04-10T00:01:00.000Z",
+          },
+        ],
+      }),
+      "utf8",
+    );
+    const api = {
+      sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      getFile: vi.fn(),
+      downloadFile: vi.fn(),
+    };
+    const bridge = {
+      checkAccess: vi.fn().mockResolvedValue({ kind: "allow" }),
+      handleAuthorizedMessage: vi.fn().mockResolvedValue({ text: "continued" }),
+    };
+
+    try {
+      await handleNormalizedTelegramMessage(
+        {
+          chatId: 123,
+          userId: 456,
+          chatType: "private",
+          text: "继续分析 看看结构",
+          replyContext: {
+            messageId: 41,
+            text: "archive summary one",
+          },
+          attachments: [],
+        },
+        {
+          api: api as never,
+          bridge: bridge as never,
+          inboxDir,
+        },
+      );
+
+      expect(bridge.handleAuthorizedMessage).not.toHaveBeenCalled();
+      expect(api.sendMessage).toHaveBeenCalledWith(123, "Received. Starting your session...");
+      expect(api.editMessage).toHaveBeenLastCalledWith(
+        123,
+        11,
+        "That archive is no longer waiting for continued analysis in this chat.",
+        undefined,
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("stores the archive summary message id for reply-based continuation targeting", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
     const inboxDir = path.join(root, "inbox");
