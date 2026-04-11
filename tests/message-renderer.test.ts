@@ -81,7 +81,7 @@ describe("message rendering", () => {
       "Error: Telegram delivery is temporarily unavailable. Retry the request or try again later.",
     );
     expect(renderCategorizedErrorMessage("engine-cli", "engine failed to start")).toBe(
-      "Error: The engine process failed to start. Restart the instance and retry.",
+      "Error: The engine runtime failed. Restart the instance and retry.",
     );
     expect(renderCategorizedErrorMessage("file-workflow", "archive extraction failed")).toBe(
       "Error: File handling failed while preparing your request. Retry with a smaller or different file.",
@@ -104,6 +104,7 @@ describe("message rendering", () => {
         "/status - show engine, session, and file task state",
         "Send files directly to analyze them in chat.",
         "Archives pause after summary; reply \"继续分析\", run /continue, or press Continue Analysis to keep going.",
+        "/continue - resume the current archive after the summary",
         "/reset - clear the current chat session",
         "/help - show this help",
       ].join("\n"),

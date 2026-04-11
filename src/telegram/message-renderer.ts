@@ -34,6 +34,7 @@ export function renderTelegramHelpMessage(): string {
     "/status - show engine, session, and file task state",
     "Send files directly to analyze them in chat.",
     "Archives pause after summary; reply \"继续分析\", run /continue, or press Continue Analysis to keep going.",
+    "/continue - resume the current archive after the summary",
     "/reset - clear the current chat session",
     "/help - show this help",
   ].join("\n");
@@ -84,7 +85,7 @@ export function renderCategorizedErrorMessage(category: FailureCategory, detail:
   }
 
   if (category === "engine-cli") {
-    return "Error: The engine process failed to start. Restart the instance and retry.";
+    return "Error: The engine runtime failed. Restart the instance and retry.";
   }
 
   if (category === "file-workflow") {
