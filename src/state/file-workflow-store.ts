@@ -253,6 +253,26 @@ export class FileWorkflowStore {
     ) ?? null;
   }
 
+  async getArchiveContinuationTarget(input: {
+    chatId: number;
+    uploadId?: string;
+    summaryMessageId?: number;
+  }): Promise<FileWorkflowRecord | null> {
+    if (input.uploadId === undefined && input.summaryMessageId === undefined) {
+      return null;
+    }
+
+    const state = await this.load();
+    return state.records.find((record) =>
+      record.chatId === input.chatId &&
+      record.kind === "archive" &&
+      (
+        (input.uploadId !== undefined && record.uploadId === input.uploadId) ||
+        (input.summaryMessageId !== undefined && record.summaryMessageId === input.summaryMessageId)
+      ),
+    ) ?? null;
+  }
+
   async beginArchiveContinuation(input: {
     chatId: number;
     uploadId?: string;

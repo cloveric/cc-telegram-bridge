@@ -20,6 +20,7 @@ import { renderErrorMessage, renderWorkingMessage } from "../src/telegram/messag
 import { CodexAppServerAdapter } from "../src/codex/app-server-adapter.js";
 import { ProcessCodexAdapter } from "../src/codex/process-adapter.js";
 import { ClaudeStreamAdapter } from "../src/codex/claude-stream-adapter.js";
+import { parseAuditEvents } from "../src/state/audit-log.js";
 
 function createDeferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
@@ -580,6 +581,46 @@ describe("polling helpers", () => {
     expect(bridge.handleAuthorizedMessage).not.toHaveBeenCalled();
   });
 
+  it("appends poll-side getUpdates failures to the audit stream with a failure category", async () => {
+    const logger = {
+      error: vi.fn(),
+    };
+    const root = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
+    const inboxDir = path.join(root, "inbox");
+    const api = {
+      getUpdates: vi.fn().mockRejectedValue(new Error("temporary Telegram API failure")),
+    };
+    const bridge = {
+      checkAccess: vi.fn().mockResolvedValue({ kind: "allow" }),
+      handleAuthorizedMessage: vi.fn(),
+    };
+
+    try {
+      await expect(
+        pollTelegramUpdatesOnce(api as never, bridge as never, inboxDir, logger, 7),
+      ).resolves.toEqual({
+        offset: 7,
+        hadFetchError: true,
+        hadUpdates: false,
+        conflict: false,
+      });
+
+      const events = parseAuditEvents(await readFile(path.join(root, "audit.log.jsonl"), "utf8"));
+      expect(events).toEqual([
+        expect.objectContaining({
+          type: "poll.fetch",
+          outcome: "error",
+          detail: "temporary Telegram API failure",
+          metadata: expect.objectContaining({
+            failureCategory: "telegram-delivery",
+          }),
+        }),
+      ]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("treats aborted polling as a clean shutdown instead of a fetch failure", async () => {
     const logger = {
       error: vi.fn(),
@@ -601,6 +642,45 @@ describe("polling helpers", () => {
       conflict: false,
     });
     expect(logger.error).not.toHaveBeenCalled();
+  });
+
+  it("appends poll conflicts to the audit stream with telegram-conflict classification", async () => {
+    const logger = {
+      error: vi.fn(),
+    };
+    const root = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
+    const inboxDir = path.join(root, "inbox");
+    const api = {
+      getUpdates: vi.fn().mockRejectedValue(new Error("409 Conflict: terminated by other getUpdates request")),
+    };
+    const bridge = {
+      checkAccess: vi.fn().mockResolvedValue({ kind: "allow" }),
+      handleAuthorizedMessage: vi.fn(),
+    };
+
+    try {
+      await expect(
+        pollTelegramUpdatesOnce(api as never, bridge as never, inboxDir, logger, 7),
+      ).resolves.toEqual({
+        offset: 7,
+        hadFetchError: true,
+        hadUpdates: false,
+        conflict: true,
+      });
+
+      const events = parseAuditEvents(await readFile(path.join(root, "audit.log.jsonl"), "utf8"));
+      expect(events).toEqual([
+        expect.objectContaining({
+          type: "poll.fetch",
+          outcome: "error",
+          metadata: expect.objectContaining({
+            failureCategory: "telegram-conflict",
+          }),
+        }),
+      ]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   it("does not enter immediate retry when updates failed before offset advanced", async () => {
@@ -1342,7 +1422,7 @@ describe("polling helpers", () => {
     }
   });
 
-  it("replies with a targeted archive-stale message when a replied summary no longer matches any awaiting archive", async () => {
+  it("replies with an already-completed message when a replied summary targets a completed archive", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
     const inboxDir = path.join(root, "inbox");
     await writeFile(
@@ -1417,7 +1497,72 @@ describe("polling helpers", () => {
       expect(api.editMessage).toHaveBeenLastCalledWith(
         123,
         11,
-        "That archive is no longer waiting for continued analysis in this chat.",
+        "That archive has already completed continued analysis in this chat.",
+        undefined,
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("replies with an already-processing message when the targeted continue button is pressed again mid-run", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
+    const inboxDir = path.join(root, "inbox");
+    await writeFile(
+      path.join(root, "file-workflow.json"),
+      JSON.stringify({
+        records: [
+          {
+            uploadId: "archive-1",
+            chatId: 123,
+            userId: 456,
+            kind: "archive",
+            status: "processing",
+            sourceFiles: ["repo.zip"],
+            derivedFiles: [],
+            summary: "archive summary one",
+            summaryMessageId: 41,
+            extractedPath: "workspace/.telegram-files/archive-1/extracted",
+            createdAt: "2026-04-10T00:00:00.000Z",
+            updatedAt: "2026-04-10T00:01:00.000Z",
+          },
+        ],
+      }),
+      "utf8",
+    );
+    const api = {
+      sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      answerCallbackQuery: vi.fn().mockResolvedValue(undefined),
+      getFile: vi.fn(),
+      downloadFile: vi.fn(),
+    };
+    const bridge = {
+      checkAccess: vi.fn().mockResolvedValue({ kind: "allow" }),
+      handleAuthorizedMessage: vi.fn().mockResolvedValue({ text: "continued" }),
+    };
+    const normalized = normalizeUpdate({
+      update_id: 99,
+      callback_query: {
+        id: "cb-1",
+        from: { id: 456 },
+        message: { message_id: 41, chat: { id: 123, type: "private" }, text: "Archive summary" },
+        data: "continue-archive:archive-1",
+      },
+    });
+
+    try {
+      await handleNormalizedTelegramMessage(normalized!, {
+        api: api as never,
+        bridge: bridge as never,
+        inboxDir,
+      });
+
+      expect(bridge.handleAuthorizedMessage).not.toHaveBeenCalled();
+      expect(api.editMessage).toHaveBeenLastCalledWith(
+        123,
+        11,
+        "That archive is already being processed in this chat.",
         undefined,
       );
     } finally {

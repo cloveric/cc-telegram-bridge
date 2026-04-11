@@ -394,6 +394,48 @@ describe("telegram service commands", () => {
     }
   });
 
+  it("reports a poll conflict failure category in doctor output from the audit stream", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
+    const messages: string[] = [];
+    const stateDir = path.join(tempDir, ".codex", "channels", "telegram", "alpha");
+    const lockPath = resolveInstanceLockPath(stateDir);
+
+    try {
+      await mkdir(stateDir, { recursive: true });
+      await writeFile(
+        lockPath,
+        JSON.stringify({
+          pid: 12345,
+          token: "token",
+          acquiredAt: new Date().toISOString(),
+        }),
+        "utf8",
+      );
+      await writeFile(
+        path.join(stateDir, "audit.log.jsonl"),
+        [
+          '{"timestamp":"2026-04-08T10:00:00.000Z","type":"poll.fetch","outcome":"error","detail":"409 Conflict: terminated by other getUpdates request","metadata":{"failureCategory":"telegram-conflict"}}',
+        ].join("\n") + "\n",
+        "utf8",
+      );
+
+      const handled = await runCli(["telegram", "service", "doctor", "--instance", "alpha"], {
+        env: { USERPROFILE: tempDir },
+        logger: { log: (message) => messages.push(message) },
+        serviceDeps: {
+          cwd: REPO_ROOT,
+          isProcessAlive: (pid) => pid === 12345,
+          isExpectedServiceProcess: (pid) => pid === 12345,
+        },
+      });
+
+      expect(handled).toBe(true);
+      expect(messages[0]).toContain("latest failure category: telegram-conflict");
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
   it("keeps doctor healthy when tasks are only waiting for manual continuation", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
     const messages: string[] = [];

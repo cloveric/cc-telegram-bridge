@@ -430,9 +430,32 @@ export async function prepareArchiveContinueWorkflow(input: {
     summaryMessageId: targetUploadId ? undefined : input.replyContext?.messageId,
   });
   if (!archiveRecord) {
+    const explicitTarget = targetUploadId !== undefined || hasReplyTarget;
+    if (explicitTarget) {
+      const targetedRecord = await store.getArchiveContinuationTarget({
+        chatId: input.chatId,
+        uploadId: targetUploadId,
+        summaryMessageId: targetUploadId ? undefined : input.replyContext?.messageId,
+      });
+
+      if (targetedRecord?.status === "processing") {
+        return {
+          kind: "reply",
+          text: "That archive is already being processed in this chat.",
+        };
+      }
+
+      if (targetedRecord?.status === "completed") {
+        return {
+          kind: "reply",
+          text: "That archive has already completed continued analysis in this chat.",
+        };
+      }
+    }
+
     return {
       kind: "reply",
-      text: targetUploadId || hasReplyTarget
+      text: explicitTarget
         ? "That archive is no longer waiting for continued analysis in this chat."
         : "There is no archive waiting for continued analysis in this chat.",
     };
