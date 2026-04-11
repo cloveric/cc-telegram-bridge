@@ -14,9 +14,14 @@ import {
   readInstanceBotTokenFromEnvFile,
 } from "../src/service.js";
 import { ChatQueue } from "../src/runtime/chat-queue.js";
+import { classifyFailure } from "../src/runtime/error-classification.js";
 import { handleNormalizedTelegramMessage } from "../src/telegram/delivery.js";
 import { normalizeUpdate } from "../src/telegram/update-normalizer.js";
-import { renderErrorMessage, renderWorkingMessage } from "../src/telegram/message-renderer.js";
+import {
+  renderCategorizedErrorMessage,
+  renderErrorMessage,
+  renderWorkingMessage,
+} from "../src/telegram/message-renderer.js";
 import { CodexAppServerAdapter } from "../src/codex/app-server-adapter.js";
 import { ProcessCodexAdapter } from "../src/codex/process-adapter.js";
 import { ClaudeStreamAdapter } from "../src/codex/claude-stream-adapter.js";
@@ -1208,6 +1213,157 @@ describe("polling helpers", () => {
       expect(finalState.records[0]?.status).toBe("failed");
     } finally {
       allowFailure.resolve();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("does not mark a continued archive completed until Telegram delivery fully succeeds", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
+    const inboxDir = path.join(root, "inbox");
+    await writeFile(
+      path.join(root, "config.json"),
+      JSON.stringify({ engine: "codex" }) + "\n",
+      "utf8",
+    );
+    await writeFile(
+      path.join(root, "file-workflow.json"),
+      JSON.stringify({
+        records: [
+          {
+            uploadId: "archive-1",
+            chatId: 123,
+            userId: 456,
+            kind: "archive",
+            status: "awaiting_continue",
+            sourceFiles: ["repo.zip"],
+            derivedFiles: [],
+            summary: "archive summary one",
+            extractedPath: "workspace/.telegram-files/archive-1/extracted",
+            createdAt: "2026-04-10T00:00:00.000Z",
+            updatedAt: "2026-04-10T00:00:00.000Z",
+          },
+        ],
+      }),
+      "utf8",
+    );
+    const api = {
+      sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      sendDocument: vi.fn().mockRejectedValue(new Error("sendDocument failed after response")),
+      getFile: vi.fn(),
+      downloadFile: vi.fn(),
+    };
+    const bridge = {
+      checkAccess: vi.fn().mockResolvedValue({ kind: "allow" }),
+      handleAuthorizedMessage: vi.fn().mockImplementation(async ({ requestOutputDir }: { requestOutputDir?: string }) => {
+        if (!requestOutputDir) {
+          throw new Error("missing request output dir");
+        }
+
+        await writeFile(path.join(requestOutputDir, "report.txt"), "hello from workflow", "utf8");
+        return { text: "continuation complete" };
+      }),
+    };
+
+    try {
+      await expect(
+        handleNormalizedTelegramMessage(
+          {
+            chatId: 123,
+            userId: 456,
+            chatType: "private",
+            text: "继续分析 并生成文件发给我",
+            replyContext: undefined,
+            attachments: [],
+          },
+          {
+            api: api as never,
+            bridge: bridge as never,
+            inboxDir,
+          },
+        ),
+      ).rejects.toThrow("sendDocument failed after response");
+
+      const workflowState = JSON.parse(await readFile(path.join(root, "file-workflow.json"), "utf8")) as {
+        records: Array<{ status: string }>;
+      };
+      expect(workflowState.records[0]?.status).toBe("failed");
+      expect(api.editMessage).toHaveBeenCalledWith(123, 11, "continuation complete");
+      expect(api.sendMessage).toHaveBeenLastCalledWith(
+        123,
+        "Error: Telegram delivery is temporarily unavailable. Retry the request or try again later.",
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("still delivers the categorized Telegram error when workflow cleanup fails in catch", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
+    const inboxDir = path.join(root, "inbox");
+    await writeFile(
+      path.join(root, "file-workflow.json"),
+      JSON.stringify({
+        records: [
+          {
+            uploadId: "archive-1",
+            chatId: 123,
+            userId: 456,
+            kind: "archive",
+            status: "awaiting_continue",
+            sourceFiles: ["repo.zip"],
+            derivedFiles: [],
+            summary: "archive summary one",
+            extractedPath: "workspace/.telegram-files/archive-1/extracted",
+            createdAt: "2026-04-10T00:00:00.000Z",
+            updatedAt: "2026-04-10T00:00:00.000Z",
+          },
+        ],
+      }),
+      "utf8",
+    );
+    const updateSpy = vi.spyOn((await import("../src/state/file-workflow-store.js")).FileWorkflowStore.prototype, "update")
+      .mockRejectedValue(new Error("workflow cleanup write failed"));
+    const api = {
+      sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      getFile: vi.fn(),
+      downloadFile: vi.fn(),
+    };
+    const bridge = {
+      checkAccess: vi.fn().mockResolvedValue({ kind: "allow" }),
+      handleAuthorizedMessage: vi.fn().mockRejectedValue(new Error("engine failed during continuation")),
+    };
+
+    try {
+      await expect(
+        handleNormalizedTelegramMessage(
+          {
+            chatId: 123,
+            userId: 456,
+            chatType: "private",
+            text: "继续分析 看看结构",
+            replyContext: undefined,
+            attachments: [],
+          },
+          {
+            api: api as never,
+            bridge: bridge as never,
+            inboxDir,
+          },
+        ),
+      ).rejects.toThrow("engine failed during continuation");
+
+      expect(api.editMessage).toHaveBeenLastCalledWith(
+        123,
+        11,
+        renderCategorizedErrorMessage(
+          classifyFailure(new Error("engine failed during continuation")),
+          "engine failed during continuation",
+        ),
+      );
+    } finally {
+      updateSpy.mockRestore();
       await rm(root, { recursive: true, force: true });
     }
   });

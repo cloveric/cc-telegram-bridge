@@ -41,6 +41,7 @@ async function loadEngine(stateDir: string): Promise<"codex" | "claude"> {
     return "codex";
   }
 }
+
 import {
   chunkTelegramMessage,
   renderAccessCheckMessage,
@@ -420,12 +421,6 @@ export async function handleNormalizedTelegramMessage(
     lastAllowedProgressEditCounter = progressEditCounter;
     await progressEditChain;
 
-    if (workflowRecordId) {
-      await workflowStore.update(workflowRecordId, (record) => {
-        record.status = "completed";
-      });
-    }
-
     if (result.usage) {
       const usageStore = new UsageStore(stateDir);
       await usageStore.record({
@@ -453,6 +448,13 @@ export async function handleNormalizedTelegramMessage(
         await context.api.sendDocument(normalized.chatId, file.name, contents);
       }
     }
+
+    if (workflowRecordId) {
+      await workflowStore.update(workflowRecordId, (record) => {
+        record.status = "completed";
+      });
+    }
+
     await appendAuditEvent(path.dirname(context.inboxDir), {
       type: "update.handle",
       instanceName: context.instanceName,
@@ -469,33 +471,39 @@ export async function handleNormalizedTelegramMessage(
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    const failureCategory = classifyFailure(error);
+    let workflowCleanupError: unknown;
     progressEditsClosed = true;
     lastAllowedProgressEditCounter = progressEditCounter;
     await progressEditChain;
 
     if (workflowRecordId) {
-      await workflowStore.update(workflowRecordId, (record) => {
-        if (record.status === "processing" || record.status === "awaiting_continue") {
-          record.status = "failed";
-        }
-      });
+      try {
+        await workflowStore.update(workflowRecordId, (record) => {
+          if (record.status === "processing" || record.status === "awaiting_continue") {
+            record.status = "failed";
+          }
+        });
+      } catch (cleanupError) {
+        workflowCleanupError = cleanupError;
+      }
     }
 
     if (placeholderShowsResponse) {
       await context.api.sendMessage(
         normalized.chatId,
-        renderCategorizedErrorMessage(classifyFailure(error), message),
+        renderCategorizedErrorMessage(failureCategory, message),
       );
     } else if (placeholderMessageId !== undefined) {
       await context.api.editMessage(
         normalized.chatId,
         placeholderMessageId,
-        renderCategorizedErrorMessage(classifyFailure(error), message),
+        renderCategorizedErrorMessage(failureCategory, message),
       );
     } else {
       await context.api.sendMessage(
         normalized.chatId,
-        renderCategorizedErrorMessage(classifyFailure(error), message),
+        renderCategorizedErrorMessage(failureCategory, message),
       );
     }
 
@@ -510,7 +518,13 @@ export async function handleNormalizedTelegramMessage(
       metadata: {
         durationMs: Date.now() - startedAt,
         attachments: normalized.attachments.length,
-        failureCategory: classifyFailure(error),
+        failureCategory,
+        workflowCleanupError:
+          workflowCleanupError === undefined
+            ? undefined
+            : workflowCleanupError instanceof Error
+              ? workflowCleanupError.message
+              : String(workflowCleanupError),
       },
     });
 
