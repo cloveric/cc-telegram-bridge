@@ -122,6 +122,7 @@ function formatSessionList(
 
   if (warning) {
     lines.push(`Warning: ${warning}`);
+    return lines.join("\n");
   }
 
   if (sessions.length === 0) {
@@ -157,6 +158,7 @@ function formatTaskList(instanceName: string, result: Awaited<ReturnType<typeof 
 
   if (result.warning) {
     lines.push(`Warning: ${result.warning}`);
+    return lines.join("\n");
   }
 
   if (result.tasks.length === 0) {
@@ -420,6 +422,7 @@ async function runSessionCommand(argv: string[], env: InstanceTokenEnv, logger: 
     const result = await inspectSessionForChat(env, instanceName, chatId);
     if (result.warning === SESSION_STATE_UNREADABLE_WARNING) {
       logger.log(`Session state unreadable for instance "${instanceName}".`);
+      return true;
     }
     if (!result.session) {
       logger.log(`No session binding found for chat ${chatId} in instance "${instanceName}".`);
@@ -482,6 +485,7 @@ async function runTaskCommand(argv: string[], env: InstanceTokenEnv, logger: Cli
 
     if (result.warning === FILE_WORKFLOW_STATE_UNREADABLE_WARNING) {
       logger.log(`Task state unreadable for instance "${instanceName}".`);
+      return true;
     }
 
     if (!result.task) {
@@ -897,9 +901,9 @@ Commands:
   access <pair|policy|allow|revoke> [--instance <name>]
                                               Manage access control
   status [--instance <name>]                  Show access policy and paired users
+  session list [--instance <name>]            Inspect chat-to-thread bindings
   session inspect [--instance <name>] <chat-id>
   session reset [--instance <name>] <chat-id>
-  session <list|inspect> [--instance <name>]  Inspect chat-to-thread bindings
   task list [--instance <name>]               Inspect file workflow records
   task inspect [--instance <name>] <upload-id> Inspect one file workflow record
   task clear [--instance <name>] <upload-id>  Clear a file workflow record

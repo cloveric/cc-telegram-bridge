@@ -269,15 +269,22 @@ export async function handleNormalizedTelegramMessage(
     if (isStatusCommand(normalized.text)) {
       const sessionResult = await sessionStore.findByChatIdSafe(normalized.chatId);
       const workflowResult = await workflowStore.inspect();
-      const pendingTasks = workflowResult.warning
+      const chatRecords = workflowResult.warning
+        ? []
+        : workflowResult.state.records.filter((record) => record.chatId === normalized.chatId);
+      const blockingTasks = workflowResult.warning
         ? null
-        : workflowResult.state.records.filter((record) => record.chatId === normalized.chatId && record.status !== "completed").length;
+        : chatRecords.filter((record) => record.status === "processing" || record.status === "failed").length;
+      const waitingTasks = workflowResult.warning
+        ? null
+        : chatRecords.filter((record) => record.status === "awaiting_continue").length;
       const statusMessage = renderTelegramStatusMessage({
         engine: await loadEngine(stateDir),
         sessionBound: sessionResult.warning ? null : sessionResult.record !== null,
-        pendingTasks,
+        blockingTasks,
+        waitingTasks,
         sessionWarning: sessionResult.warning,
-        pendingTasksWarning: workflowResult.warning,
+        taskStateWarning: workflowResult.warning,
       });
       await context.api.editMessage(normalized.chatId, placeholderMessageId, statusMessage);
       await appendAuditEvent(path.dirname(context.inboxDir), {

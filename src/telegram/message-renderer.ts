@@ -42,21 +42,27 @@ export function renderTelegramHelpMessage(): string {
 export function renderTelegramStatusMessage(input: {
   engine: "codex" | "claude";
   sessionBound: boolean | null;
-  pendingTasks: number | null;
+  blockingTasks: number | null;
+  waitingTasks: number | null;
   sessionWarning?: string;
-  pendingTasksWarning?: string;
+  taskStateWarning?: string;
 }): string {
-  const pendingTasksValue = input.pendingTasks ?? 0;
-  const pendingTasks = Number.isFinite(pendingTasksValue) ? Math.max(0, Math.trunc(pendingTasksValue)) : 0;
+  const blockingTasksValue = input.blockingTasks ?? 0;
+  const waitingTasksValue = input.waitingTasks ?? 0;
+  const blockingTasks = Number.isFinite(blockingTasksValue) ? Math.max(0, Math.trunc(blockingTasksValue)) : 0;
+  const waitingTasks = Number.isFinite(waitingTasksValue) ? Math.max(0, Math.trunc(waitingTasksValue)) : 0;
 
   return [
     `Engine: ${input.engine}`,
     input.sessionWarning
       ? `Session bound: unknown (${input.sessionWarning})`
       : `Session bound: ${input.sessionBound ? "yes" : "no"}`,
-    input.pendingTasksWarning
-      ? `Pending file tasks: unknown (${input.pendingTasksWarning})`
-      : `Pending file tasks: ${pendingTasks}`,
+    input.taskStateWarning
+      ? `Blocking file tasks: unknown (${input.taskStateWarning})`
+      : `Blocking file tasks: ${blockingTasks}`,
+    input.taskStateWarning
+      ? `Waiting file tasks: unknown (${input.taskStateWarning})`
+      : `Waiting file tasks: ${waitingTasks}`,
   ].join("\n");
 }
 

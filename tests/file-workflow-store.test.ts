@@ -2,9 +2,10 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-import { FileWorkflowStore } from "../src/state/file-workflow-store.js";
+import { FILE_WORKFLOW_STATE_UNREADABLE_WARNING, FileWorkflowStore } from "../src/state/file-workflow-store.js";
+import { JsonStore } from "../src/state/json-store.js";
 
 describe("FileWorkflowStore", () => {
   it("lists records newest-first and clears a single upload", async () => {
@@ -206,6 +207,25 @@ describe("FileWorkflowStore", () => {
       await expect(store.find("two")).resolves.toBeNull();
       expect((await store.list({ chatId: 100 })).map((record) => record.uploadId)).toEqual(["one"]);
     } finally {
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("treats permission-denied reads as unreadable workflow state", async () => {
+    const stateDir = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
+    const store = new FileWorkflowStore(stateDir);
+    const permissionError = Object.assign(new Error("permission denied"), { code: "EPERM" });
+    const readSpy = vi.spyOn((store as unknown as { store: JsonStore<unknown> }).store, "read");
+
+    readSpy.mockRejectedValue(permissionError);
+
+    try {
+      await expect(store.inspect()).resolves.toEqual({
+        state: { records: [] },
+        warning: FILE_WORKFLOW_STATE_UNREADABLE_WARNING,
+      });
+    } finally {
+      readSpy.mockRestore();
       await rm(stateDir, { recursive: true, force: true });
     }
   });

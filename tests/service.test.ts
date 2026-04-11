@@ -1414,7 +1414,7 @@ describe("polling helpers", () => {
     }
   });
 
-  it("returns a concise status message for /status", async () => {
+  it("returns a concise status message for /status with blocking tasks called out separately", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
     const inboxDir = path.join(root, "inbox");
     await writeFile(path.join(root, "config.json"), JSON.stringify({ engine: "codex" }) + "\n", "utf8");
@@ -1522,7 +1522,8 @@ describe("polling helpers", () => {
         [
           "Engine: codex",
           "Session bound: yes",
-          "Pending file tasks: 3",
+          "Blocking file tasks: 2",
+          "Waiting file tasks: 1",
         ].join("\n"),
       );
       expect(bridge.handleAuthorizedMessage).not.toHaveBeenCalled();
@@ -1570,7 +1571,8 @@ describe("polling helpers", () => {
         [
           "Engine: codex",
           "Session bound: unknown (session state unreadable)",
-          "Pending file tasks: unknown (file workflow state unreadable)",
+          "Blocking file tasks: unknown (file workflow state unreadable)",
+          "Waiting file tasks: unknown (file workflow state unreadable)",
         ].join("\n"),
       );
       expect(bridge.handleAuthorizedMessage).not.toHaveBeenCalled();

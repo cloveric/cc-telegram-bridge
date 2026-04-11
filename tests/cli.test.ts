@@ -275,8 +275,9 @@ describe("runCli", () => {
       });
 
       expect(handled).toBe(true);
-      expect(messages[0]).toBe('Session state unreadable for instance "alpha".');
-      expect(messages[1]).toContain('No session binding found for chat 84 in instance "alpha".');
+      expect(messages).toEqual([
+        'Session state unreadable for instance "alpha".',
+      ]);
     } finally {
       await rm(tempDir, { recursive: true, force: true });
     }
@@ -469,7 +470,50 @@ describe("runCli", () => {
       expect(handled).toBe(true);
       expect(messages[0]).toBe('Task state unreadable for instance "alpha".');
       expect(messages[1]).toContain("Recent file workflow records: unknown");
-      expect(messages[1]).toContain("Tasks: none");
+      expect(messages[1]).not.toContain("Tasks: none");
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("degrades task inspection when workflow state is unreadable without claiming absence", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
+    const messages: string[] = [];
+
+    try {
+      const workflowPath = path.join(tempDir, ".codex", "channels", "telegram", "alpha", "file-workflow.json");
+      await mkdir(path.dirname(workflowPath), { recursive: true });
+      await writeFile(workflowPath, "{not valid json", "utf8");
+
+      const handled = await runCli(["telegram", "task", "inspect", "--instance", "alpha", "upload-123"], {
+        env: { USERPROFILE: tempDir },
+        logger: { log: (message) => messages.push(message) },
+      });
+
+      expect(handled).toBe(true);
+      expect(messages).toEqual([
+        'Task state unreadable for instance "alpha".',
+      ]);
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("shows updated help wording for inspect-first session and task commands", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
+    const messages: string[] = [];
+
+    try {
+      const handled = await runCli(["telegram", "help"], {
+        env: { USERPROFILE: tempDir },
+        logger: { log: (message) => messages.push(message) },
+      });
+
+      expect(handled).toBe(true);
+      expect(messages[0]).toContain("session inspect [--instance <name>] <chat-id>");
+      expect(messages[0]).not.toContain("session <list|inspect>");
+      expect(messages[0]).toContain("task inspect [--instance <name>] <upload-id>");
+      expect(messages[0]).toContain("task clear [--instance <name>] <upload-id>");
     } finally {
       await rm(tempDir, { recursive: true, force: true });
     }

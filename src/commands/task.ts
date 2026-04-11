@@ -50,7 +50,14 @@ function isSingleWorkspaceChildName(uploadId: string): boolean {
     return false;
   }
 
-  return path.basename(uploadId) === uploadId && path.normalize(uploadId) === uploadId;
+  if (path.basename(uploadId) !== uploadId || path.normalize(uploadId) !== uploadId) {
+    return false;
+  }
+
+  return (
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(uploadId) ||
+    /^upload-[A-Za-z0-9_-]+$/.test(uploadId)
+  );
 }
 
 export async function listTasks(

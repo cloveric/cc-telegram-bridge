@@ -1,10 +1,10 @@
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { JsonStore } from "../src/state/json-store.js";
-import { SessionStore } from "../src/state/session-store.js";
+import { SESSION_STATE_UNREADABLE_WARNING, SessionStore } from "../src/state/session-store.js";
 import type { SessionRecord, SessionState } from "../src/types.js";
 
 describe("JsonStore", () => {
@@ -216,6 +216,26 @@ describe("SessionStore", () => {
 
       await expect(store.load()).rejects.toThrow("invalid session state");
     } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("treats permission-denied reads as unreadable session state", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
+    const filePath = path.join(tempDir, "session.json");
+    const store = new SessionStore(filePath);
+    const permissionError = Object.assign(new Error("permission denied"), { code: "EACCES" });
+    const readSpy = vi.spyOn((store as unknown as { store: JsonStore<SessionState> }).store, "read");
+
+    readSpy.mockRejectedValue(permissionError);
+
+    try {
+      await expect(store.inspect()).resolves.toEqual({
+        state: { chats: [] },
+        warning: SESSION_STATE_UNREADABLE_WARNING,
+      });
+    } finally {
+      readSpy.mockRestore();
       await rm(tempDir, { recursive: true, force: true });
     }
   });

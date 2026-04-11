@@ -160,5 +160,12 @@ export class SessionStore {
 }
 
 function isRecoverableSessionStateError(error: unknown): boolean {
-  return error instanceof SyntaxError || (error instanceof Error && error.message === "invalid session state");
+  return (
+    error instanceof SyntaxError ||
+    (error instanceof Error && error.message === "invalid session state") ||
+    (typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      (((error as NodeJS.ErrnoException).code === "EACCES") || (error as NodeJS.ErrnoException).code === "EPERM"))
+  );
 }

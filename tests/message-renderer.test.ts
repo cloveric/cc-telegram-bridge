@@ -109,23 +109,34 @@ describe("message rendering", () => {
       renderTelegramStatusMessage({
         engine: "codex",
         sessionBound: true,
-        pendingTasks: 2,
+        blockingTasks: 2,
+        waitingTasks: 1,
       }),
     ).toContain("Engine: codex");
     expect(
       renderTelegramStatusMessage({
         engine: "codex",
         sessionBound: true,
-        pendingTasks: 2,
+        blockingTasks: 2,
+        waitingTasks: 1,
       }),
     ).toContain("Session bound: yes");
     expect(
       renderTelegramStatusMessage({
         engine: "codex",
         sessionBound: true,
-        pendingTasks: 2,
+        blockingTasks: 2,
+        waitingTasks: 1,
       }),
-    ).toContain("Pending file tasks: 2");
+    ).toContain("Blocking file tasks: 2");
+    expect(
+      renderTelegramStatusMessage({
+        engine: "codex",
+        sessionBound: true,
+        blockingTasks: 2,
+        waitingTasks: 1,
+      }),
+    ).toContain("Waiting file tasks: 1");
   });
 });
 

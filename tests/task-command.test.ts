@@ -108,6 +108,44 @@ describe("task commands", () => {
     }
   });
 
+  it("skips workspace deletion for win32 alias-style upload ids", async () => {
+    const homeDir = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
+    const stateDir = path.join(homeDir, ".codex", "channels", "telegram", "alpha");
+    const victimDir = path.join(stateDir, "workspace", ".telegram-files", "victim");
+    const victimSentinelPath = path.join(victimDir, "sentinel.txt");
+
+    try {
+      await mkdir(victimDir, { recursive: true });
+      await writeFile(victimSentinelPath, "keep me", "utf8");
+      await writeFile(
+        path.join(stateDir, "file-workflow.json"),
+        JSON.stringify({
+          records: [
+            {
+              uploadId: "victim.",
+              chatId: 100,
+              userId: 100,
+              kind: "archive",
+              status: "failed",
+              sourceFiles: ["repo.zip"],
+              derivedFiles: [],
+              summary: "archive summary",
+              createdAt: "2026-04-10T00:00:00.000Z",
+              updatedAt: "2026-04-10T00:00:00.000Z",
+            },
+          ],
+        }),
+        "utf8",
+      );
+
+      await expect(clearTask({ USERPROFILE: homeDir }, "alpha", "victim.")).resolves.toBe(true);
+      await expect(readFile(victimSentinelPath, "utf8")).resolves.toBe("keep me");
+      await expect(readFile(path.join(stateDir, "file-workflow.json"), "utf8")).resolves.toContain('"records": []');
+    } finally {
+      await rm(homeDir, { recursive: true, force: true });
+    }
+  });
+
   it("does not delete workspace files before record removal succeeds", async () => {
     const homeDir = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
     const stateDir = path.join(homeDir, ".codex", "channels", "telegram", "alpha");
