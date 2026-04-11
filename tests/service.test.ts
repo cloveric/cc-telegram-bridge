@@ -912,6 +912,71 @@ describe("polling helpers", () => {
     }
   });
 
+  it("persists a failed archive workflow record when extraction is rejected", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
+    const inboxDir = path.join(root, "inbox");
+    const api = {
+      sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      getFile: vi.fn().mockResolvedValue({ file_path: "uploads/bad.zip" }),
+      downloadFile: vi.fn().mockImplementation(async (_filePath: string, destinationPath: string) => {
+        await writeFile(destinationPath, "not a zip archive", "utf8");
+      }),
+    };
+    const bridge = {
+      checkAccess: vi.fn().mockResolvedValue({ kind: "allow" }),
+      handleAuthorizedMessage: vi.fn(),
+    };
+
+    try {
+      await expect(
+        handleNormalizedTelegramMessage(
+          {
+            chatId: 123,
+            userId: 456,
+            chatType: "private",
+            text: "",
+            replyContext: undefined,
+            attachments: [{ fileId: "zip-1", fileName: "bad.zip", kind: "document" }],
+          },
+          {
+            api: api as never,
+            bridge: bridge as never,
+            inboxDir,
+          },
+        ),
+      ).rejects.toThrow();
+
+      const workflowState = JSON.parse(await readFile(path.join(root, "file-workflow.json"), "utf8")) as {
+        records: Array<{
+          uploadId: string;
+          status: string;
+          kind: string;
+          sourceFiles: string[];
+          extractedPath?: string;
+          summary: string;
+        }>;
+      };
+
+      expect(workflowState.records).toHaveLength(1);
+      expect(workflowState.records[0]).toEqual(expect.objectContaining({
+        kind: "archive",
+        status: "failed",
+        extractedPath: expect.stringContaining(path.join("workspace", ".telegram-files")),
+        sourceFiles: [expect.stringContaining(path.join("workspace", ".telegram-files"))],
+        summary: expect.stringMatching(/invalid|zip|archive/i),
+      }));
+      expect(api.editMessage).toHaveBeenLastCalledWith(
+        123,
+        11,
+        "Error: File handling failed while preparing your request. Retry with a smaller or different file.",
+      );
+      expect(bridge.handleAuthorizedMessage).not.toHaveBeenCalled();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("continues analysis for the latest uploaded archive when requested", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
     const inboxDir = path.join(root, "inbox");
@@ -1400,12 +1465,24 @@ describe("polling helpers", () => {
             chatId: 123,
             userId: 456,
             kind: "document",
-            status: "completed",
+            status: "failed",
             sourceFiles: ["c.txt"],
             derivedFiles: [],
-            summary: "third",
+            summary: "third failed",
             createdAt: "2026-04-10T00:02:00.000Z",
             updatedAt: "2026-04-10T00:02:00.000Z",
+          },
+          {
+            uploadId: "four",
+            chatId: 123,
+            userId: 456,
+            kind: "document",
+            status: "completed",
+            sourceFiles: ["d.txt"],
+            derivedFiles: [],
+            summary: "fourth",
+            createdAt: "2026-04-10T00:03:00.000Z",
+            updatedAt: "2026-04-10T00:03:00.000Z",
           },
         ],
       }),
@@ -1445,7 +1522,7 @@ describe("polling helpers", () => {
         [
           "Engine: codex",
           "Session bound: yes",
-          "Pending file tasks: 2",
+          "Pending file tasks: 3",
         ].join("\n"),
       );
       expect(bridge.handleAuthorizedMessage).not.toHaveBeenCalled();
@@ -1539,6 +1616,8 @@ describe("polling helpers", () => {
         [
           "Telegram commands:",
           "/status - show engine, session, and file task state",
+          "Send files directly to analyze them in chat.",
+          "Archives pause after summary; reply \"继续分析\" or press Continue Analysis to keep going.",
           "/reset - clear the current chat session",
           "/help - show this help",
         ].join("\n"),

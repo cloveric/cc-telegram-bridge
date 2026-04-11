@@ -253,6 +253,15 @@ async function summarizeArchive(archivePath: string, extractedRoot: string): Pro
   };
 }
 
+function createArchiveFailureSummary(archivePath: string, extractedRoot: string, error: unknown): string {
+  const detail = error instanceof Error ? error.message : String(error);
+  return [
+    `Archive summary failed: ${path.basename(archivePath)}`,
+    `Extract path: ${extractedRoot}`,
+    `Failure: ${detail}`,
+  ].join("\n");
+}
+
 export async function prepareAttachmentWorkflow(input: {
   stateDir: string;
   chatId: number;
@@ -273,26 +282,39 @@ export async function prepareAttachmentWorkflow(input: {
 
   if (uniqueKinds.length === 1 && uniqueKinds[0] === "archive" && stagedFiles.length === 1) {
     const extractedRoot = path.join(resolveWorkspaceUploadsDir(input.stateDir), uploadId, "extracted");
-    const { summary } = await summarizeArchive(stagedFiles[0]!, extractedRoot);
     const record: FileWorkflowRecord = {
       uploadId,
       chatId: input.chatId,
       userId: input.userId,
       kind: "archive",
-      status: "awaiting_continue",
+      status: "processing",
       sourceFiles: stagedFiles,
       derivedFiles: [],
-      summary,
+      summary: `Preparing archive summary for ${path.basename(stagedFiles[0]!)}`,
       extractedPath: extractedRoot,
       createdAt: now,
       updatedAt: now,
     };
     await store.append(record);
-    return {
-      kind: "reply",
-      text: summary,
-      workflowRecordId: uploadId,
-    };
+
+    try {
+      const { summary } = await summarizeArchive(stagedFiles[0]!, extractedRoot);
+      await store.update(uploadId, (current) => {
+        current.status = "awaiting_continue";
+        current.summary = summary;
+      });
+      return {
+        kind: "reply",
+        text: summary,
+        workflowRecordId: uploadId,
+      };
+    } catch (error) {
+      await store.update(uploadId, (current) => {
+        current.status = "failed";
+        current.summary = createArchiveFailureSummary(stagedFiles[0]!, extractedRoot, error);
+      });
+      throw error;
+    }
   }
 
   const documentSections: string[] = [];

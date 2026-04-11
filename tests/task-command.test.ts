@@ -159,4 +159,51 @@ describe("task commands", () => {
       await rm(homeDir, { recursive: true, force: true });
     }
   });
+
+  it("treats cleanup failure as a warning after record removal succeeds", async () => {
+    const homeDir = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
+    const stateDir = path.join(homeDir, ".codex", "channels", "telegram", "alpha");
+    const workflowPath = path.join(stateDir, "file-workflow.json");
+    const uploadWorkspaceDir = path.join(stateDir, "workspace", ".telegram-files", "upload-123");
+
+    try {
+      await mkdir(uploadWorkspaceDir, { recursive: true });
+      await writeFile(
+        workflowPath,
+        JSON.stringify({
+          records: [
+            {
+              uploadId: "upload-123",
+              chatId: 84,
+              userId: 42,
+              kind: "archive",
+              status: "failed",
+              sourceFiles: ["repo.zip"],
+              derivedFiles: [],
+              summary: "Extraction failed",
+              createdAt: "2026-04-08T12:00:00.000Z",
+              updatedAt: "2026-04-08T12:00:00.000Z",
+            },
+          ],
+        }) + "\n",
+        "utf8",
+      );
+
+      await expect(
+        clearTaskWithRecovery({ USERPROFILE: homeDir }, "alpha", "upload-123", {
+          removeWorkspaceDir: async () => {
+            throw new Error("cleanup failed");
+          },
+        }),
+      ).resolves.toEqual({
+        cleared: true,
+        repaired: false,
+        cleanupWarning: "cleanup failed",
+      });
+
+      expect(JSON.parse(await readFile(workflowPath, "utf8"))).toEqual({ records: [] });
+    } finally {
+      await rm(homeDir, { recursive: true, force: true });
+    }
+  });
 });

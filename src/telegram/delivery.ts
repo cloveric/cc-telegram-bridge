@@ -271,9 +271,7 @@ export async function handleNormalizedTelegramMessage(
       const workflowResult = await workflowStore.inspect();
       const pendingTasks = workflowResult.warning
         ? null
-        : workflowResult.state.records.filter((record) =>
-            record.chatId === normalized.chatId && (record.status === "processing" || record.status === "awaiting_continue"),
-          ).length;
+        : workflowResult.state.records.filter((record) => record.chatId === normalized.chatId && record.status !== "completed").length;
       const statusMessage = renderTelegramStatusMessage({
         engine: await loadEngine(stateDir),
         sessionBound: sessionResult.warning ? null : sessionResult.record !== null,

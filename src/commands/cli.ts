@@ -504,7 +504,11 @@ async function runTaskCommand(argv: string[], env: InstanceTokenEnv, logger: Cli
     if (result.repaired) {
       logger.log(`Task state was unreadable and has been reset for instance "${instanceName}".`);
     } else if (result.cleared) {
-      logger.log(`Cleared task "${uploadId}" in instance "${instanceName}".`);
+      logger.log(
+        result.cleanupWarning
+          ? `Cleared task "${uploadId}" in instance "${instanceName}". Warning: ${result.cleanupWarning}`
+          : `Cleared task "${uploadId}" in instance "${instanceName}".`,
+      );
     } else {
       logger.log(`No task found for "${uploadId}" in instance "${instanceName}".`);
     }

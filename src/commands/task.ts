@@ -16,6 +16,12 @@ interface ClearTaskDeps {
   removeWorkspaceDir?: (workspaceDir: string) => Promise<void>;
 }
 
+export interface ClearTaskResult {
+  cleared: boolean;
+  repaired: boolean;
+  cleanupWarning?: string;
+}
+
 function resolveTaskStateDir(env: TaskCommandEnv, instanceName: string): string {
   return resolveInstanceStateDir({
     HOME: env.HOME,
@@ -82,7 +88,7 @@ export async function clearTaskWithRecovery(
   instanceName: string,
   uploadId: string,
   deps: ClearTaskDeps = {},
-): Promise<{ cleared: boolean; repaired: boolean }> {
+): Promise<ClearTaskResult> {
   const stateDir = resolveTaskStateDir(env, instanceName);
   const store = new FileWorkflowStore(stateDir);
   const { record, warning } = await store.findSafe(uploadId);
@@ -117,7 +123,15 @@ export async function clearTaskWithRecovery(
 
   if (isSingleWorkspaceChildName(record.uploadId)) {
     const workspaceDir = path.resolve(resolveTaskWorkspaceDir(env, instanceName, record.uploadId));
-    await removeWorkspaceDir(workspaceDir);
+    try {
+      await removeWorkspaceDir(workspaceDir);
+    } catch (error) {
+      return {
+        cleared: true,
+        repaired: false,
+        cleanupWarning: error instanceof Error ? error.message : String(error),
+      };
+    }
   }
 
   return {

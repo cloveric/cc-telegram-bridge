@@ -32,6 +32,8 @@ export function renderTelegramHelpMessage(): string {
   return [
     "Telegram commands:",
     "/status - show engine, session, and file task state",
+    "Send files directly to analyze them in chat.",
+    "Archives pause after summary; reply \"继续分析\" or press Continue Analysis to keep going.",
     "/reset - clear the current chat session",
     "/help - show this help",
   ].join("\n");
