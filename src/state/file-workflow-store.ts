@@ -253,6 +253,41 @@ export class FileWorkflowStore {
     ) ?? null;
   }
 
+  async beginArchiveContinuation(input: {
+    chatId: number;
+    uploadId?: string;
+    summaryMessageId?: number;
+  }): Promise<FileWorkflowRecord | null> {
+    let claimedRecord: FileWorkflowRecord | null = null;
+
+    await this.enqueueWrite(async () => {
+      const state = await this.load();
+      const matchingRecords = state.records.filter((record) =>
+        record.chatId === input.chatId &&
+        record.kind === "archive" &&
+        record.status === "awaiting_continue",
+      );
+
+      const record =
+        input.uploadId
+          ? matchingRecords.find((entry) => entry.uploadId === input.uploadId)
+          : input.summaryMessageId !== undefined
+            ? matchingRecords.find((entry) => entry.summaryMessageId === input.summaryMessageId) ?? matchingRecords.at(-1)
+            : matchingRecords.at(-1);
+
+      if (!record) {
+        return;
+      }
+
+      record.status = "processing";
+      record.updatedAt = new Date().toISOString();
+      await this.store.write(state);
+      claimedRecord = { ...record };
+    });
+
+    return claimedRecord;
+  }
+
   async reset(): Promise<void> {
     await this.store.write(createDefaultState());
   }

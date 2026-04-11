@@ -92,7 +92,7 @@ export function renderCategorizedErrorMessage(category: FailureCategory, detail:
   }
 
   if (category === "workflow-state") {
-    return "Error: Internal workflow state is unavailable right now. Reset the chat and try again.";
+    return "Error: Internal workflow state is unavailable right now. Retry the request later or ask the operator to inspect the service state.";
   }
 
   if (category === "session-state") {

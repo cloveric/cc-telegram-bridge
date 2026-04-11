@@ -1054,6 +1054,84 @@ describe("polling helpers", () => {
     }
   });
 
+  it("marks a continued archive as failed when engine execution fails", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
+    const inboxDir = path.join(root, "inbox");
+    await writeFile(
+      path.join(root, "file-workflow.json"),
+      JSON.stringify({
+        records: [
+          {
+            uploadId: "archive-1",
+            chatId: 123,
+            userId: 456,
+            kind: "archive",
+            status: "awaiting_continue",
+            sourceFiles: ["repo.zip"],
+            derivedFiles: [],
+            summary: "archive summary one",
+            extractedPath: "workspace/.telegram-files/archive-1/extracted",
+            createdAt: "2026-04-10T00:00:00.000Z",
+            updatedAt: "2026-04-10T00:00:00.000Z",
+          },
+        ],
+      }),
+      "utf8",
+    );
+    const continuationStarted = createDeferred<void>();
+    const allowFailure = createDeferred<void>();
+    const api = {
+      sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      getFile: vi.fn(),
+      downloadFile: vi.fn(),
+    };
+    const bridge = {
+      checkAccess: vi.fn().mockResolvedValue({ kind: "allow" }),
+      handleAuthorizedMessage: vi.fn().mockImplementation(async () => {
+        continuationStarted.resolve();
+        await allowFailure.promise;
+        throw new Error("engine failed during continuation");
+      }),
+    };
+
+    try {
+      const continuationPromise = handleNormalizedTelegramMessage(
+        {
+          chatId: 123,
+          userId: 456,
+          chatType: "private",
+          text: "继续分析 看看结构",
+          replyContext: undefined,
+          attachments: [],
+        },
+        {
+          api: api as never,
+          bridge: bridge as never,
+          inboxDir,
+        },
+      );
+
+      await continuationStarted.promise;
+      const inFlightState = JSON.parse(await readFile(path.join(root, "file-workflow.json"), "utf8")) as {
+        records: Array<{ status: string }>;
+      };
+      expect(inFlightState.records[0]?.status).toBe("processing");
+
+      allowFailure.resolve();
+
+      await expect(continuationPromise).rejects.toThrow("engine failed during continuation");
+
+      const finalState = JSON.parse(await readFile(path.join(root, "file-workflow.json"), "utf8")) as {
+        records: Array<{ status: string }>;
+      };
+      expect(finalState.records[0]?.status).toBe("failed");
+    } finally {
+      allowFailure.resolve();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("maps archive-specific callback queries to the targeted /continue flow", async () => {
     const normalized = normalizeUpdate({
       update_id: 99,
@@ -1352,7 +1430,7 @@ describe("polling helpers", () => {
       expect(api.editMessage).toHaveBeenLastCalledWith(
         123,
         11,
-        "Error: Internal workflow state is unavailable right now. Reset the chat and try again.",
+        "Error: Internal workflow state is unavailable right now. Retry the request later or ask the operator to inspect the service state.",
       );
       expect(bridge.handleAuthorizedMessage).not.toHaveBeenCalled();
     } finally {
@@ -1397,7 +1475,7 @@ describe("polling helpers", () => {
       expect(api.editMessage).toHaveBeenLastCalledWith(
         123,
         11,
-        "Error: Internal workflow state is unavailable right now. Reset the chat and try again.",
+        "Error: Internal workflow state is unavailable right now. Retry the request later or ask the operator to inspect the service state.",
       );
       expect(bridge.handleAuthorizedMessage).not.toHaveBeenCalled();
     } finally {

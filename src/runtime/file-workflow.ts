@@ -382,13 +382,11 @@ export async function prepareArchiveContinueWorkflow(input: {
   }
 
   const store = new FileWorkflowStore(input.stateDir);
-  const archiveRecord =
-    targetUploadId
-      ? await store.getAwaitingArchive(input.chatId, targetUploadId)
-      : input.replyContext?.messageId
-        ? (await store.getAwaitingArchiveBySummaryMessageId(input.chatId, input.replyContext.messageId))
-          ?? (await store.getLatestAwaitingArchive(input.chatId))
-        : await store.getLatestAwaitingArchive(input.chatId);
+  const archiveRecord = await store.beginArchiveContinuation({
+    chatId: input.chatId,
+    uploadId: targetUploadId,
+    summaryMessageId: targetUploadId ? undefined : input.replyContext?.messageId,
+  });
   if (!archiveRecord) {
     return {
       kind: "reply",

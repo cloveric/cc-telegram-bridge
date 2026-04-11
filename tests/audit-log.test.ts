@@ -139,4 +139,22 @@ describe("audit log", () => {
       detail: "Error: session store unavailable",
     });
   });
+
+  it("preserves explicit workflow-state metadata in latest failure summaries", () => {
+    const events = parseAuditEvents(
+      JSON.stringify({
+        timestamp: "2026-04-10T00:02:00.000Z",
+        type: "update.handle",
+        outcome: "error",
+        detail: "Error: write access denied",
+        metadata: { failureCategory: "workflow-state" },
+      }),
+    );
+
+    expect(getLatestFailure(events)).toEqual({
+      timestamp: "2026-04-10T00:02:00.000Z",
+      category: "workflow-state",
+      detail: "Error: write access denied",
+    });
+  });
 });

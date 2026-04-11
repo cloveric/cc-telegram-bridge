@@ -41,6 +41,7 @@ const failureCategories = new Set<FailureCategory>([
   "telegram-delivery",
   "engine-cli",
   "file-workflow",
+  "workflow-state",
   "session-state",
   "unknown",
 ]);

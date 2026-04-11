@@ -87,7 +87,7 @@ describe("message rendering", () => {
       "Error: File handling failed while preparing your request. Retry with a smaller or different file.",
     );
     expect(renderCategorizedErrorMessage("workflow-state", "invalid file workflow state")).toBe(
-      "Error: Internal workflow state is unavailable right now. Reset the chat and try again.",
+      "Error: Internal workflow state is unavailable right now. Retry the request later or ask the operator to inspect the service state.",
     );
     expect(renderCategorizedErrorMessage("session-state", "session store unavailable")).toBe(
       "Error: Session state is unavailable right now. Reset the chat and try again.",
