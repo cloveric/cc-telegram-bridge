@@ -22,7 +22,7 @@
 </h3>
 
 <p align="center">
-  <a href="#-双引擎">双引擎</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#-多-bot-部署">多 Bot</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#-agent-指令">agent.md</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#-yolo-模式">YOLO</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#-用量追踪">用量</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#-快速开始">快速开始</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#-docker">Docker</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#-服务运维">运维</a>
+  <a href="#双引擎codex--claude-code">双引擎</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#多-bot-部署">多 Bot</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#agent-指令">agent.md</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#yolo-模式">YOLO</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#预算控制">预算</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#国际化">i18n</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#备份与恢复">备份</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#快速开始">快速开始</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#服务运维">运维</a>
 </p>
 
 > **RULE 1：** 让你的 Claude Code 或 Codex CLI 来帮你配置这个项目。克隆仓库，在终端里打开，然后告诉你的 AI agent：*"读一下 README，帮我配置一个 Telegram bot"*。剩下的它会搞定。
@@ -358,8 +358,28 @@ Telegram 消息 → 标准化 → 访问检查 → 聊天队列（串行）
   </tr>
   <tr>
     <td>
+      <h3>预算控制</h3>
+      <p>按实例设置费用上限。达到上限时自动拦截请求 — 中英双语提示。</p>
+    </td>
+    <td>
+      <h3>国际化 (en/zh)</h3>
+      <p>所有 bot 回复、错误消息和状态输出都可按实例切换为中文。</p>
+    </td>
+  </tr>
+  <tr>
+    <td>
+      <h3>备份与恢复</h3>
+      <p>一条命令备份或恢复实例。零依赖二进制格式，跨平台兼容，原子回滚。</p>
+    </td>
+    <td>
+      <h3>实例管理</h3>
+      <p>通过 CLI 列出、重命名、删除实例。运行中的实例有保护机制防止误操作。</p>
+    </td>
+  </tr>
+  <tr>
+    <td>
       <h3>完整审计日志</h3>
-      <p>每个实例独立的 JSONL 追加日志 — 支持按类型、聊天、结果过滤。</p>
+      <p>每个实例独立的 JSONL 追加日志 — 支持按类型、聊天、结果过滤。10MB 自动轮转。</p>
     </td>
     <td>
       <h3>Docker 就绪</h3>
