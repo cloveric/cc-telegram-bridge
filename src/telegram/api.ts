@@ -296,4 +296,8 @@ export class TelegramApi {
   async getMe(): Promise<TelegramBotIdentity> {
     return this.postJson("getMe", {}, isTelegramBotIdentity);
   }
+
+  async setMyCommands(commands: Array<{ command: string; description: string }>): Promise<void> {
+    await this.postJson("setMyCommands", { commands }, (v): v is true => v === true);
+  }
 }

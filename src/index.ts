@@ -5,6 +5,7 @@ import {
   createServiceDependencies,
   parseServiceInstanceName,
   pollTelegramUpdates,
+  registerBotCommands,
   resolveServiceEnvForInstance,
 } from "./service.js";
 import { loadBusConfig } from "./bus/bus-config.js";
@@ -50,6 +51,7 @@ async function main(): Promise<void> {
     process.once("SIGINT", shutdown);
 
     const { api, bridge, config } = await createServiceDependencies(resolvedEnv);
+    await registerBotCommands(api);
 
     let busServer: ReturnType<typeof createBusServer> | null = null;
     const channelRoot = resolveChannelRoot(config.stateDir);

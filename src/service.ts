@@ -442,6 +442,27 @@ export async function createServiceDependenciesForInstance(
   return createServiceDependencies(await resolveServiceEnvForInstance(env, instanceName));
 }
 
+const BOT_COMMANDS: Array<{ command: string; description: string }> = [
+  { command: "reset", description: "Reset conversation session" },
+  { command: "compact", description: "Compress session context (Claude only)" },
+  { command: "status", description: "Show current session status" },
+  { command: "effort", description: "Set effort level (low/medium/high/max/off)" },
+  { command: "model", description: "Set model (opus/sonnet/o3/off)" },
+  { command: "continue", description: "Continue a paused task" },
+  { command: "ask", description: "Delegate to another bot instance" },
+  { command: "fan", description: "Query multiple bots in parallel" },
+  { command: "verify", description: "Execute then auto-verify with reviewer" },
+  { command: "help", description: "Show available commands" },
+];
+
+export async function registerBotCommands(api: TelegramApi): Promise<void> {
+  try {
+    await api.setMyCommands(BOT_COMMANDS);
+  } catch {
+    // Best effort — don't block service startup if this fails
+  }
+}
+
 export async function lookupTelegramBotIdentity(api: TelegramApi): Promise<ResolvedBotIdentity> {
   const identity = await api.getMe();
   return {
