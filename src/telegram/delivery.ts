@@ -103,6 +103,10 @@ function isResetCommand(text: string): boolean {
   return /^\/reset(?:@\w+)?(?:\s|$)/i.test(text.trim());
 }
 
+function isCompactCommand(text: string): boolean {
+  return /^\/compact(?:@\w+)?(?:\s|$)/i.test(text.trim());
+}
+
 function isHelpCommand(text: string): boolean {
   return /^\/help(?:@\w+)?(?:\s|$)/i.test(text.trim());
 }
@@ -355,6 +359,50 @@ export async function handleNormalizedTelegramMessage(
           responseChars: resetMessage.length,
           chunkCount: chunkTelegramMessage(resetMessage).length,
         },
+      });
+      return;
+    }
+
+    if (isCompactCommand(normalized.text)) {
+      await context.api.editMessage(normalized.chatId, placeholderMessageId,
+        locale === "zh" ? "正在压缩会话上下文..." : "Compacting session context...");
+
+      try {
+        const result = await context.bridge.handleAuthorizedMessage({
+          chatId: normalized.chatId,
+          userId: normalized.userId,
+          chatType: normalized.chatType,
+          locale,
+          text: "/compact",
+          files: [],
+        });
+
+        const compactMsg = locale === "zh"
+          ? `上下文已压缩。\n\n${result.text}`
+          : `Context compacted.\n\n${result.text}`;
+        const chunks = chunkTelegramMessage(compactMsg);
+        await context.api.editMessage(normalized.chatId, placeholderMessageId, chunks[0]!);
+        placeholderShowsResponse = true;
+        for (const chunk of chunks.slice(1)) {
+          await context.api.sendMessage(normalized.chatId, chunk);
+        }
+      } catch {
+        await sessionStore.removeByChatId(normalized.chatId);
+        const fallbackMsg = locale === "zh"
+          ? "引擎不支持 compact，已重置会话（效果相同）。"
+          : "Engine does not support compact. Session reset instead (same effect).";
+        await context.api.editMessage(normalized.chatId, placeholderMessageId, fallbackMsg);
+        placeholderShowsResponse = true;
+      }
+
+      await appendAuditEventBestEffort(path.dirname(context.inboxDir), {
+        type: "update.handle",
+        instanceName: context.instanceName,
+        chatId: normalized.chatId,
+        userId: normalized.userId,
+        updateId: context.updateId,
+        outcome: "success",
+        metadata: { durationMs: Date.now() - startedAt },
       });
       return;
     }
