@@ -608,6 +608,24 @@ export async function handleNormalizedTelegramMessage(
         ? undefined
         : normalized.replyContext;
 
+    if (replyContext) {
+      const quotedFileId = replyContext.photoFileId ?? replyContext.documentFileId;
+      if (quotedFileId) {
+        try {
+          await ensureInboxDirExists(context.inboxDir);
+          const telegramFile = await context.api.getFile(quotedFileId);
+          const ext = replyContext.photoFileId
+            ? ".jpg"
+            : (replyContext.documentFileName ? path.extname(replyContext.documentFileName) : path.extname(telegramFile.file_path)) || "";
+          const localPath = path.join(context.inboxDir, `quoted-${replyContext.messageId}${ext}`);
+          await context.api.downloadFile(telegramFile.file_path, localPath);
+          requestFiles.push(localPath);
+        } catch {
+          // Quoted attachment download is best-effort; continue without it
+        }
+      }
+    }
+
     const result = await context.bridge.handleAuthorizedMessage({
       chatId: normalized.chatId,
       userId: normalized.userId,

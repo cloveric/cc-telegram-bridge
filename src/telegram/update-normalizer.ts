@@ -13,11 +13,14 @@ export interface NormalizedTelegramMessage {
   replyContext?: {
     messageId: number;
     text: string;
+    photoFileId?: string;
+    documentFileId?: string;
+    documentFileName?: string;
   };
   attachments: NormalizedTelegramAttachment[];
 }
 
-function normalizeReplyContext(message: any): { messageId: number; text: string } | undefined {
+function normalizeReplyContext(message: any): NormalizedTelegramMessage["replyContext"] {
   const reply = message?.reply_to_message;
   const messageId = reply?.message_id;
   if (typeof messageId !== "number") {
@@ -31,16 +34,27 @@ function normalizeReplyContext(message: any): { messageId: number; text: string 
         ? reply.caption
         : "";
 
-  if (!replyText) {
-    return {
-      messageId,
-      text: "",
-    };
+  let photoFileId: string | undefined;
+  if (Array.isArray(reply?.photo) && reply.photo.length > 0) {
+    const largest = reply.photo[reply.photo.length - 1];
+    if (typeof largest?.file_id === "string") {
+      photoFileId = largest.file_id;
+    }
+  }
+
+  let documentFileId: string | undefined;
+  let documentFileName: string | undefined;
+  if (typeof reply?.document?.file_id === "string") {
+    documentFileId = reply.document.file_id;
+    documentFileName = typeof reply.document.file_name === "string" ? reply.document.file_name : undefined;
   }
 
   return {
     messageId,
     text: replyText,
+    photoFileId,
+    documentFileId,
+    documentFileName,
   };
 }
 
