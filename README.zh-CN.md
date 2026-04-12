@@ -18,7 +18,7 @@
 <h3 align="center">
   把真正的 Codex 和 Claude Code CLI 搬到 Telegram。<br>
   不是 API 封装 — 是原生 CLI，带会话、记忆和文件处理。<br>
-  多 bot 并行，每个拥有独立的引擎、人格和隔离状态。
+  多 bot 并行，每个拥有独立的引擎、人格和状态 — 默认隔离，需要协作时通过 Agent Bus 互通。
 </h3>
 
 <p align="center">

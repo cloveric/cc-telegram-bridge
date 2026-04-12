@@ -18,7 +18,7 @@
 <h3 align="center">
   Put the real Codex and Claude Code CLI on Telegram.<br>
   Not an API wrapper — the actual CLI, with sessions, memory, and file handling.<br>
-  Run multiple bots, each with its own engine, personality, and isolated state.
+  Run multiple bots, each with its own engine, personality, and state — isolated by default, connected via Agent Bus when you need them to collaborate.
 </h3>
 
 <p align="center">
