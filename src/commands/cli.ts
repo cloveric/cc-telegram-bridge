@@ -924,8 +924,8 @@ Commands:
   locale [en|zh] [--instance <name>]          Set user-facing message language
   instance <list|rename|delete> [...]         Manage instances (list, rename, delete)
   logs rotate [--instance <name>]             Rotate log files now (auto on service start)
-  backup [--instance <name>] [--out <path>]   Back up instance state to a zip archive
-  restore <zip-path> [--instance <name>]      Restore instance state from a backup zip
+  backup [--instance <name>] [--out <path>]   Back up instance state to a .cctb.gz archive (pure Node)
+  restore <archive> [--instance <name>]       Restore instance state from a backup archive
   dashboard                                   Open a visual status dashboard in the browser
   help                                        Show this help message`;
 
@@ -1121,7 +1121,7 @@ async function runBackupCommand(
   const outIdx = args.indexOf("--out");
   const outPath = outIdx !== -1 && args[outIdx + 1]
     ? args[outIdx + 1]
-    : path.join(process.cwd(), `${instanceName}-backup-${Date.now()}.tar.gz`);
+    : path.join(process.cwd(), `${instanceName}-backup-${Date.now()}.cctb.gz`);
 
   const stateDir = resolveStateDirForInstance(env, instanceName);
   const fs = await import("node:fs/promises");
@@ -1131,22 +1131,11 @@ async function runBackupCommand(
     throw new Error(`Instance "${instanceName}" state directory not found.`);
   }
 
-  const { spawn } = await import("node:child_process");
-  await new Promise<void>((resolve, reject) => {
-    const child = spawn("tar", ["-czf", outPath, "-C", path.dirname(stateDir), path.basename(stateDir)], {
-      stdio: ["ignore", "ignore", "pipe"],
-      windowsHide: true,
-    });
-    let stderr = "";
-    child.stderr?.on("data", (c) => { stderr += c.toString(); });
-    child.once("error", reject);
-    child.once("close", (code) => {
-      if (code === 0) resolve();
-      else reject(new Error(`tar failed: ${stderr.trim() || `exit ${code}`}`));
-    });
-  });
-
-  logger.log(`Backed up instance "${instanceName}" to ${outPath}`);
+  const { createArchive } = await import("../state/archive.js");
+  const result = await createArchive(stateDir, outPath);
+  logger.log(
+    `Backed up instance "${instanceName}" to ${outPath} (${result.fileCount} files, ${Math.round(result.archiveBytes / 1024)} KB compressed from ${Math.round(result.uncompressedBytes / 1024)} KB)`,
+  );
   return true;
 }
 
@@ -1157,9 +1146,9 @@ async function runRestoreCommand(
 ): Promise<boolean> {
   const { instanceName, args } = extractInstanceOption(argv.slice(1));
   if (args.length < 1) {
-    throw new Error("Usage: telegram restore <backup.tar.gz> [--instance <name>]");
+    throw new Error("Usage: telegram restore <backup.cctb.gz> [--instance <name>] [--force]");
   }
-  const zipPath = args[0];
+  const archivePath = args[0];
   const channelsDir = resolveChannelsDirFromEnv(env);
   const fs = await import("node:fs/promises");
   await fs.mkdir(channelsDir, { recursive: true });
@@ -1175,22 +1164,16 @@ async function runRestoreCommand(
     if (e instanceof Error && e.message.includes("already exists")) throw e;
   }
 
-  const { spawn } = await import("node:child_process");
-  await new Promise<void>((resolve, reject) => {
-    const child = spawn("tar", ["-xzf", zipPath, "-C", channelsDir], {
-      stdio: ["ignore", "ignore", "pipe"],
-      windowsHide: true,
-    });
-    let stderr = "";
-    child.stderr?.on("data", (c) => { stderr += c.toString(); });
-    child.once("error", reject);
-    child.once("close", (code) => {
-      if (code === 0) resolve();
-      else reject(new Error(`tar failed: ${stderr.trim() || `exit ${code}`}`));
-    });
-  });
+  const { extractArchive } = await import("../state/archive.js");
+  const result = await extractArchive(archivePath, channelsDir);
 
-  logger.log(`Restored instance "${instanceName}" from ${zipPath}`);
+  // If the archive was created under a different instance name, rename to requested
+  const extractedDir = path.join(channelsDir, result.rootName);
+  if (result.rootName !== instanceName) {
+    await fs.rename(extractedDir, targetDir);
+  }
+
+  logger.log(`Restored instance "${instanceName}" from ${archivePath} (${result.fileCount} files).`);
   return true;
 }
 

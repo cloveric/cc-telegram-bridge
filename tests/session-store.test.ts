@@ -38,12 +38,13 @@ describe("JsonStore", () => {
       await writeFile(`${filePath}.tmp`, "stale-temp-file", "utf8");
       await store.write(value);
 
-      const onDisk = await readFile(filePath, "utf8");
-      expect(onDisk).toBe(JSON.stringify(value, null, 2));
+      const onDisk = JSON.parse(await readFile(filePath, "utf8")) as typeof value & { schemaVersion?: number };
+      expect(onDisk.chats).toEqual(value.chats);
+      expect(onDisk.schemaVersion).toBe(1);
       expect(await readFile(`${filePath}.tmp`, "utf8")).toBe("stale-temp-file");
 
       const readBack = await store.read({ chats: [] });
-      expect(readBack).toEqual(value);
+      expect(readBack.chats).toEqual(value.chats);
     } finally {
       await rm(tempDir, { recursive: true, force: true });
     }
@@ -186,7 +187,7 @@ describe("SessionStore", () => {
       first.chats.push(createRecord());
 
       const second = await store.load();
-      expect(second).toEqual({ chats: [] });
+      expect(second.chats).toEqual([]);
       expect(second).not.toBe(first);
     } finally {
       await rm(tempDir, { recursive: true, force: true });
@@ -273,7 +274,8 @@ describe("SessionStore", () => {
         repaired: true,
       });
 
-      await expect(readFile(filePath, "utf8")).resolves.toBe(JSON.stringify({ chats: [] }, null, 2));
+      const after = JSON.parse(await readFile(filePath, "utf8")) as { chats: unknown[] };
+      expect(after.chats).toEqual([]);
       const backups = (await readdir(tempDir)).filter((entry) => entry.startsWith("session.json.") && !entry.endsWith(".tmp"));
       expect(backups).toHaveLength(1);
       await expect(readFile(path.join(tempDir, backups[0]!), "utf8")).resolves.toBe(unreadableContents);

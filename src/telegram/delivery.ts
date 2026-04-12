@@ -44,6 +44,16 @@ async function loadEngine(stateDir: string): Promise<"codex" | "claude"> {
   }
 }
 
+async function loadLocale(stateDir: string): Promise<"en" | "zh"> {
+  try {
+    const raw = await readFile(path.join(stateDir, "config.json"), "utf8");
+    const config = JSON.parse(raw) as { locale?: string };
+    return config.locale === "zh" ? "zh" : "en";
+  } catch {
+    return "en";
+  }
+}
+
 async function appendAuditEventBestEffort(stateDir: string, event: Parameters<typeof appendAuditEvent>[1]): Promise<void> {
   try {
     await appendAuditEvent(stateDir, event);
@@ -258,6 +268,7 @@ export async function handleNormalizedTelegramMessage(
   const stateDir = path.dirname(context.inboxDir);
   const workflowStore = new FileWorkflowStore(stateDir);
   const sessionStore = new SessionStore(path.join(stateDir, "session.json"));
+  const locale = await loadLocale(stateDir);
 
   try {
     if (normalized.callbackQueryId) {
@@ -267,9 +278,9 @@ export async function handleNormalizedTelegramMessage(
         // Callback acks are advisory; continuation should still proceed.
       }
     }
-    const placeholder = await context.api.sendMessage(normalized.chatId, renderWorkingMessage());
+    const placeholder = await context.api.sendMessage(normalized.chatId, renderWorkingMessage(locale));
     placeholderMessageId = placeholder.message_id;
-    await context.api.editMessage(normalized.chatId, placeholderMessageId, renderAccessCheckMessage());
+    await context.api.editMessage(normalized.chatId, placeholderMessageId, renderAccessCheckMessage(locale));
 
     const accessDecision = await context.bridge.checkAccess({
       chatId: normalized.chatId,
@@ -281,7 +292,7 @@ export async function handleNormalizedTelegramMessage(
       await context.api.editMessage(
         normalized.chatId,
         placeholderMessageId,
-        accessDecision.text ?? renderErrorMessage(renderUnauthorizedMessage()),
+        accessDecision.text ?? renderErrorMessage(renderUnauthorizedMessage(locale), locale),
       );
       await appendAuditEvent(path.dirname(context.inboxDir), {
         type: "update.reply",
@@ -311,7 +322,7 @@ export async function handleNormalizedTelegramMessage(
       }
 
       await sessionStore.removeByChatId(normalized.chatId);
-      const resetMessage = renderSessionResetMessage(false);
+      const resetMessage = renderSessionResetMessage(false, locale);
       await context.api.editMessage(normalized.chatId, placeholderMessageId, resetMessage);
       placeholderShowsResponse = true;
       await appendAuditEventBestEffort(path.dirname(context.inboxDir), {
@@ -332,7 +343,7 @@ export async function handleNormalizedTelegramMessage(
     }
 
     if (isHelpCommand(normalized.text)) {
-      const helpMessage = renderTelegramHelpMessage();
+      const helpMessage = renderTelegramHelpMessage(locale);
       await context.api.editMessage(normalized.chatId, placeholderMessageId, helpMessage);
       placeholderShowsResponse = true;
       await appendAuditEventBestEffort(path.dirname(context.inboxDir), {
@@ -371,7 +382,7 @@ export async function handleNormalizedTelegramMessage(
         waitingTasks,
         sessionWarning: sessionResult.warning,
         taskStateWarning: workflowResult.warning,
-      });
+      }, locale);
       await context.api.editMessage(normalized.chatId, placeholderMessageId, statusMessage);
       placeholderShowsResponse = true;
       await appendAuditEventBestEffort(path.dirname(context.inboxDir), {
@@ -395,7 +406,7 @@ export async function handleNormalizedTelegramMessage(
       await context.api.editMessage(
         normalized.chatId,
         placeholderMessageId,
-        renderAttachmentDownloadMessage(normalized.attachments.length),
+        renderAttachmentDownloadMessage(normalized.attachments.length, locale),
       );
     }
 
@@ -466,7 +477,7 @@ export async function handleNormalizedTelegramMessage(
       ? workflowResult.files
       : downloadedAttachments.map((attachment) => attachment.localPath);
 
-    await context.api.editMessage(normalized.chatId, placeholderMessageId, renderExecutionMessage());
+    await context.api.editMessage(normalized.chatId, placeholderMessageId, renderExecutionMessage(locale));
 
     const verbosity = await loadVerbosity(stateDir);
     let lastProgressEdit = 0;
@@ -501,10 +512,13 @@ export async function handleNormalizedTelegramMessage(
         const usageStore = new UsageStore(stateDir);
         const usage = await usageStore.load();
         if (usage.totalCostUsd >= cfg.budgetUsd) {
+          const budgetMsg = locale === "zh"
+            ? `预算已用尽：$${usage.totalCostUsd.toFixed(4)} / $${cfg.budgetUsd.toFixed(2)}。使用 \`telegram budget set <usd>\` 提高预算或 \`telegram budget clear\` 清除。`
+            : `Budget exhausted: $${usage.totalCostUsd.toFixed(4)} used of $${cfg.budgetUsd.toFixed(2)}. Raise the budget with \`telegram budget set <usd>\` or clear it with \`telegram budget clear\`.`;
           await context.api.editMessage(
             normalized.chatId,
             placeholderMessageId,
-            `Budget exhausted: $${usage.totalCostUsd.toFixed(4)} used of $${cfg.budgetUsd.toFixed(2)}. Raise the budget with \`telegram budget set <usd>\` or clear it with \`telegram budget clear\`.`,
+            budgetMsg,
           );
           placeholderShowsResponse = true;
           await appendAuditEventBestEffort(stateDir, {
@@ -601,12 +615,12 @@ export async function handleNormalizedTelegramMessage(
     const message = classifiedError instanceof Error ? classifiedError.message : String(classifiedError);
     const failureCategory = classifyFailure(classifiedError);
     const errorMessage = shouldUseNonRepairableResetSessionGuidance(classifiedError, failureCategory, normalized.text)
-      ? renderSessionStateErrorMessage(false)
+      ? renderSessionStateErrorMessage(false, locale)
       : classifiedError instanceof SessionStateError
-      ? renderSessionStateErrorMessage(classifiedError.repairable)
+      ? renderSessionStateErrorMessage(classifiedError.repairable, locale)
       : failureHint
-      ? `${renderCategorizedErrorMessage(failureCategory, message)}\n${failureHint}`
-      : renderCategorizedErrorMessage(failureCategory, message);
+      ? `${renderCategorizedErrorMessage(failureCategory, message, locale)}\n${failureHint}`
+      : renderCategorizedErrorMessage(failureCategory, message, locale);
     let workflowCleanupError: unknown;
     progressEditsClosed = true;
     lastAllowedProgressEditCounter = progressEditCounter;

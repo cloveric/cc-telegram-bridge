@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 
+import { CURRENT_SCHEMA_VERSION } from "./schema-version.js";
+
 export class JsonStore<T> {
   constructor(
     private readonly filePath: string,
@@ -12,6 +14,17 @@ export class JsonStore<T> {
     try {
       const contents = await readFile(this.filePath, "utf8");
       const parsed = JSON.parse(contents) as unknown;
+
+      // Schema compatibility check: reject newer versions (downgrade would corrupt).
+      if (typeof parsed === "object" && parsed !== null && "schemaVersion" in parsed) {
+        const v = (parsed as { schemaVersion?: unknown }).schemaVersion;
+        if (typeof v === "number" && v > CURRENT_SCHEMA_VERSION) {
+          throw new Error(
+            `State file ${path.basename(this.filePath)} has schema version ${v}, but this bridge supports up to ${CURRENT_SCHEMA_VERSION}. Upgrade the bridge.`,
+          );
+        }
+      }
+
       return this.parser ? this.parser(parsed) : (parsed as T);
     } catch (error) {
       if (typeof error === "object" && error !== null && "code" in error && (error as NodeJS.ErrnoException).code === "ENOENT") {
@@ -25,8 +38,14 @@ export class JsonStore<T> {
   async write(value: T): Promise<void> {
     await mkdir(path.dirname(this.filePath), { recursive: true });
 
+    // Attach current schema version on write so future loads can detect
+    // incompatibility without every caller remembering to add it.
+    const versioned = typeof value === "object" && value !== null
+      ? { schemaVersion: CURRENT_SCHEMA_VERSION, ...(value as object) }
+      : value;
+
     const tmpPath = path.join(path.dirname(this.filePath), `${path.basename(this.filePath)}.${randomUUID()}.tmp`);
-    await writeFile(tmpPath, JSON.stringify(value, null, 2), "utf8");
+    await writeFile(tmpPath, JSON.stringify(versioned, null, 2), "utf8");
     await rename(tmpPath, this.filePath);
   }
 

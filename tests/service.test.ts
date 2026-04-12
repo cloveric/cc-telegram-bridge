@@ -2998,7 +2998,7 @@ describe("polling helpers", () => {
       );
 
       expect(api.editMessage).toHaveBeenLastCalledWith(123, 11, "Session reset for this chat.");
-      expect(JSON.parse(await readFile(path.join(root, "session.json"), "utf8"))).toEqual({
+      expect(JSON.parse(await readFile(path.join(root, "session.json"), "utf8"))).toEqual(expect.objectContaining({
         chats: [
           {
             telegramChatId: 456,
@@ -3007,7 +3007,7 @@ describe("polling helpers", () => {
             updatedAt: "2026-04-10T00:00:00.000Z",
           },
         ],
-      });
+      }));
       expect(bridge.handleAuthorizedMessage).not.toHaveBeenCalled();
     } finally {
       await rm(root, { recursive: true, force: true });
@@ -3510,7 +3510,7 @@ describe("polling helpers", () => {
       ).resolves.toBeUndefined();
 
       expect(api.editMessage).toHaveBeenLastCalledWith(123, 11, "Session reset for this chat.");
-      expect(JSON.parse(await readFile(path.join(stateDir, "session.json"), "utf8"))).toEqual({ chats: [] });
+      expect(JSON.parse(await readFile(path.join(stateDir, "session.json"), "utf8"))).toEqual(expect.objectContaining({ chats: [] }));
       expect(api.sendMessage).toHaveBeenCalledTimes(1);
       expect(api.sendMessage).toHaveBeenCalledWith(123, "Received. Starting your session...");
     } finally {

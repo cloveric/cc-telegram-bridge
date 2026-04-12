@@ -365,7 +365,7 @@ describe("runCli", () => {
 
       expect(handled).toBe(true);
       expect(messages[0]).toContain('Session state was unreadable and has been reset for instance "alpha".');
-      expect(JSON.parse(await readFile(sessionPath, "utf8"))).toEqual({ chats: [] });
+      expect(JSON.parse(await readFile(sessionPath, "utf8"))).toEqual(expect.objectContaining({ chats: [] }));
       expect(await readdir(path.dirname(sessionPath))).toEqual(
         expect.arrayContaining([expect.stringMatching(/^session\.json\.corrupt\..+\.bak$/)]),
       );
@@ -640,7 +640,7 @@ describe("runCli", () => {
 
       expect(handled).toBe(true);
       expect(messages[0]).toContain('Task state was unreadable and has been reset for instance "alpha".');
-      expect(JSON.parse(await readFile(workflowPath, "utf8"))).toEqual({ records: [] });
+      expect(JSON.parse(await readFile(workflowPath, "utf8"))).toEqual(expect.objectContaining({ records: [] }));
       expect(await readdir(path.dirname(workflowPath))).toEqual(
         expect.arrayContaining([expect.stringMatching(/^file-workflow\.json\.corrupt\..+\.bak$/)]),
       );

@@ -417,7 +417,8 @@ describe("FileWorkflowStore", () => {
         repaired: true,
       });
 
-      await expect(readFile(filePath, "utf8")).resolves.toBe(JSON.stringify({ records: [] }, null, 2));
+      const after = JSON.parse(await readFile(filePath, "utf8")) as { records: unknown[] };
+      expect(after.records).toEqual([]);
       const backups = (await readdir(stateDir)).filter((entry) => entry.startsWith("file-workflow.json.") && !entry.endsWith(".tmp"));
       expect(backups).toHaveLength(1);
       await expect(readFile(path.join(stateDir, backups[0]!), "utf8")).resolves.toBe(unreadableContents);

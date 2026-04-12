@@ -239,7 +239,7 @@ describe("task commands", () => {
         cleanupWarning: "cleanup failed",
       });
 
-      expect(JSON.parse(await readFile(workflowPath, "utf8"))).toEqual({ records: [] });
+      expect(JSON.parse(await readFile(workflowPath, "utf8"))).toEqual(expect.objectContaining({ records: [] }));
     } finally {
       await rm(homeDir, { recursive: true, force: true });
     }
@@ -286,7 +286,7 @@ describe("task commands", () => {
         repaired: true,
       });
 
-      expect(JSON.parse(await readFile(workflowPath, "utf8"))).toEqual({ records: [] });
+      expect(JSON.parse(await readFile(workflowPath, "utf8"))).toEqual(expect.objectContaining({ records: [] }));
       await expect(access(workflowPath)).resolves.toBeUndefined();
       expect(removeWorkspaceDir).not.toHaveBeenCalled();
     } finally {
