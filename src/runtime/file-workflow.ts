@@ -56,6 +56,10 @@ const MAX_ARCHIVE_SUMMARY_DELIVERY_CHARS = 3900;
 const MAX_TOTAL_ARCHIVE_BYTES = 500 * 1024 * 1024;
 const MAX_ACTIVE_WORKFLOWS_PER_CHAT = 3;
 
+function isActiveWorkflowStatus(status: FileWorkflowRecord["status"]): boolean {
+  return status === "preparing" || status === "processing" || status === "awaiting_continue";
+}
+
 function resolveWorkspaceUploadsDir(stateDir: string): string {
   return path.join(stateDir, "workspace", ".telegram-files");
 }
@@ -341,7 +345,7 @@ export async function prepareAttachmentWorkflow(input: {
 
   const existingState = await store.load();
   const activeForChat = existingState.records.filter(
-    (r) => r.chatId === input.chatId && (r.status === "preparing" || r.status === "processing"),
+    (r) => r.chatId === input.chatId && isActiveWorkflowStatus(r.status),
   );
   if (activeForChat.length >= MAX_ACTIVE_WORKFLOWS_PER_CHAT) {
     return {

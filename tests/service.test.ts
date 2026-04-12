@@ -1386,6 +1386,104 @@ describe("polling helpers", () => {
     }
   });
 
+  it("rejects new uploads when three archives are already waiting for continuation", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
+    const inboxDir = path.join(root, "inbox");
+    await writeFile(
+      path.join(root, "file-workflow.json"),
+      JSON.stringify({
+        records: [
+          {
+            uploadId: "archive-1",
+            chatId: 123,
+            userId: 456,
+            kind: "archive",
+            status: "awaiting_continue",
+            sourceFiles: ["repo-1.zip"],
+            derivedFiles: [],
+            summary: "archive summary one",
+            extractedPath: "workspace/.telegram-files/archive-1/extracted",
+            createdAt: "2026-04-10T00:00:00.000Z",
+            updatedAt: "2026-04-10T00:00:00.000Z",
+          },
+          {
+            uploadId: "archive-2",
+            chatId: 123,
+            userId: 456,
+            kind: "archive",
+            status: "awaiting_continue",
+            sourceFiles: ["repo-2.zip"],
+            derivedFiles: [],
+            summary: "archive summary two",
+            extractedPath: "workspace/.telegram-files/archive-2/extracted",
+            createdAt: "2026-04-10T00:01:00.000Z",
+            updatedAt: "2026-04-10T00:01:00.000Z",
+          },
+          {
+            uploadId: "archive-3",
+            chatId: 123,
+            userId: 456,
+            kind: "archive",
+            status: "awaiting_continue",
+            sourceFiles: ["repo-3.zip"],
+            derivedFiles: [],
+            summary: "archive summary three",
+            extractedPath: "workspace/.telegram-files/archive-3/extracted",
+            createdAt: "2026-04-10T00:02:00.000Z",
+            updatedAt: "2026-04-10T00:02:00.000Z",
+          },
+        ],
+      }),
+      "utf8",
+    );
+    const api = {
+      sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      getFile: vi.fn().mockResolvedValue({ file_path: "uploads/note.txt" }),
+      downloadFile: vi.fn().mockImplementation(async (_filePath: string, destinationPath: string) => {
+        await writeFile(destinationPath, "hello", "utf8");
+      }),
+    };
+    const bridge = {
+      checkAccess: vi.fn().mockResolvedValue({ kind: "allow" }),
+      handleAuthorizedMessage: vi.fn().mockResolvedValue({ text: "analysis done" }),
+    };
+
+    try {
+      await handleNormalizedTelegramMessage(
+        {
+          chatId: 123,
+          userId: 456,
+          chatType: "private",
+          text: "analyze this note",
+          replyContext: undefined,
+          attachments: [{ fileId: "doc-1", fileName: "note.txt", kind: "document" }],
+        },
+        {
+          api: api as never,
+          bridge: bridge as never,
+          inboxDir,
+        },
+      );
+
+      expect(api.editMessage).toHaveBeenLastCalledWith(
+        123,
+        11,
+        "Too many active file tasks for this chat. Wait for current tasks to finish or use /reset.",
+        undefined,
+      );
+      expect(bridge.handleAuthorizedMessage).not.toHaveBeenCalled();
+
+      const workflowState = JSON.parse(await readFile(path.join(root, "file-workflow.json"), "utf8")) as {
+        records: Array<{ uploadId: string; status: string }>;
+      };
+      expect(workflowState.records).toHaveLength(3);
+      expect(workflowState.records.every((record) => record.status === "awaiting_continue")).toBe(true);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("marks a continued archive as failed when engine execution fails", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
     const inboxDir = path.join(root, "inbox");

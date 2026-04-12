@@ -3,7 +3,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { ClaudeStreamAdapter } from "../src/codex/claude-stream-adapter.js";
 
@@ -42,6 +42,11 @@ class FakeClaudeChildProcess extends EventEmitter {
   stdin = new FakeWritable();
   stdout = new FakeStream();
   stderr = new FakeStream();
+  killCalls = 0;
+
+  kill() {
+    this.killCalls += 1;
+  }
 
   close(code: number | null) {
     this.emit("close", code);
@@ -270,5 +275,51 @@ describe("ClaudeStreamAdapter", () => {
     children[0].stdout.emitData('{"type":"result","subtype":"success","is_error":true,"result":"Permission denied","session_id":"session-123"}\n');
 
     await expect(resultPromise).rejects.toThrow("Permission denied");
+  });
+
+  it("times out a stalled turn and starts a fresh worker for the retry", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const { children, spawnFn } = createSpawnHarness();
+      const adapter = new ClaudeStreamAdapter("claude", {
+        spawnFn,
+      });
+
+      const firstPromise = adapter.sendUserMessage("telegram-12345", {
+        text: "First",
+        files: [],
+      });
+
+      expect(children).toHaveLength(1);
+      expect(children[0].stdin.lines).toHaveLength(1);
+
+      const firstOutcome: string[] = [];
+      void firstPromise.then(
+        () => firstOutcome.push("resolved"),
+        (error: Error) => firstOutcome.push(error.message),
+      );
+
+      await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
+
+      expect(firstOutcome).toEqual(["Engine execution timed out after 5 minutes"]);
+      expect(children[0].killCalls).toBe(1);
+
+      const secondPromise = adapter.sendUserMessage("telegram-12345", {
+        text: "Second",
+        files: [],
+      });
+
+      expect(children).toHaveLength(2);
+      expect(children[1].stdin.lines).toHaveLength(1);
+      children[1].stdout.emitData('{"type":"result","subtype":"success","is_error":false,"result":"RECOVERED","session_id":"session-2"}\n');
+
+      await expect(secondPromise).resolves.toEqual({
+        text: "RECOVERED",
+        sessionId: "session-2",
+      });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

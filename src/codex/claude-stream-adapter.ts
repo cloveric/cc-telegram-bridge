@@ -54,6 +54,7 @@ type PendingTurn = {
   assistantText: string;
   resolve: (value: CodexAdapterResponse) => void;
   reject: (error: Error) => void;
+  timeout?: ReturnType<typeof setTimeout>;
 };
 
 type ClaudeWorker = {
@@ -67,6 +68,7 @@ type ClaudeWorker = {
 
 const MAX_INSTRUCTIONS_CHARS = 16_000;
 const MAX_LINE_BUFFER_BYTES = 1024 * 1024;
+const TURN_TIMEOUT_MS = 5 * 60 * 1000;
 
 function isLogicalTelegramSessionId(sessionId: string): boolean {
   return sessionId.startsWith("telegram-");
@@ -227,10 +229,7 @@ export class ClaudeStreamAdapter implements CodexAdapter {
 
       const resumedSessionId = existing.currentSessionId ?? sessionId;
       existing.child.kill?.();
-      this.workers.delete(sessionId);
-      if (existing.currentSessionId && existing.currentSessionId !== sessionId) {
-        this.workers.delete(existing.currentSessionId);
-      }
+      this.removeWorker(existing);
       sessionId = resumedSessionId;
     }
 
@@ -285,9 +284,7 @@ export class ClaudeStreamAdapter implements CodexAdapter {
 
     child.once("close", (code) => {
       this.failWorker(worker, new Error(`claude stream session exited with code ${code}`));
-      if (worker.currentSessionId) {
-        this.workers.delete(worker.currentSessionId);
-      }
+      this.removeWorker(worker);
     });
 
     this.workers.set(sessionId, worker);
@@ -338,6 +335,7 @@ export class ClaudeStreamAdapter implements CodexAdapter {
     if (parsed.type === "result" && worker.pendingTurn) {
       const pending = worker.pendingTurn;
       worker.pendingTurn = null;
+      this.clearPendingTurnTimeout(pending);
       if (parsed.is_error) {
         pending.reject(new Error((parsed.result ?? pending.assistantText ?? "Claude reported an error").trim()));
         return;
@@ -355,11 +353,22 @@ export class ClaudeStreamAdapter implements CodexAdapter {
     }
 
     return await new Promise<CodexAdapterResponse>((resolve, reject) => {
-      worker.pendingTurn = {
+      const pendingTurn: PendingTurn = {
         assistantText: "",
         resolve,
         reject,
       };
+      pendingTurn.timeout = setTimeout(() => {
+        if (worker.pendingTurn !== pendingTurn) {
+          return;
+        }
+
+        worker.pendingTurn = null;
+        this.removeWorker(worker);
+        worker.child.kill?.();
+        reject(new Error("Engine execution timed out after 5 minutes"));
+      }, TURN_TIMEOUT_MS);
+      worker.pendingTurn = pendingTurn;
 
       worker.child.stdin?.write(
         JSON.stringify({
@@ -376,7 +385,9 @@ export class ClaudeStreamAdapter implements CodexAdapter {
         }) + "\n",
         (error) => {
           if (error) {
+            this.clearPendingTurnTimeout(worker.pendingTurn);
             worker.pendingTurn = null;
+            this.removeWorker(worker);
             reject(error);
           }
         },
@@ -388,6 +399,7 @@ export class ClaudeStreamAdapter implements CodexAdapter {
     for (const worker of this.workers.values()) {
       worker.child.kill?.();
       if (worker.pendingTurn) {
+        this.clearPendingTurnTimeout(worker.pendingTurn);
         worker.pendingTurn.reject(new Error("Adapter destroyed"));
         worker.pendingTurn = null;
       }
@@ -399,7 +411,23 @@ export class ClaudeStreamAdapter implements CodexAdapter {
     if (worker.pendingTurn) {
       const pending = worker.pendingTurn;
       worker.pendingTurn = null;
+      this.clearPendingTurnTimeout(pending);
       pending.reject(error);
+    }
+  }
+
+  private clearPendingTurnTimeout(pending: PendingTurn | null | undefined): void {
+    if (pending?.timeout) {
+      clearTimeout(pending.timeout);
+      pending.timeout = undefined;
+    }
+  }
+
+  private removeWorker(worker: ClaudeWorker): void {
+    for (const [key, candidate] of this.workers.entries()) {
+      if (candidate === worker) {
+        this.workers.delete(key);
+      }
     }
   }
 }
