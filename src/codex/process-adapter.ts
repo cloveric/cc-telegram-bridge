@@ -266,6 +266,23 @@ export class ProcessCodexAdapter implements CodexAdapter {
     }
   }
 
+  private async loadEngineOptions(): Promise<{ effort?: string; model?: string }> {
+    if (!this.configPath) {
+      return {};
+    }
+
+    try {
+      const raw = await readFile(this.configPath, "utf8");
+      const parsed = JSON.parse(raw) as { effort?: string; model?: string };
+      return {
+        effort: typeof parsed.effort === "string" ? parsed.effort : undefined,
+        model: typeof parsed.model === "string" ? parsed.model : undefined,
+      };
+    } catch {
+      return {};
+    }
+  }
+
   private async loadInstructions(): Promise<string | null> {
     if (!this.instructionsPath) {
       return null;
@@ -306,15 +323,24 @@ export class ProcessCodexAdapter implements CodexAdapter {
     parts.push(...input.files.map((file) => `Attachment: ${file}`));
     const prompt = parts.join("\n");
     const approvalMode = this.configPath ? await this.loadApprovalMode() : "normal";
+    const engineOptions = this.configPath ? await this.loadEngineOptions() : {};
     const approvalFlags: string[] =
       approvalMode === "bypass"
         ? ["--dangerously-bypass-approvals-and-sandbox"]
         : approvalMode === "full-auto"
           ? ["--full-auto"]
           : [];
+    const engineFlags: string[] = [];
+    if (engineOptions.effort) {
+      const codexEffort = engineOptions.effort === "max" ? "xhigh" : engineOptions.effort;
+      engineFlags.push("-c", `model_reasoning_effort="${codexEffort}"`);
+    }
+    if (engineOptions.model) {
+      engineFlags.push("-m", engineOptions.model);
+    }
     const args = isLogicalTelegramSessionId(sessionId)
-      ? ["exec", "--json", "--skip-git-repo-check", ...approvalFlags, "-"]
-      : ["exec", "resume", "--json", "--skip-git-repo-check", ...approvalFlags, sessionId, "-"];
+      ? ["exec", "--json", "--skip-git-repo-check", ...approvalFlags, ...engineFlags, "-"]
+      : ["exec", "resume", "--json", "--skip-git-repo-check", ...approvalFlags, ...engineFlags, sessionId, "-"];
     const result = await this.runCodexJsonCommand(args, prompt);
     const events = parseJsonEvents(result.stdout);
     const lastAgentMessage = extractLastAgentMessage(events);
