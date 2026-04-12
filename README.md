@@ -663,11 +663,11 @@ npm start                    # Start production build
 docker build -t cc-telegram-bridge .
 
 # Run (configure first, then start)
-docker run -v ~/.codex:/root/.codex cc-telegram-bridge telegram configure <token>
-docker run -v ~/.codex:/root/.codex cc-telegram-bridge telegram service start
+docker run -v ~/.cctb:/root/.codex cc-telegram-bridge telegram configure <token>
+docker run -v ~/.cctb:/root/.codex cc-telegram-bridge telegram service start
 ```
 
-Mount `~/.codex` to persist state across container restarts.
+Mount `~/.cctb` to persist state across container restarts.
 
 ---
 

@@ -671,11 +671,11 @@ npm start                    # 启动生产版本
 docker build -t cc-telegram-bridge .
 
 # 运行
-docker run -v ~/.codex:/root/.codex cc-telegram-bridge telegram configure <token>
-docker run -v ~/.codex:/root/.codex cc-telegram-bridge telegram service start
+docker run -v ~/.cctb:/root/.codex cc-telegram-bridge telegram configure <token>
+docker run -v ~/.cctb:/root/.codex cc-telegram-bridge telegram service start
 ```
 
-挂载 `~/.codex` 以在容器重启后保留状态。
+挂载 `~/.cctb` 以在容器重启后保留状态。
 
 ---
 
