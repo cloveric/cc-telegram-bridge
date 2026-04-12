@@ -170,10 +170,28 @@ export class ProcessClaudeAdapter implements CodexAdapter {
     }
   }
 
+  private async loadEngineOptions(): Promise<{ effort?: string; model?: string }> {
+    if (!this.configPath) {
+      return {};
+    }
+
+    try {
+      const raw = await readFile(this.configPath, "utf8");
+      const parsed = JSON.parse(raw) as { effort?: string; model?: string };
+      return {
+        effort: typeof parsed.effort === "string" ? parsed.effort : undefined,
+        model: typeof parsed.model === "string" ? parsed.model : undefined,
+      };
+    } catch {
+      return {};
+    }
+  }
+
   async sendUserMessage(sessionId: string, input: CodexUserMessageInput): Promise<CodexAdapterResponse> {
     const agentInstructions = this.instructionsPath ? await this.loadInstructions() : null;
     const bridgeInstructions = input.instructions ?? null;
     const approvalMode = this.configPath ? await this.loadApprovalMode() : "normal";
+    const engineOptions = this.configPath ? await this.loadEngineOptions() : {};
 
     // Build prompt with files
     const parts: string[] = [];
@@ -204,6 +222,16 @@ export class ProcessClaudeAdapter implements CodexAdapter {
       args.push("--dangerously-skip-permissions");
     } else if (approvalMode === "full-auto") {
       args.push("--permission-mode", "bypassPermissions");
+    }
+
+    // Effort level
+    if (engineOptions.effort) {
+      args.push("--effort", engineOptions.effort);
+    }
+
+    // Model override
+    if (engineOptions.model) {
+      args.push("--model", engineOptions.model);
     }
 
     // Workspace directory (where CLAUDE.md lives)

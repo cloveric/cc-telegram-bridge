@@ -25,12 +25,18 @@ import { SessionStateError } from "../runtime/session-manager.js";
 import { delegateToInstance } from "../bus/bus-client.js";
 import { loadBusConfig } from "../bus/bus-config.js";
 
+type EffortLevel = "low" | "medium" | "high" | "max";
+
 interface InstanceConfig {
   engine: "codex" | "claude";
   locale: "en" | "zh";
   verbosity: 0 | 1 | 2;
   budgetUsd: number | undefined;
+  effort: EffortLevel | undefined;
+  model: string | undefined;
 }
+
+const VALID_EFFORT_LEVELS: EffortLevel[] = ["low", "medium", "high", "max"];
 
 async function loadInstanceConfig(stateDir: string): Promise<InstanceConfig> {
   try {
@@ -40,16 +46,32 @@ async function loadInstanceConfig(stateDir: string): Promise<InstanceConfig> {
       locale?: string;
       verbosity?: number;
       budgetUsd?: number;
+      effort?: string;
+      model?: string;
     };
+    const effort = VALID_EFFORT_LEVELS.includes(config.effort as EffortLevel) ? config.effort as EffortLevel : undefined;
     return {
       engine: config.engine === "claude" ? "claude" : "codex",
       locale: config.locale === "zh" ? "zh" : "en",
       verbosity: config.verbosity === 0 ? 0 : config.verbosity === 2 ? 2 : 1,
       budgetUsd: typeof config.budgetUsd === "number" && config.budgetUsd > 0 ? config.budgetUsd : undefined,
+      effort,
+      model: typeof config.model === "string" && config.model.trim() ? config.model.trim() : undefined,
     };
   } catch {
-    return { engine: "codex", locale: "en", verbosity: 1, budgetUsd: undefined };
+    return { engine: "codex", locale: "en", verbosity: 1, budgetUsd: undefined, effort: undefined, model: undefined };
   }
+}
+
+async function updateInstanceConfig(stateDir: string, updater: (config: Record<string, unknown>) => void): Promise<void> {
+  const configPath = path.join(stateDir, "config.json");
+  let config: Record<string, unknown> = {};
+  try {
+    config = JSON.parse(await readFile(configPath, "utf8")) as Record<string, unknown>;
+  } catch { /* start fresh */ }
+  updater(config);
+  const { writeFile } = await import("node:fs/promises");
+  await writeFile(configPath, JSON.stringify(config, null, 2) + "\n", "utf8");
 }
 
 async function appendAuditEventBestEffort(stateDir: string, event: Parameters<typeof appendAuditEvent>[1]): Promise<void> {
@@ -114,6 +136,18 @@ function isHelpCommand(text: string): boolean {
 
 function isStatusCommand(text: string): boolean {
   return /^\/status(?:@\w+)?(?:\s|$)/i.test(text.trim());
+}
+
+function parseEffortCommand(text: string): { level: string } | null {
+  const match = text.trim().match(/^\/effort(?:@\w+)?(?:\s+(\S+))?$/i);
+  if (!match) return null;
+  return { level: match[1] ?? "" };
+}
+
+function parseModelCommand(text: string): { model: string } | null {
+  const match = text.trim().match(/^\/model(?:@\w+)?(?:\s+(\S+))?$/i);
+  if (!match) return null;
+  return { model: match[1] ?? "" };
 }
 
 function parseAskCommand(text: string): { targetInstance: string; prompt: string } | null {
@@ -500,6 +534,49 @@ export async function handleNormalizedTelegramMessage(
           chunkCount: chunkTelegramMessage(statusMessage).length,
         },
       });
+      return;
+    }
+
+    const effortCmd = parseEffortCommand(normalized.text);
+    if (effortCmd) {
+      if (!effortCmd.level) {
+        const current = cfg.effort ?? "default";
+        const msg = locale === "zh" ? `当前 effort: ${current}` : `Current effort: ${current}`;
+        await context.api.editMessage(normalized.chatId, placeholderMessageId, msg);
+      } else if (VALID_EFFORT_LEVELS.includes(effortCmd.level as EffortLevel)) {
+        await updateInstanceConfig(stateDir, (c) => { c.effort = effortCmd.level; });
+        const msg = locale === "zh" ? `Effort 已设为 ${effortCmd.level}。` : `Effort set to ${effortCmd.level}.`;
+        await context.api.editMessage(normalized.chatId, placeholderMessageId, msg);
+      } else if (effortCmd.level === "off" || effortCmd.level === "default") {
+        await updateInstanceConfig(stateDir, (c) => { delete c.effort; });
+        const msg = locale === "zh" ? "Effort 已恢复默认。" : "Effort reset to default.";
+        await context.api.editMessage(normalized.chatId, placeholderMessageId, msg);
+      } else {
+        const msg = locale === "zh"
+          ? "用法: /effort [low|medium|high|max|off]"
+          : "Usage: /effort [low|medium|high|max|off]";
+        await context.api.editMessage(normalized.chatId, placeholderMessageId, msg);
+      }
+      placeholderShowsResponse = true;
+      return;
+    }
+
+    const modelCmd = parseModelCommand(normalized.text);
+    if (modelCmd) {
+      if (!modelCmd.model) {
+        const current = cfg.model ?? "default";
+        const msg = locale === "zh" ? `当前模型: ${current}` : `Current model: ${current}`;
+        await context.api.editMessage(normalized.chatId, placeholderMessageId, msg);
+      } else if (modelCmd.model === "off" || modelCmd.model === "default") {
+        await updateInstanceConfig(stateDir, (c) => { delete c.model; });
+        const msg = locale === "zh" ? "模型已恢复默认。" : "Model reset to default.";
+        await context.api.editMessage(normalized.chatId, placeholderMessageId, msg);
+      } else {
+        await updateInstanceConfig(stateDir, (c) => { c.model = modelCmd.model; });
+        const msg = locale === "zh" ? `模型已设为 ${modelCmd.model}。` : `Model set to ${modelCmd.model}.`;
+        await context.api.editMessage(normalized.chatId, placeholderMessageId, msg);
+      }
+      placeholderShowsResponse = true;
       return;
     }
 

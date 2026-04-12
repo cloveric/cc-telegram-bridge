@@ -188,12 +188,30 @@ export class ClaudeStreamAdapter implements CodexAdapter {
     }
   }
 
+  private async loadEngineOptions(): Promise<{ effort?: string; model?: string }> {
+    if (!this.configPath) {
+      return {};
+    }
+
+    try {
+      const raw = await readFile(this.configPath, "utf8");
+      const parsed = JSON.parse(raw) as { effort?: string; model?: string };
+      return {
+        effort: typeof parsed.effort === "string" ? parsed.effort : undefined,
+        model: typeof parsed.model === "string" ? parsed.model : undefined,
+      };
+    } catch {
+      return {};
+    }
+  }
+
   async sendUserMessage(sessionId: string, input: CodexUserMessageInput): Promise<CodexAdapterResponse> {
     const agentInstructions = this.instructionsPath ? await this.loadInstructions() : null;
     const bridgeInstructions = input.instructions ?? null;
     const approvalMode = this.configPath ? await this.loadApprovalMode() : "normal";
+    const engineOptions = this.configPath ? await this.loadEngineOptions() : {};
     const prompt = this.buildPrompt(input);
-    const worker = this.getOrCreateWorker(sessionId, agentInstructions, bridgeInstructions, approvalMode);
+    const worker = this.getOrCreateWorker(sessionId, agentInstructions, bridgeInstructions, approvalMode, engineOptions);
 
     const response = await this.sendTurn(worker, prompt);
     const nextSessionId = response.sessionId;
@@ -215,7 +233,7 @@ export class ClaudeStreamAdapter implements CodexAdapter {
     return parts.join("\n");
   }
 
-  private getOrCreateWorker(sessionId: string, agentInstructions: string | null, bridgeInstructions: string | null, approvalMode: ApprovalMode): ClaudeWorker {
+  private getOrCreateWorker(sessionId: string, agentInstructions: string | null, bridgeInstructions: string | null, approvalMode: ApprovalMode, engineOptions?: { effort?: string; model?: string }): ClaudeWorker {
     const combinedKey = combineInstructions(agentInstructions, bridgeInstructions);
     const existing = this.workers.get(sessionId);
     if (existing) {
@@ -247,6 +265,12 @@ export class ClaudeStreamAdapter implements CodexAdapter {
       args.push("--dangerously-skip-permissions");
     } else if (approvalMode === "full-auto") {
       args.push("--permission-mode", "bypassPermissions");
+    }
+    if (engineOptions?.effort) {
+      args.push("--effort", engineOptions.effort);
+    }
+    if (engineOptions?.model) {
+      args.push("--model", engineOptions.model);
     }
     if (this.workspacePath) {
       args.push("--add-dir", this.workspacePath);
