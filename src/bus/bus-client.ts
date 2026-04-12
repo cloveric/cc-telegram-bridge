@@ -20,7 +20,7 @@ export async function delegateToInstance(input: BusDelegateInput): Promise<BusTa
     throw new Error(`Instance "${input.targetInstance}" is not in the peer list`);
   }
 
-  if (input.depth > busConfig.maxDepth) {
+  if (input.depth >= busConfig.maxDepth) {
     throw new Error(`Max delegation depth (${busConfig.maxDepth}) exceeded`);
   }
 
@@ -48,12 +48,17 @@ export async function delegateToInstance(input: BusDelegateInput): Promise<BusTa
 
   const url = `http://127.0.0.1:${target.port}/api/talk`;
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 5 * 60 * 1000);
+  const timeout = setTimeout(() => controller.abort(), 60 * 1000);
+
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (target.secret) {
+    headers.Authorization = `Bearer ${target.secret}`;
+  }
 
   try {
     const res = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body,
       signal: controller.signal,
     });
@@ -67,7 +72,7 @@ export async function delegateToInstance(input: BusDelegateInput): Promise<BusTa
     return result;
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
-      throw new Error(`Delegation to "${input.targetInstance}" timed out after 5 minutes`);
+      throw new Error(`Delegation to "${input.targetInstance}" timed out after 60 seconds`);
     }
     throw error;
   } finally {

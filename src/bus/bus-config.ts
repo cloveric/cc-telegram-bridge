@@ -5,6 +5,7 @@ export interface BusConfig {
   peers: "*" | string[] | false;
   maxDepth: number;
   port: number;
+  secret: string;
 }
 
 const DEFAULT_MAX_DEPTH = 3;
@@ -15,7 +16,7 @@ export function parseBusConfig(raw: unknown): BusConfig | null {
   }
 
   if (raw === true) {
-    return { peers: "*", maxDepth: DEFAULT_MAX_DEPTH, port: 0 };
+    return { peers: "*", maxDepth: DEFAULT_MAX_DEPTH, port: 0, secret: "" };
   }
 
   if (typeof raw !== "object") {
@@ -46,7 +47,9 @@ export function parseBusConfig(raw: unknown): BusConfig | null {
       ? Math.trunc(obj.port)
       : 0;
 
-  return { peers, maxDepth, port };
+  const secret = typeof obj.secret === "string" ? obj.secret : "";
+
+  return { peers, maxDepth, port, secret };
 }
 
 export async function loadBusConfig(stateDir: string): Promise<BusConfig | null> {

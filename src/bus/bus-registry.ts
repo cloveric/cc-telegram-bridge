@@ -4,6 +4,7 @@ import path from "node:path";
 export interface BusRegistryEntry {
   port: number;
   pid: number;
+  secret: string;
   updatedAt: string;
 }
 
@@ -36,12 +37,14 @@ export async function registerInstance(
   channelRoot: string,
   instanceName: string,
   port: number,
+  secret: string,
 ): Promise<void> {
   await mkdir(channelRoot, { recursive: true });
   const registry = await readRegistry(channelRoot);
   registry.instances[instanceName] = {
     port,
     pid: process.pid,
+    secret,
     updatedAt: new Date().toISOString(),
   };
   await writeFile(resolveRegistryPath(channelRoot), JSON.stringify(registry, null, 2) + "\n", "utf8");

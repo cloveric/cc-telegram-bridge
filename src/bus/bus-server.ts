@@ -85,6 +85,13 @@ export function createBusServer(
           return;
         }
 
+        const authHeader = req.headers.authorization;
+        const expectedSecret = busConfig.secret;
+        if (expectedSecret && authHeader !== `Bearer ${expectedSecret}`) {
+          sendJson(res, 401, { success: false, error: "Invalid or missing bus secret" });
+          return;
+        }
+
         if (!isPeerAllowed(busConfig, talkReq.fromInstance)) {
           sendJson(res, 403, {
             success: false,
@@ -93,7 +100,7 @@ export function createBusServer(
           return;
         }
 
-        if (talkReq.depth > busConfig.maxDepth) {
+        if (talkReq.depth >= busConfig.maxDepth) {
           sendJson(res, 429, {
             success: false,
             error: `Max delegation depth (${busConfig.maxDepth}) exceeded`,

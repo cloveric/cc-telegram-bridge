@@ -28,17 +28,17 @@ describe("parseBusConfig", () => {
 
   it("parses true as wildcard peers", () => {
     const result = parseBusConfig(true);
-    expect(result).toEqual({ peers: "*", maxDepth: 3, port: 0 });
+    expect(result).toEqual({ peers: "*", maxDepth: 3, port: 0, secret: "" });
   });
 
   it("parses peers wildcard", () => {
     const result = parseBusConfig({ peers: "*" });
-    expect(result).toEqual({ peers: "*", maxDepth: 3, port: 0 });
+    expect(result).toEqual({ peers: "*", maxDepth: 3, port: 0, secret: "" });
   });
 
   it("parses peers list", () => {
     const result = parseBusConfig({ peers: ["work", "reviewer"] });
-    expect(result).toEqual({ peers: ["work", "reviewer"], maxDepth: 3, port: 0 });
+    expect(result).toEqual({ peers: ["work", "reviewer"], maxDepth: 3, port: 0, secret: "" });
   });
 
   it("returns null for empty peers list", () => {
@@ -47,7 +47,12 @@ describe("parseBusConfig", () => {
 
   it("respects custom maxDepth and port", () => {
     const result = parseBusConfig({ peers: "*", maxDepth: 5, port: 9200 });
-    expect(result).toEqual({ peers: "*", maxDepth: 5, port: 9200 });
+    expect(result).toEqual({ peers: "*", maxDepth: 5, port: 9200, secret: "" });
+  });
+
+  it("parses secret", () => {
+    const result = parseBusConfig({ peers: "*", secret: "my-token" });
+    expect(result).toEqual({ peers: "*", maxDepth: 3, port: 0, secret: "my-token" });
   });
 
   it("returns null for peers: false", () => {
@@ -57,19 +62,19 @@ describe("parseBusConfig", () => {
 
 describe("isPeerAllowed", () => {
   it("allows all peers with wildcard", () => {
-    const config: BusConfig = { peers: "*", maxDepth: 3, port: 0 };
+    const config: BusConfig = { peers: "*", maxDepth: 3, port: 0, secret: "" };
     expect(isPeerAllowed(config, "anything")).toBe(true);
   });
 
   it("allows listed peers", () => {
-    const config: BusConfig = { peers: ["work", "reviewer"], maxDepth: 3, port: 0 };
+    const config: BusConfig = { peers: ["work", "reviewer"], maxDepth: 3, port: 0, secret: "" };
     expect(isPeerAllowed(config, "work")).toBe(true);
     expect(isPeerAllowed(config, "reviewer")).toBe(true);
     expect(isPeerAllowed(config, "unknown")).toBe(false);
   });
 
   it("denies all when peers is false", () => {
-    const config: BusConfig = { peers: false, maxDepth: 3, port: 0 };
+    const config: BusConfig = { peers: false, maxDepth: 3, port: 0, secret: "" };
     expect(isPeerAllowed(config, "work")).toBe(false);
   });
 });
@@ -78,11 +83,11 @@ describe("bus registry", () => {
   it("registers, looks up, and deregisters instances", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "bus-registry-"));
     try {
-      await registerInstance(tempDir, "work", 9100);
-      await registerInstance(tempDir, "reviewer", 9101);
+      await registerInstance(tempDir, "work", 9100, "secret-a");
+      await registerInstance(tempDir, "reviewer", 9101, "secret-b");
 
       const work = await lookupInstance(tempDir, "work");
-      expect(work).toEqual(expect.objectContaining({ port: 9100, pid: process.pid }));
+      expect(work).toEqual(expect.objectContaining({ port: 9100, pid: process.pid, secret: "secret-a" }));
 
       const all = await listRegisteredInstances(tempDir);
       expect(all).toHaveLength(2);
@@ -183,7 +188,7 @@ describe("bus server", () => {
         const res = await fetch(`http://127.0.0.1:${port}/api/talk`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ fromInstance: "work", prompt: "hello", depth: 3 }),
+          body: JSON.stringify({ fromInstance: "work", prompt: "hello", depth: 2 }),
         });
         expect(res.status).toBe(429);
       } finally {

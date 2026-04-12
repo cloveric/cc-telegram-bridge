@@ -408,42 +408,69 @@ export async function handleNormalizedTelegramMessage(
 
     const askCommand = parseAskCommand(normalized.text);
     if (askCommand) {
+      const currentInstance = context.instanceName ?? "default";
+      if (askCommand.targetInstance === currentInstance) {
+        await context.api.editMessage(normalized.chatId, placeholderMessageId,
+          locale === "zh" ? "不能委托给自己。" : "Cannot delegate to yourself.");
+        placeholderShowsResponse = true;
+        return;
+      }
+
       const askLabel = locale === "zh"
         ? `正在转发给 ${askCommand.targetInstance}...`
         : `Delegating to ${askCommand.targetInstance}...`;
       await context.api.editMessage(normalized.chatId, placeholderMessageId, askLabel);
 
-      const result = await delegateToInstance({
-        fromInstance: context.instanceName ?? "default",
-        targetInstance: askCommand.targetInstance,
-        prompt: askCommand.prompt,
-        depth: 0,
-        stateDir,
-      });
+      try {
+        const result = await delegateToInstance({
+          fromInstance: currentInstance,
+          targetInstance: askCommand.targetInstance,
+          prompt: askCommand.prompt,
+          depth: 0,
+          stateDir,
+        });
 
-      const askResponse = locale === "zh"
-        ? `[来自 ${askCommand.targetInstance}]\n\n${result.text}`
-        : `[From ${askCommand.targetInstance}]\n\n${result.text}`;
-      const chunks = chunkTelegramMessage(askResponse);
-      await context.api.editMessage(normalized.chatId, placeholderMessageId, chunks[0]!);
-      placeholderShowsResponse = true;
-      for (const chunk of chunks.slice(1)) {
-        await context.api.sendMessage(normalized.chatId, chunk);
+        const askResponse = locale === "zh"
+          ? `[来自 ${askCommand.targetInstance}]\n\n${result.text}`
+          : `[From ${askCommand.targetInstance}]\n\n${result.text}`;
+        const chunks = chunkTelegramMessage(askResponse);
+        await context.api.editMessage(normalized.chatId, placeholderMessageId, chunks[0]!);
+        placeholderShowsResponse = true;
+        for (const chunk of chunks.slice(1)) {
+          await context.api.sendMessage(normalized.chatId, chunk);
+        }
+
+        await appendAuditEventBestEffort(stateDir, {
+          type: "update.handle",
+          instanceName: context.instanceName,
+          chatId: normalized.chatId,
+          userId: normalized.userId,
+          updateId: context.updateId,
+          outcome: "success",
+          metadata: {
+            durationMs: Date.now() - startedAt,
+            delegatedTo: askCommand.targetInstance,
+            responseChars: askResponse.length,
+          },
+        });
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        const errorMsg = locale === "zh"
+          ? `委托给 ${askCommand.targetInstance} 失败：${detail}`
+          : `Delegation to ${askCommand.targetInstance} failed: ${detail}`;
+        await context.api.editMessage(normalized.chatId, placeholderMessageId, errorMsg);
+        placeholderShowsResponse = true;
+        await appendAuditEventBestEffort(stateDir, {
+          type: "update.handle",
+          instanceName: context.instanceName,
+          chatId: normalized.chatId,
+          userId: normalized.userId,
+          updateId: context.updateId,
+          outcome: "error",
+          detail,
+          metadata: { durationMs: Date.now() - startedAt, delegatedTo: askCommand.targetInstance },
+        });
       }
-
-      await appendAuditEventBestEffort(stateDir, {
-        type: "update.handle",
-        instanceName: context.instanceName,
-        chatId: normalized.chatId,
-        userId: normalized.userId,
-        updateId: context.updateId,
-        outcome: "success",
-        metadata: {
-          durationMs: Date.now() - startedAt,
-          delegatedTo: askCommand.targetInstance,
-          responseChars: askResponse.length,
-        },
-      });
       return;
     }
 

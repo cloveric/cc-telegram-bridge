@@ -56,11 +56,13 @@ async function main(): Promise<void> {
     const busConfig = await loadBusConfig(config.stateDir);
 
     if (busConfig) {
+      let busSessionCounter = 0;
       const handler = async (req: BusTalkRequest): Promise<BusTalkResponse> => {
         const startedAt = Date.now();
+        const busChatId = -(++busSessionCounter);
         try {
           const result = await bridge.handleAuthorizedMessage({
-            chatId: 0,
+            chatId: busChatId,
             userId: 0,
             chatType: "bus",
             text: req.prompt,
@@ -85,7 +87,7 @@ async function main(): Promise<void> {
 
       busServer = createBusServer(instanceName, config.stateDir, handler);
       const boundPort = await startBusServer(busServer, busConfig.port);
-      await registerInstance(channelRoot, instanceName, boundPort);
+      await registerInstance(channelRoot, instanceName, boundPort, busConfig.secret);
       console.log(`Bus server listening on 127.0.0.1:${boundPort}`);
     }
 
