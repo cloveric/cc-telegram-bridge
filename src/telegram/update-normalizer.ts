@@ -1,7 +1,7 @@
 export interface NormalizedTelegramAttachment {
   fileId: string;
   fileName?: string;
-  kind: "document" | "photo";
+  kind: "document" | "photo" | "voice";
 }
 
 export interface NormalizedTelegramMessage {
@@ -91,6 +91,20 @@ function normalizePhotoAttachment(message: any): NormalizedTelegramAttachment[] 
   ];
 }
 
+function normalizeVoiceAttachment(message: any): NormalizedTelegramAttachment[] {
+  const fileId = message?.voice?.file_id;
+  if (typeof fileId !== "string" || fileId.length === 0) {
+    return [];
+  }
+
+  return [
+    {
+      fileId,
+      kind: "voice",
+    },
+  ];
+}
+
 export function normalizeUpdate(update: any): NormalizedTelegramMessage | null {
   const callbackQuery = update?.callback_query;
   const rawCallbackData =
@@ -141,6 +155,6 @@ export function normalizeUpdate(update: any): NormalizedTelegramMessage | null {
           ? message.caption
           : "",
     replyContext: normalizeReplyContext(message),
-    attachments: [...normalizeDocumentAttachment(message), ...normalizePhotoAttachment(message)],
+    attachments: [...normalizeDocumentAttachment(message), ...normalizePhotoAttachment(message), ...normalizeVoiceAttachment(message)],
   };
 }

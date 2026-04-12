@@ -1,3 +1,4 @@
+import { execFile } from "node:child_process";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 
@@ -193,6 +194,10 @@ function inferExtension(attachment: NormalizedTelegramAttachment, telegramFilePa
     return ".jpg";
   }
 
+  if (attachment.kind === "voice") {
+    return ".ogg";
+  }
+
   return "";
 }
 
@@ -216,6 +221,37 @@ function buildContinueAnalysisKeyboard(uploadId: string) {
 
 async function ensureInboxDirExists(inboxDir: string): Promise<void> {
   await mkdir(inboxDir, { recursive: true });
+}
+
+const ASR_HTTP_URL = "http://127.0.0.1:8412/transcribe";
+const ASR_CLI_PYTHON = path.join(process.env.HOME ?? "/", "projects/qwen3-asr/venv/bin/python3");
+const ASR_CLI_SCRIPT = path.join(process.env.HOME ?? "/", "projects/qwen3-asr/transcribe.py");
+
+async function transcribeVoice(audioPath: string): Promise<string> {
+  try {
+    const response = await fetch(ASR_HTTP_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path: audioPath }),
+      signal: AbortSignal.timeout(30_000),
+    });
+    if (response.ok) {
+      const text = await response.text();
+      if (text.trim()) return text.trim();
+    }
+  } catch {
+    // HTTP server not running — fall back to CLI
+  }
+
+  return new Promise<string>((resolve, reject) => {
+    execFile(ASR_CLI_PYTHON, [ASR_CLI_SCRIPT, audioPath], { timeout: 120_000 }, (error, stdout, stderr) => {
+      if (error) {
+        reject(new Error(stderr?.trim() || error.message));
+        return;
+      }
+      resolve(stdout.trim());
+    });
+  });
 }
 
 async function downloadAttachments(
@@ -694,7 +730,31 @@ export async function handleNormalizedTelegramMessage(
       );
     }
 
-    const downloadedAttachments = await downloadAttachments(context.api, context.inboxDir, normalized.attachments);
+    const allDownloaded = await downloadAttachments(context.api, context.inboxDir, normalized.attachments);
+
+    const voiceDownloads = allDownloaded.filter((d) => d.attachment.kind === "voice");
+    const downloadedAttachments = allDownloaded.filter((d) => d.attachment.kind !== "voice");
+
+    if (voiceDownloads.length > 0) {
+      await context.api.editMessage(
+        normalized.chatId,
+        placeholderMessageId,
+        locale === "zh" ? "正在转写语音…" : "Transcribing voice…",
+      );
+      for (const voice of voiceDownloads) {
+        try {
+          const transcript = await transcribeVoice(voice.localPath);
+          if (transcript) {
+            normalized.text = normalized.text ? `${normalized.text}\n${transcript}` : transcript;
+          }
+        } catch {
+          const fallbackMsg = locale === "zh" ? "语音转写失败，请发送文字消息。" : "Voice transcription failed. Please send a text message.";
+          await context.api.editMessage(normalized.chatId, placeholderMessageId, fallbackMsg);
+          placeholderShowsResponse = true;
+          return;
+        }
+      }
+    }
 
     const workflowResult =
       downloadedAttachments.length > 0

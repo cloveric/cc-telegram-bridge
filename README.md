@@ -26,7 +26,7 @@
 </p>
 
 <p align="center">
-  <a href="#dual-engine-codex--claude-code">Dual Engine</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#multi-bot-setup">Multi-Bot</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#agent-bus">Agent Bus</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#yolo-mode">YOLO</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#budget-control">Budget</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#localization">i18n</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#backup--restore">Backup</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#quick-start">Quick Start</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#service-operations">Ops</a>
+  <a href="#dual-engine-codex--claude-code">Dual Engine</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#multi-bot-setup">Multi-Bot</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#agent-bus">Agent Bus</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#yolo-mode">YOLO</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#voice-input-asr">Voice</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#budget-control">Budget</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#localization">i18n</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#backup--restore">Backup</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#quick-start">Quick Start</a>&nbsp;&nbsp;|&nbsp;&nbsp;<a href="#service-operations">Ops</a>
 </p>
 
 > **RULE 1:** Let your Claude Code or Codex CLI set this up for you. Clone the repo, open it in your terminal, and tell your AI agent: *"read the README and configure a Telegram bot for me"*. It will handle the rest.
@@ -225,6 +225,52 @@ npm run dev -- telegram locale zh --instance work   # Chinese
 npm run dev -- telegram locale en --instance work   # English (default)
 npm run dev -- telegram locale --instance work       # Check current
 ```
+
+---
+
+## Voice Input (ASR)
+
+Send voice messages in Telegram — the bridge transcribes them locally before forwarding the text to the AI engine. No cloud ASR service required.
+
+**How it works:**
+
+1. User sends a voice message in Telegram
+2. The bridge downloads the `.ogg` file
+3. Transcribes it via a local ASR service (HTTP first, CLI fallback)
+4. The transcript replaces the voice attachment as the user's text message
+5. The AI engine processes it as a normal text request
+
+**Setup with Qwen3-ASR (example):**
+
+```bash
+# Clone and install the ASR model
+git clone https://github.com/nicoboss/qwen3-asr-python
+cd qwen3-asr-python
+python -m venv venv
+source venv/bin/activate
+pip install -e .
+
+# Download a model (0.6B is fast enough for voice messages)
+huggingface-cli download Qwen/Qwen3-ASR-0.6B --local-dir models/Qwen3-ASR-0.6B
+```
+
+The bridge looks for the ASR service at two locations (in order):
+
+| Method | Endpoint / Path | Latency | Notes |
+|---|---|---|---|
+| HTTP server | `POST http://127.0.0.1:8412/transcribe` | ~2-3s | Model stays in memory. Recommended. |
+| CLI fallback | `~/projects/qwen3-asr/transcribe.py <file>` | ~30s | Loads model each time. No server needed. |
+
+**Start the HTTP server (recommended):**
+
+```bash
+python ~/projects/qwen3-asr/server.py
+# Qwen3-ASR server listening on http://127.0.0.1:8412
+```
+
+**Custom ASR integration:**
+
+To use a different ASR engine, modify the `transcribeVoice()` function in `src/telegram/delivery.ts`. The function receives the local path to an `.ogg` audio file and should return the transcribed text as a string.
 
 ---
 
@@ -506,13 +552,20 @@ Telegram Update → Normalize → Access Check → Chat Queue (serialized)
   </tr>
   <tr>
     <td>
+      <h3>Voice Input</h3>
+      <p>Send voice messages — transcribed locally via pluggable ASR (e.g. Qwen3-ASR). HTTP server for fast inference, CLI fallback when offline.</p>
+    </td>
+    <td>
       <h3>Full Audit Trail</h3>
       <p>Every action recorded per-instance in append-only JSONL — filterable by type, chat, and outcome. Auto-rotated at 10MB.</p>
     </td>
+  </tr>
+  <tr>
     <td>
       <h3>Docker Ready</h3>
       <p>Multi-stage Dockerfile included. Build once, deploy anywhere.</p>
     </td>
+    <td></td>
   </tr>
 </table>
 
