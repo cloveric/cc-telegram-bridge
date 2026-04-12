@@ -502,6 +502,7 @@ export async function handleNormalizedTelegramMessage(
       await context.api.editMessage(normalized.chatId, placeholderMessageId,
         locale === "zh" ? `正在并行查询 ${targets.length + 1} 个 bot...` : `Querying ${targets.length + 1} bots in parallel...`);
 
+      let fanOutcome: "success" | "error" = "success";
       try {
         const selfPromise = context.bridge.handleAuthorizedMessage({
           chatId: normalized.chatId,
@@ -510,19 +511,22 @@ export async function handleNormalizedTelegramMessage(
           locale,
           text: fanCommand.prompt,
           files: [],
-        });
+        })
+          .then((r) => ({ name: currentInstance, text: r.text, error: null as string | null }))
+          .catch((e) => ({ name: currentInstance, text: "", error: e instanceof Error ? e.message : String(e) }));
+
         const peerPromises = targets.map((target) =>
           delegateToInstance({ fromInstance: currentInstance, targetInstance: target, prompt: fanCommand.prompt, depth: 0, stateDir })
             .then((r) => ({ name: target, text: r.text, error: null as string | null }))
             .catch((e) => ({ name: target, text: "", error: e instanceof Error ? e.message : String(e) })),
         );
 
-        const [selfResult, ...peerResults] = await Promise.all([selfPromise, ...peerPromises]);
-        const sections: string[] = [`[${currentInstance}]\n${selfResult.text}`];
-        for (const peer of peerResults) {
-          sections.push(peer.error
-            ? `[${peer.name}] Error: ${peer.error}`
-            : `[${peer.name}]\n${peer.text}`);
+        const results = await Promise.all([selfPromise, ...peerPromises]);
+        const sections: string[] = [];
+        for (const r of results) {
+          sections.push(r.error
+            ? `[${r.name}] Error: ${r.error}`
+            : `[${r.name}]\n${r.text}`);
         }
 
         const fanResponse = sections.join("\n\n---\n\n");
@@ -533,6 +537,7 @@ export async function handleNormalizedTelegramMessage(
           await context.api.sendMessage(normalized.chatId, chunk);
         }
       } catch (error) {
+        fanOutcome = "error";
         const detail = error instanceof Error ? error.message : String(error);
         await context.api.editMessage(normalized.chatId, placeholderMessageId,
           locale === "zh" ? `并行执行失败：${detail}` : `Parallel execution failed: ${detail}`);
@@ -545,7 +550,7 @@ export async function handleNormalizedTelegramMessage(
         chatId: normalized.chatId,
         userId: normalized.userId,
         updateId: context.updateId,
-        outcome: "success",
+        outcome: fanOutcome,
         metadata: { durationMs: Date.now() - startedAt, fanTargets: targets },
       });
       return;
@@ -563,9 +568,17 @@ export async function handleNormalizedTelegramMessage(
       }
 
       const currentInstance = context.instanceName ?? "default";
+      if (verifier === currentInstance) {
+        await context.api.editMessage(normalized.chatId, placeholderMessageId,
+          locale === "zh" ? "验证 bot 不能是自己。" : "Verifier cannot be the same instance.");
+        placeholderShowsResponse = true;
+        return;
+      }
+
       await context.api.editMessage(normalized.chatId, placeholderMessageId,
         locale === "zh" ? "正在执行..." : "Executing...");
 
+      let verifyOutcome: "success" | "error" = "success";
       try {
         const result = await context.bridge.handleAuthorizedMessage({
           chatId: normalized.chatId,
@@ -606,6 +619,7 @@ export async function handleNormalizedTelegramMessage(
           await context.api.sendMessage(normalized.chatId, chunk);
         }
       } catch (error) {
+        verifyOutcome = "error";
         const detail = error instanceof Error ? error.message : String(error);
         await context.api.editMessage(normalized.chatId, placeholderMessageId,
           locale === "zh" ? `验证流程失败：${detail}` : `Verification failed: ${detail}`);
@@ -618,7 +632,7 @@ export async function handleNormalizedTelegramMessage(
         chatId: normalized.chatId,
         userId: normalized.userId,
         updateId: context.updateId,
-        outcome: "success",
+        outcome: verifyOutcome,
         metadata: { durationMs: Date.now() - startedAt, verifier },
       });
       return;
