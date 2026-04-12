@@ -54,6 +54,7 @@ npm run dev -- telegram engine --instance review-bot
 | 会话恢复 | `codex exec resume --json <id>` | `claude -p -r <session-id>` |
 | 项目指令 | `agent.md`（注入到 prompt） | `agent.md`（`--system-prompt`）+ `CLAUDE.md`（工作目录自动加载） |
 | YOLO 模式 | `--full-auto` / `--dangerously-bypass-*` | `--permission-mode bypassPermissions` / `--dangerously-skip-permissions` |
+| `/compact` | 不需要（每次 exec 无状态） | 压缩会话上下文，减少 token 消耗 |
 | 工作目录 | 实例目录下的 `workspace/` | 实例目录下的 `workspace/`（放 `CLAUDE.md`） |
 
 ### Claude 引擎：CLAUDE.md 支持
@@ -555,6 +556,7 @@ Telegram 用户也可以使用：
 
 - `/status`
 - `/continue`
+- `/compact`（仅 Claude — 压缩上下文；Codex 回退为 reset）
 - `/reset`
 - `/help`
 
