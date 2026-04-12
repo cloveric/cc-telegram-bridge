@@ -944,9 +944,8 @@ describe("polling helpers", () => {
 
       expect(api.getFile).toHaveBeenCalledTimes(2);
       expect(api.downloadFile).toHaveBeenCalledTimes(2);
-      expect(api.editMessage).toHaveBeenNthCalledWith(1, 123, 11, "Checking access policy...");
-      expect(api.editMessage).toHaveBeenNthCalledWith(2, 123, 11, "Downloading 2 attachments...");
-      expect(api.editMessage).toHaveBeenNthCalledWith(3, 123, 11, "Working on your request...");
+      expect(api.editMessage).toHaveBeenNthCalledWith(1, 123, 11, "Downloading 2 attachments...");
+      expect(api.editMessage).toHaveBeenNthCalledWith(2, 123, 11, "Working on your request...");
       expect(bridge.handleAuthorizedMessage).toHaveBeenCalledWith(expect.objectContaining({
         chatId: 123,
         userId: 456,
@@ -2513,7 +2512,6 @@ describe("polling helpers", () => {
       editMessage: vi
         .fn()
         .mockResolvedValueOnce({ message_id: 11 })
-        .mockResolvedValueOnce({ message_id: 11 })
         .mockRejectedValueOnce(new Error("message is too long"))
         .mockResolvedValueOnce({ message_id: 11 }),
       getFile: vi.fn().mockResolvedValue({ file_path: "documents/repo.zip" }),
@@ -2628,7 +2626,6 @@ describe("polling helpers", () => {
       sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
       editMessage: vi
         .fn()
-        .mockResolvedValueOnce({ message_id: 11 })
         .mockResolvedValueOnce({ message_id: 11 })
         .mockRejectedValueOnce(new Error("message is too long"))
         .mockResolvedValueOnce({ message_id: 11 }),
@@ -2885,9 +2882,8 @@ describe("polling helpers", () => {
     );
 
     expect(api.sendMessage).toHaveBeenCalledWith(123, renderWorkingMessage());
-    expect(api.editMessage).toHaveBeenNthCalledWith(1, 123, 11, "Checking access policy...");
-    expect(api.editMessage).toHaveBeenNthCalledWith(2, 123, 11, "Working on your request...");
-    expect(api.editMessage).toHaveBeenNthCalledWith(3, 123, 11, "final response");
+    expect(api.editMessage).toHaveBeenNthCalledWith(1, 123, 11, "Working on your request...");
+    expect(api.editMessage).toHaveBeenNthCalledWith(2, 123, 11, "final response");
   });
 
   it("waits for in-flight progress edits before applying the final response", async () => {
@@ -4009,10 +4005,9 @@ describe("polling helpers", () => {
       ),
     ).rejects.toThrow("send failed");
 
-    expect(api.editMessage).toHaveBeenCalledTimes(3);
-    expect(api.editMessage).toHaveBeenNthCalledWith(1, 123, 11, "Checking access policy...");
-    expect(api.editMessage).toHaveBeenNthCalledWith(2, 123, 11, "Working on your request...");
-    expect(api.editMessage).toHaveBeenNthCalledWith(3, 123, 11, "a".repeat(4000));
+    expect(api.editMessage).toHaveBeenCalledTimes(2);
+    expect(api.editMessage).toHaveBeenNthCalledWith(1, 123, 11, "Working on your request...");
+    expect(api.editMessage).toHaveBeenNthCalledWith(2, 123, 11, "a".repeat(4000));
     expect(api.sendMessage).toHaveBeenNthCalledWith(2, 123, "a".repeat(500));
     expect(api.sendMessage).toHaveBeenNthCalledWith(
       3,
@@ -4096,7 +4091,7 @@ describe("polling helpers", () => {
       },
     );
 
-    expect(api.editMessage).toHaveBeenNthCalledWith(3, 123, 11, "Sending file: report.txt");
+    expect(api.editMessage).toHaveBeenNthCalledWith(2, 123, 11, "Sending file: report.txt");
     expect(api.sendDocument).toHaveBeenCalledWith(123, "report.txt", "hello world\n");
   });
 

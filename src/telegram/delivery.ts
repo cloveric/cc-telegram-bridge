@@ -22,35 +22,30 @@ import { readFile } from "node:fs/promises";
 import { SessionStore } from "../state/session-store.js";
 import { SessionStateError } from "../runtime/session-manager.js";
 
-async function loadVerbosity(stateDir: string): Promise<number> {
-  try {
-    const raw = await readFile(path.join(stateDir, "config.json"), "utf8");
-    const config = JSON.parse(raw) as { verbosity?: number };
-    const v = config.verbosity;
-    if (v === 0 || v === 1 || v === 2) return v;
-    return 1;
-  } catch {
-    return 1;
-  }
+interface InstanceConfig {
+  engine: "codex" | "claude";
+  locale: "en" | "zh";
+  verbosity: 0 | 1 | 2;
+  budgetUsd: number | undefined;
 }
 
-async function loadEngine(stateDir: string): Promise<"codex" | "claude"> {
+async function loadInstanceConfig(stateDir: string): Promise<InstanceConfig> {
   try {
     const raw = await readFile(path.join(stateDir, "config.json"), "utf8");
-    const config = JSON.parse(raw) as { engine?: string };
-    return config.engine === "claude" ? "claude" : "codex";
+    const config = JSON.parse(raw) as {
+      engine?: string;
+      locale?: string;
+      verbosity?: number;
+      budgetUsd?: number;
+    };
+    return {
+      engine: config.engine === "claude" ? "claude" : "codex",
+      locale: config.locale === "zh" ? "zh" : "en",
+      verbosity: config.verbosity === 0 ? 0 : config.verbosity === 2 ? 2 : 1,
+      budgetUsd: typeof config.budgetUsd === "number" && config.budgetUsd > 0 ? config.budgetUsd : undefined,
+    };
   } catch {
-    return "codex";
-  }
-}
-
-async function loadLocale(stateDir: string): Promise<"en" | "zh"> {
-  try {
-    const raw = await readFile(path.join(stateDir, "config.json"), "utf8");
-    const config = JSON.parse(raw) as { locale?: string };
-    return config.locale === "zh" ? "zh" : "en";
-  } catch {
-    return "en";
+    return { engine: "codex", locale: "en", verbosity: 1, budgetUsd: undefined };
   }
 }
 
@@ -76,7 +71,6 @@ async function updateWorkflowBestEffort(
 
 import {
   chunkTelegramMessage,
-  renderAccessCheckMessage,
   renderAttachmentDownloadMessage,
   renderCategorizedErrorMessage,
   renderErrorMessage,
@@ -268,7 +262,8 @@ export async function handleNormalizedTelegramMessage(
   const stateDir = path.dirname(context.inboxDir);
   const workflowStore = new FileWorkflowStore(stateDir);
   const sessionStore = new SessionStore(path.join(stateDir, "session.json"));
-  const locale = await loadLocale(stateDir);
+  const cfg = await loadInstanceConfig(stateDir);
+  const locale = cfg.locale;
 
   try {
     if (normalized.callbackQueryId) {
@@ -280,7 +275,6 @@ export async function handleNormalizedTelegramMessage(
     }
     const placeholder = await context.api.sendMessage(normalized.chatId, renderWorkingMessage(locale));
     placeholderMessageId = placeholder.message_id;
-    await context.api.editMessage(normalized.chatId, placeholderMessageId, renderAccessCheckMessage(locale));
 
     const accessDecision = await context.bridge.checkAccess({
       chatId: normalized.chatId,
@@ -377,7 +371,7 @@ export async function handleNormalizedTelegramMessage(
         ? null
         : chatRecords.filter((record) => record.status === "awaiting_continue").length;
       const statusMessage = renderTelegramStatusMessage({
-        engine: await loadEngine(stateDir),
+        engine: cfg.engine,
         sessionBound: sessionResult.warning ? null : sessionResult.record !== null,
         blockingTasks,
         waitingTasks,
@@ -430,7 +424,7 @@ export async function handleNormalizedTelegramMessage(
           });
     failureHint = workflowResult?.failureHint;
 
-    const engine = await loadEngine(stateDir);
+    const engine = cfg.engine;
     if (engine === "codex" && wantsTelegramOut(normalized.text)) {
       telegramOutDirPath = (await createTelegramOutDir(stateDir, `${Date.now()}-${normalized.chatId}`)).dirPath;
     }
@@ -480,7 +474,7 @@ export async function handleNormalizedTelegramMessage(
 
     await context.api.editMessage(normalized.chatId, placeholderMessageId, renderExecutionMessage(locale));
 
-    const verbosity = await loadVerbosity(stateDir);
+    const verbosity = cfg.verbosity;
     let lastProgressEdit = 0;
     const PROGRESS_THROTTLE_MS = verbosity === 2 ? 1000 : 2000;
     const progressMessageId = placeholderMessageId;
@@ -505,37 +499,30 @@ export async function handleNormalizedTelegramMessage(
         .catch(() => {});
     };
 
-    // Budget enforcement: if config.budgetUsd is set and usage.totalCostUsd >= budget, block the request
-    try {
-      const cfgRaw = await readFile(path.join(stateDir, "config.json"), "utf8");
-      const cfg = JSON.parse(cfgRaw) as { budgetUsd?: number };
-      if (typeof cfg.budgetUsd === "number" && cfg.budgetUsd > 0) {
-        const usageStore = new UsageStore(stateDir);
-        const usage = await usageStore.load();
-        if (usage.totalCostUsd >= cfg.budgetUsd) {
-          const budgetMsg = locale === "zh"
-            ? `预算已用尽：$${usage.totalCostUsd.toFixed(4)} / $${cfg.budgetUsd.toFixed(2)}。使用 \`telegram budget set <usd>\` 提高预算或 \`telegram budget clear\` 清除。`
-            : `Budget exhausted: $${usage.totalCostUsd.toFixed(4)} used of $${cfg.budgetUsd.toFixed(2)}. Raise the budget with \`telegram budget set <usd>\` or clear it with \`telegram budget clear\`.`;
-          await context.api.editMessage(
-            normalized.chatId,
-            placeholderMessageId,
-            budgetMsg,
-          );
-          placeholderShowsResponse = true;
-          await appendAuditEventBestEffort(stateDir, {
-            type: "update.reply",
-            instanceName: context.instanceName,
-            chatId: normalized.chatId,
-            userId: normalized.userId,
-            updateId: context.updateId,
-            outcome: "reply",
-            detail: "budget exhausted",
-          });
-          return;
-        }
+    if (cfg.budgetUsd !== undefined) {
+      const usageStore = new UsageStore(stateDir);
+      const usage = await usageStore.load();
+      if (usage.totalCostUsd >= cfg.budgetUsd) {
+        const budgetMsg = locale === "zh"
+          ? `预算已用尽：$${usage.totalCostUsd.toFixed(4)} / $${cfg.budgetUsd.toFixed(2)}。使用 \`telegram budget set <usd>\` 提高预算或 \`telegram budget clear\` 清除。`
+          : `Budget exhausted: $${usage.totalCostUsd.toFixed(4)} used of $${cfg.budgetUsd.toFixed(2)}. Raise the budget with \`telegram budget set <usd>\` or clear it with \`telegram budget clear\`.`;
+        await context.api.editMessage(
+          normalized.chatId,
+          placeholderMessageId,
+          budgetMsg,
+        );
+        placeholderShowsResponse = true;
+        await appendAuditEventBestEffort(stateDir, {
+          type: "update.reply",
+          instanceName: context.instanceName,
+          chatId: normalized.chatId,
+          userId: normalized.userId,
+          updateId: context.updateId,
+          outcome: "reply",
+          detail: "budget exhausted",
+        });
+        return;
       }
-    } catch {
-      // Config read errors should not block the request
     }
 
     const replyContext =
@@ -569,25 +556,19 @@ export async function handleNormalizedTelegramMessage(
         costUsd: result.usage.costUsd,
       });
 
-      try {
-        const cfgRaw2 = await readFile(path.join(stateDir, "config.json"), "utf8");
-        const cfg2 = JSON.parse(cfgRaw2) as { budgetUsd?: number };
-        if (typeof cfg2.budgetUsd === "number" && cfg2.budgetUsd > 0) {
-          const postUsage = await usageStore.load();
-          if (postUsage.totalCostUsd >= cfg2.budgetUsd) {
-            await appendAuditEventBestEffort(stateDir, {
-              type: "update.reply",
-              instanceName: context.instanceName,
-              chatId: normalized.chatId,
-              userId: normalized.userId,
-              updateId: context.updateId,
-              outcome: "reply",
-              detail: `budget threshold reached: $${postUsage.totalCostUsd.toFixed(4)} / $${cfg2.budgetUsd.toFixed(2)}`,
-            });
-          }
+      if (cfg.budgetUsd !== undefined) {
+        const postUsage = await usageStore.load();
+        if (postUsage.totalCostUsd >= cfg.budgetUsd) {
+          await appendAuditEventBestEffort(stateDir, {
+            type: "update.reply",
+            instanceName: context.instanceName,
+            chatId: normalized.chatId,
+            userId: normalized.userId,
+            updateId: context.updateId,
+            outcome: "reply",
+            detail: `budget threshold reached: $${postUsage.totalCostUsd.toFixed(4)} / $${cfg.budgetUsd.toFixed(2)}`,
+          });
         }
-      } catch {
-        // Budget post-check is best-effort
       }
     }
 
