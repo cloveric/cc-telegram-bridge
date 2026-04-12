@@ -764,6 +764,5 @@ export async function handleNormalizedTelegramMessage(
       },
     });
 
-    throw error;
   }
 }

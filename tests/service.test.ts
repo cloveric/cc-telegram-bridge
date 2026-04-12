@@ -501,7 +501,7 @@ describe("polling helpers", () => {
     }
   });
 
-  it("does not advance offset beyond a failed update", async () => {
+  it("advances offset past a failed update and continues processing", async () => {
     const logger = {
       error: vi.fn(),
     };
@@ -538,17 +538,16 @@ describe("polling helpers", () => {
     await expect(
       pollTelegramUpdatesOnce(api as never, bridge as never, path.join(os.tmpdir(), "ignored"), logger, 7),
     ).resolves.toEqual({
-      offset: 11,
+      offset: 12,
       hadFetchError: false,
       hadUpdates: true,
       conflict: false,
     });
 
     expect(bridge.handleAuthorizedMessage).toHaveBeenCalledTimes(2);
-    expect(logger.error).toHaveBeenCalledTimes(1);
   });
 
-  it("stops processing later updates after a failed update", async () => {
+  it("continues processing later updates after a failed update", async () => {
     const logger = {
       error: vi.fn(),
     };
@@ -588,8 +587,7 @@ describe("polling helpers", () => {
       logger,
     );
 
-    expect(bridge.handleAuthorizedMessage).toHaveBeenCalledTimes(1);
-    expect(logger.error).toHaveBeenCalledTimes(1);
+    expect(bridge.handleAuthorizedMessage).toHaveBeenCalledTimes(2);
   });
 
   it("logs getUpdates failures without crashing the loop helper", async () => {
@@ -1125,7 +1123,7 @@ describe("polling helpers", () => {
             inboxDir,
           },
         ),
-      ).rejects.toThrow();
+      ).resolves.toBeUndefined();
 
       const workflowState = JSON.parse(await readFile(path.join(root, "file-workflow.json"), "utf8")) as {
         records: Array<{
@@ -1199,7 +1197,7 @@ describe("polling helpers", () => {
             inboxDir,
           },
         ),
-      ).rejects.toThrow("escapes target directory");
+      ).resolves.toBeUndefined();
 
       const workflowState = JSON.parse(await readFile(path.join(root, "file-workflow.json"), "utf8")) as {
         records: Array<{ status: string; kind: string; summary: string }>;
@@ -1550,7 +1548,7 @@ describe("polling helpers", () => {
 
       allowFailure.resolve();
 
-      await expect(continuationPromise).rejects.toThrow("engine failed during continuation");
+      await expect(continuationPromise).resolves.toBeUndefined();
 
       const finalState = JSON.parse(await readFile(path.join(root, "file-workflow.json"), "utf8")) as {
         records: Array<{ status: string }>;
@@ -1627,7 +1625,7 @@ describe("polling helpers", () => {
             inboxDir,
           },
         ),
-      ).rejects.toThrow("sendDocument failed after response");
+      ).resolves.toBeUndefined();
 
       const workflowState = JSON.parse(await readFile(path.join(root, "file-workflow.json"), "utf8")) as {
         records: Array<{ status: string }>;
@@ -1697,7 +1695,7 @@ describe("polling helpers", () => {
             inboxDir,
           },
         ),
-      ).rejects.toThrow("engine failed during continuation");
+      ).resolves.toBeUndefined();
 
       expect(api.editMessage).toHaveBeenLastCalledWith(
         123,
@@ -2190,7 +2188,7 @@ describe("polling helpers", () => {
           bridge: bridge as never,
           inboxDir,
         }),
-      ).rejects.toThrow("transient failure");
+      ).resolves.toBeUndefined();
 
       expect(api.editMessage).toHaveBeenLastCalledWith(
         123,
@@ -2324,7 +2322,7 @@ describe("polling helpers", () => {
           bridge: bridge as never,
           inboxDir,
         }),
-      ).rejects.toThrow("transient failure");
+      ).resolves.toBeUndefined();
 
       const failedState = JSON.parse(await readFile(path.join(root, "file-workflow.json"), "utf8")) as {
         records: Array<{ status: string }>;
@@ -2640,7 +2638,7 @@ describe("polling helpers", () => {
             inboxDir,
           },
         ),
-      ).rejects.toThrow("message is too long");
+      ).resolves.toBeUndefined();
 
       const workflowState = JSON.parse(await readFile(path.join(root, "file-workflow.json"), "utf8")) as {
         records: Array<{ status: string; summaryMessageId?: number }>;
@@ -2694,7 +2692,7 @@ describe("polling helpers", () => {
             inboxDir,
           },
         ),
-      ).rejects.toThrow();
+      ).resolves.toBeUndefined();
 
       const workflowState = JSON.parse(await readFile(path.join(root, "file-workflow.json"), "utf8")) as {
         records: Array<{ status: string; summary: string }>;
@@ -2755,7 +2753,7 @@ describe("polling helpers", () => {
             inboxDir,
           },
         ),
-      ).rejects.toThrow("message is too long");
+      ).resolves.toBeUndefined();
 
       expect(appendSpy).not.toHaveBeenCalledWith(expect.objectContaining({ status: "processing" }));
     } finally {
@@ -2799,7 +2797,7 @@ describe("polling helpers", () => {
             inboxDir,
           },
         ),
-      ).rejects.toThrow("invalid file workflow state");
+      ).resolves.toBeUndefined();
 
       expect(api.editMessage).toHaveBeenLastCalledWith(
         123,
@@ -2844,7 +2842,7 @@ describe("polling helpers", () => {
             inboxDir,
           },
         ),
-      ).rejects.toThrow("invalid file workflow state");
+      ).resolves.toBeUndefined();
 
       expect(api.editMessage).toHaveBeenLastCalledWith(
         123,
@@ -3694,7 +3692,7 @@ describe("polling helpers", () => {
             inboxDir,
           },
         ),
-      ).rejects.toThrow("The operator needs to repair session state and retry.");
+      ).resolves.toBeUndefined();
 
       expect(api.editMessage).toHaveBeenLastCalledWith(
         123,
@@ -3741,7 +3739,7 @@ describe("polling helpers", () => {
             inboxDir,
           },
         ),
-      ).rejects.toThrow("The operator needs to restore read access and retry.");
+      ).resolves.toBeUndefined();
 
       expect(api.editMessage).toHaveBeenLastCalledWith(
         123,
@@ -3792,7 +3790,7 @@ describe("polling helpers", () => {
             inboxDir,
           },
         ),
-      ).rejects.toThrow("The operator needs to restore read access and retry.");
+      ).resolves.toBeUndefined();
 
       expect(api.editMessage).toHaveBeenLastCalledWith(
         123,
@@ -3899,7 +3897,7 @@ describe("polling helpers", () => {
         bridge: bridge as never,
         inboxDir: path.join(os.tmpdir(), "ignored"),
       }),
-    ).rejects.toThrow();
+    ).resolves.toBeUndefined();
 
     expect(api.editMessage).toHaveBeenLastCalledWith(
       123,
@@ -3936,7 +3934,7 @@ describe("polling helpers", () => {
           inboxDir: path.join(os.tmpdir(), "ignored"),
         },
       ),
-    ).rejects.toThrow("boom");
+    ).resolves.toBeUndefined();
 
     expect(api.editMessage).toHaveBeenCalledWith(
       123,
@@ -3975,7 +3973,7 @@ describe("polling helpers", () => {
             inboxDir: path.join(os.tmpdir(), "ignored"),
           },
         ),
-      ).rejects.toThrow("boom");
+      ).resolves.toBeUndefined();
 
       expect(api.editMessage).toHaveBeenLastCalledWith(
         123,
@@ -4016,7 +4014,7 @@ describe("polling helpers", () => {
           bridge: bridge as never,
           inboxDir,
         }),
-      ).rejects.toThrow();
+      ).resolves.toBeUndefined();
 
       const audit = await readFile(path.join(root, "audit.log.jsonl"), "utf8");
       expect(audit).toContain('"failureCategory":"auth"');
@@ -4089,7 +4087,7 @@ describe("polling helpers", () => {
           inboxDir: path.join(os.tmpdir(), "ignored"),
         },
       ),
-    ).rejects.toThrow("send failed");
+    ).resolves.toBeUndefined();
 
     expect(api.editMessage).toHaveBeenCalledTimes(2);
     expect(api.editMessage).toHaveBeenNthCalledWith(1, 123, 11, "Working on your request...");

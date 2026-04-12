@@ -567,7 +567,8 @@ export async function processTelegramUpdates(
     } catch (error) {
       await appendUpdateHandleFailureAuditEventBestEffort(context.inboxDir, context.instanceName, error, updateId);
       logger.error(formatErrorMessage("Failed to handle Telegram update", error));
-      break;
+      nextOffset = advanceOffset(nextOffset, completedOffset);
+      continue;
     }
   }
 
