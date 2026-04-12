@@ -22,7 +22,7 @@
 </h3>
 
 <p align="center">
-  <em>当你能在 Telegram 上开 10 个 bot，OpenClaw 还有什么意义呢？</em>
+  <em>当你能在 Telegram 上开 10 个原生 bot，OpenClaw 还有什么意义呢？</em>
 </p>
 
 <p align="center">
