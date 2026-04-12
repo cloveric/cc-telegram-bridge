@@ -150,6 +150,12 @@ function parseModelCommand(text: string): { model: string } | null {
   return { model: match[1] ?? "" };
 }
 
+function parseBtwCommand(text: string): { prompt: string } | null {
+  const match = text.trim().match(/^\/btw(?:@\w+)?\s+([\s\S]+)$/i);
+  if (!match) return null;
+  return { prompt: match[1]!.trim() };
+}
+
 function parseAskCommand(text: string): { targetInstance: string; prompt: string } | null {
   const match = text.trim().match(/^\/ask(?:@\w+)?\s+(\S+)\s+([\s\S]+)$/i);
   if (!match) {
@@ -577,6 +583,43 @@ export async function handleNormalizedTelegramMessage(
         await context.api.editMessage(normalized.chatId, placeholderMessageId, msg);
       }
       placeholderShowsResponse = true;
+      return;
+    }
+
+    const btwCmd = parseBtwCommand(normalized.text);
+    if (btwCmd) {
+      await context.api.editMessage(normalized.chatId, placeholderMessageId, renderExecutionMessage(locale));
+      try {
+        const btwChatId = -(Date.now() % 1_000_000_000);
+        const result = await context.bridge.handleAuthorizedMessage({
+          chatId: btwChatId,
+          userId: normalized.userId,
+          chatType: normalized.chatType,
+          locale,
+          text: btwCmd.prompt,
+          files: [],
+        });
+        const chunks = chunkTelegramMessage(result.text);
+        await context.api.editMessage(normalized.chatId, placeholderMessageId, chunks[0]!);
+        placeholderShowsResponse = true;
+        for (const chunk of chunks.slice(1)) {
+          await context.api.sendMessage(normalized.chatId, chunk);
+        }
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        const msg = locale === "zh" ? `旁问失败：${detail}` : `Side question failed: ${detail}`;
+        await context.api.editMessage(normalized.chatId, placeholderMessageId, msg);
+        placeholderShowsResponse = true;
+      }
+      await appendAuditEventBestEffort(path.dirname(context.inboxDir), {
+        type: "update.handle",
+        instanceName: context.instanceName,
+        chatId: normalized.chatId,
+        userId: normalized.userId,
+        updateId: context.updateId,
+        outcome: "success",
+        metadata: { durationMs: Date.now() - startedAt },
+      });
       return;
     }
 

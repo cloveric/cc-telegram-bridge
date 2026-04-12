@@ -448,6 +448,7 @@ const BOT_COMMANDS: Array<{ command: string; description: string }> = [
   { command: "status", description: "Show current session status" },
   { command: "effort", description: "Set effort level (low/medium/high/max/off)" },
   { command: "model", description: "Set model (opus/sonnet/o3/off)" },
+  { command: "btw", description: "Ask a side question without affecting session" },
   { command: "continue", description: "Continue a paused task" },
   { command: "ask", description: "Delegate to another bot instance" },
   { command: "fan", description: "Query multiple bots in parallel" },
