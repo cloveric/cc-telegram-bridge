@@ -80,7 +80,7 @@ export function resolveInstanceStateDir(
     throw new Error(process.platform === "win32" ? "USERPROFILE or HOME is required" : "HOME or USERPROFILE is required");
   }
 
-  return path.join(homeDir, ".codex", "channels", "telegram", instanceName);
+  return path.join(homeDir, ".cctb", instanceName);
 }
 
 export function resolveConfig(env: EnvSource = process.env): AppConfig {

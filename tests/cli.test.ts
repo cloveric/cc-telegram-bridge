@@ -27,7 +27,7 @@ describe("runCli", () => {
       expect(handled).toBe(true);
       expect(messages).toEqual(['Configured Telegram bot token for instance "default".']);
 
-      const envPath = path.join(tempDir, ".codex", "channels", "telegram", "default", ".env");
+      const envPath = path.join(tempDir, ".cctb", "default", ".env");
       await expect(readFile(envPath, "utf8")).resolves.toBe('TELEGRAM_BOT_TOKEN="bot-token-123"\n');
     } finally {
       await rm(tempDir, { recursive: true, force: true });
@@ -49,7 +49,7 @@ describe("runCli", () => {
       expect(handled).toBe(true);
       expect(messages).toEqual(['Configured Telegram bot token for instance "alpha".']);
 
-      const envPath = path.join(tempDir, ".codex", "channels", "telegram", "alpha", ".env");
+      const envPath = path.join(tempDir, ".cctb", "alpha", ".env");
       await expect(readFile(envPath, "utf8")).resolves.toBe('TELEGRAM_BOT_TOKEN="bot-token-456"\n');
     } finally {
       await rm(tempDir, { recursive: true, force: true });
@@ -92,7 +92,7 @@ describe("runCli", () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
 
     try {
-      const envPath = path.join(tempDir, ".codex", "channels", "telegram", "default", ".env");
+      const envPath = path.join(tempDir, ".cctb", "default", ".env");
       await mkdir(path.dirname(envPath), { recursive: true });
       await writeFile(envPath, "EXTRA=1\nTELEGRAM_BOT_TOKEN=old-token\nKEEP=2\n", "utf8");
 
@@ -111,7 +111,7 @@ describe("runCli", () => {
     const messages: string[] = [];
 
     try {
-      const accessPath = path.join(tempDir, ".codex", "channels", "telegram", "default", "access.json");
+      const accessPath = path.join(tempDir, ".cctb", "default", "access.json");
       const store = new AccessStore(accessPath);
       const issuedAt = new Date();
       const issued = await store.issuePairingCode({
@@ -146,7 +146,7 @@ describe("runCli", () => {
     const messages: string[] = [];
 
     try {
-      const accessPath = path.join(tempDir, ".codex", "channels", "telegram", "alpha", "access.json");
+      const accessPath = path.join(tempDir, ".cctb", "alpha", "access.json");
       const store = new AccessStore(accessPath);
       await store.issuePairingCode({
         telegramUserId: 42,
@@ -208,7 +208,7 @@ describe("runCli", () => {
     const messages: string[] = [];
 
     try {
-      const sessionPath = path.join(tempDir, ".codex", "channels", "telegram", "default", "session.json");
+      const sessionPath = path.join(tempDir, ".cctb", "default", "session.json");
       const store = new SessionStore(sessionPath);
       await store.upsert({
         telegramChatId: 84,
@@ -241,7 +241,7 @@ describe("runCli", () => {
     const messages: string[] = [];
 
     try {
-      const sessionPath = path.join(tempDir, ".codex", "channels", "telegram", "alpha", "session.json");
+      const sessionPath = path.join(tempDir, ".cctb", "alpha", "session.json");
       const store = new SessionStore(sessionPath);
       await store.upsert({
         telegramChatId: 84,
@@ -267,7 +267,7 @@ describe("runCli", () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
 
     try {
-      const stateDir = path.join(tempDir, ".codex", "channels", "telegram", "alpha");
+      const stateDir = path.join(tempDir, ".cctb", "alpha");
       await mkdir(stateDir, { recursive: true });
       await writeFile(
         path.join(stateDir, "instance.lock.json"),
@@ -294,7 +294,7 @@ describe("runCli", () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
 
     try {
-      const stateDir = path.join(tempDir, ".codex", "channels", "telegram", "alpha");
+      const stateDir = path.join(tempDir, ".cctb", "alpha");
       await mkdir(stateDir, { recursive: true });
       await writeFile(
         path.join(stateDir, "instance.lock.json"),
@@ -321,7 +321,7 @@ describe("runCli", () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
 
     try {
-      const stateDir = path.join(tempDir, ".codex", "channels", "telegram", "alpha");
+      const stateDir = path.join(tempDir, ".cctb", "alpha");
       await mkdir(stateDir, { recursive: true });
       await writeFile(path.join(stateDir, "keep.txt"), "keep-me", "utf8");
 
@@ -345,7 +345,7 @@ describe("runCli", () => {
     const messages: string[] = [];
 
     try {
-      const channelsDir = path.join(tempDir, ".codex", "channels", "telegram");
+      const channelsDir = path.join(tempDir, ".cctb");
       const sourceDir = path.join(channelsDir, "source");
       const targetDir = path.join(channelsDir, "alpha");
       await mkdir(sourceDir, { recursive: true });
@@ -375,7 +375,7 @@ describe("runCli", () => {
     const messages: string[] = [];
 
     try {
-      const sessionPath = path.join(tempDir, ".codex", "channels", "telegram", "alpha", "session.json");
+      const sessionPath = path.join(tempDir, ".cctb", "alpha", "session.json");
       await mkdir(path.dirname(sessionPath), { recursive: true });
       await writeFile(sessionPath, "{not valid json", "utf8");
 
@@ -398,7 +398,7 @@ describe("runCli", () => {
     const messages: string[] = [];
 
     try {
-      const stateDir = path.join(tempDir, ".codex", "channels", "telegram", "alpha");
+      const stateDir = path.join(tempDir, ".cctb", "alpha");
       const workflowPath = path.join(stateDir, "file-workflow.json");
       const uploadWorkspaceDir = path.join(stateDir, "workspace", ".telegram-files", "upload-123");
       await mkdir(stateDir, { recursive: true });
@@ -464,7 +464,7 @@ describe("runCli", () => {
     const messages: string[] = [];
 
     try {
-      const sessionPath = path.join(tempDir, ".codex", "channels", "telegram", "alpha", "session.json");
+      const sessionPath = path.join(tempDir, ".cctb", "alpha", "session.json");
       await mkdir(path.dirname(sessionPath), { recursive: true });
       await writeFile(sessionPath, "{not valid json", "utf8");
 
@@ -508,7 +508,7 @@ describe("runCli", () => {
     const messages: string[] = [];
 
     try {
-      const sessionPath = path.join(tempDir, ".codex", "channels", "telegram", "alpha", "session.json");
+      const sessionPath = path.join(tempDir, ".cctb", "alpha", "session.json");
       const store = new SessionStore(sessionPath);
       await store.upsert({
         telegramChatId: 84,
@@ -535,7 +535,7 @@ describe("runCli", () => {
     const messages: string[] = [];
 
     try {
-      const stateDir = path.join(tempDir, ".codex", "channels", "telegram", "alpha");
+      const stateDir = path.join(tempDir, ".cctb", "alpha");
       const workflowPath = path.join(stateDir, "file-workflow.json");
       await mkdir(stateDir, { recursive: true });
       await writeFile(
@@ -589,7 +589,7 @@ describe("runCli", () => {
     const messages: string[] = [];
 
     try {
-      const workflowPath = path.join(tempDir, ".codex", "channels", "telegram", "alpha", "file-workflow.json");
+      const workflowPath = path.join(tempDir, ".cctb", "alpha", "file-workflow.json");
       await mkdir(path.dirname(workflowPath), { recursive: true });
       await writeFile(workflowPath, "{not valid json", "utf8");
 
@@ -613,7 +613,7 @@ describe("runCli", () => {
     const messages: string[] = [];
 
     try {
-      const workflowPath = path.join(tempDir, ".codex", "channels", "telegram", "alpha", "file-workflow.json");
+      const workflowPath = path.join(tempDir, ".cctb", "alpha", "file-workflow.json");
       await mkdir(path.dirname(workflowPath), { recursive: true });
       await writeFile(workflowPath, "{not valid json", "utf8");
 
@@ -665,7 +665,7 @@ describe("runCli", () => {
     const messages: string[] = [];
 
     try {
-      const sessionPath = path.join(tempDir, ".codex", "channels", "telegram", "default", "session.json");
+      const sessionPath = path.join(tempDir, ".cctb", "default", "session.json");
       const store = new SessionStore(sessionPath);
       await store.upsert({
         telegramChatId: 84,
@@ -691,7 +691,7 @@ describe("runCli", () => {
     const messages: string[] = [];
 
     try {
-      const stateDir = path.join(tempDir, ".codex", "channels", "telegram", "alpha");
+      const stateDir = path.join(tempDir, ".cctb", "alpha");
       const workflowPath = path.join(stateDir, "file-workflow.json");
       await mkdir(stateDir, { recursive: true });
       await writeFile(
@@ -739,7 +739,7 @@ describe("runCli", () => {
     const messages: string[] = [];
 
     try {
-      const workflowPath = path.join(tempDir, ".codex", "channels", "telegram", "alpha", "file-workflow.json");
+      const workflowPath = path.join(tempDir, ".cctb", "alpha", "file-workflow.json");
       await mkdir(path.dirname(workflowPath), { recursive: true });
       await writeFile(workflowPath, "{not valid json", "utf8");
 
@@ -783,7 +783,7 @@ describe("runCli", () => {
     const messages: string[] = [];
 
     try {
-      const auditPath = path.join(tempDir, ".codex", "channels", "telegram", "default", "audit.log.jsonl");
+      const auditPath = path.join(tempDir, ".cctb", "default", "audit.log.jsonl");
       await mkdir(path.dirname(auditPath), { recursive: true });
       await writeFile(
         auditPath,
@@ -808,7 +808,7 @@ describe("runCli", () => {
     const messages: string[] = [];
 
     try {
-      const auditPath = path.join(tempDir, ".codex", "channels", "telegram", "default", "audit.log.jsonl");
+      const auditPath = path.join(tempDir, ".cctb", "default", "audit.log.jsonl");
       await mkdir(path.dirname(auditPath), { recursive: true });
       await writeFile(
         auditPath,
@@ -858,7 +858,7 @@ describe("runCli", () => {
       });
 
       expect(messages[0]).toContain('Wrote instructions for instance "alpha"');
-      expect(messages[1]).toBe(path.join(tempDir, ".codex", "channels", "telegram", "alpha", "agent.md"));
+      expect(messages[1]).toBe(path.join(tempDir, ".cctb", "alpha", "agent.md"));
       expect(messages[2]).toContain('Instance "alpha" instructions:');
       expect(messages[2]).toContain("You are bot alpha.");
     } finally {
@@ -878,7 +878,7 @@ describe("runCli", () => {
 
       expect(handled).toBe(true);
       expect(messages[0]).toBe('Instance "alpha": no instructions configured (agent.md not found).');
-      expect(messages[1]).toContain(path.join(tempDir, ".codex", "channels", "telegram", "alpha", "agent.md"));
+      expect(messages[1]).toContain(path.join(tempDir, ".cctb", "alpha", "agent.md"));
     } finally {
       await rm(tempDir, { recursive: true, force: true });
     }
@@ -903,7 +903,7 @@ describe("runCli", () => {
       expect(messages[0]).toBe('Instance "alpha": engine set to "claude". Restart the service to apply.');
       expect(messages[1]).toBe('Instance "alpha": engine = claude');
 
-      const configPath = path.join(tempDir, ".codex", "channels", "telegram", "alpha", "config.json");
+      const configPath = path.join(tempDir, ".cctb", "alpha", "config.json");
       await expect(readFile(configPath, "utf8")).resolves.toContain('"engine": "claude"');
     } finally {
       await rm(tempDir, { recursive: true, force: true });

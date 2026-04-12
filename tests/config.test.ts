@@ -10,8 +10,8 @@ describe("resolveConfig", () => {
     });
 
     expect(config.instanceName).toBe("default");
-    expect(config.stateDir).toBe("C:\\Users\\hangw\\.codex\\channels\\telegram\\default");
-    expect(config.inboxDir).toBe("C:\\Users\\hangw\\.codex\\channels\\telegram\\default\\inbox");
+    expect(config.stateDir).toBe("C:\\Users\\hangw\\.cctb\\default");
+    expect(config.inboxDir).toBe("C:\\Users\\hangw\\.cctb\\default\\inbox");
     expect(config.telegramBotToken).toBe("abc123");
   });
 
@@ -22,7 +22,7 @@ describe("resolveConfig", () => {
       TELEGRAM_BOT_TOKEN: "abc123",
     });
 
-    expect(config.stateDir).toBe("C:\\Users\\hangw\\.codex\\channels\\telegram\\default");
+    expect(config.stateDir).toBe("C:\\Users\\hangw\\.cctb\\default");
   });
 
   it("throws when USERPROFILE is missing", () => {
@@ -75,8 +75,8 @@ describe("resolveConfig", () => {
     });
 
     expect(config.instanceName).toBe("alpha");
-    expect(config.stateDir).toBe("C:\\Users\\hangw\\.codex\\channels\\telegram\\alpha");
-    expect(config.accessStatePath).toBe("C:\\Users\\hangw\\.codex\\channels\\telegram\\alpha\\access.json");
+    expect(config.stateDir).toBe("C:\\Users\\hangw\\.cctb\\alpha");
+    expect(config.accessStatePath).toBe("C:\\Users\\hangw\\.cctb\\alpha\\access.json");
   });
 
   it("rejects unsafe instance names", () => {

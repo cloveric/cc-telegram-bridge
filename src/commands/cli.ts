@@ -941,7 +941,7 @@ function resolveStateDirForInstance(env: InstanceTokenEnv, instanceName: string)
 function resolveChannelsDirFromEnv(env: InstanceTokenEnv): string {
   const home = env.HOME ?? env.USERPROFILE;
   if (!home) throw new Error("HOME or USERPROFILE is required");
-  return path.join(home, ".codex", "channels", "telegram");
+  return path.join(home, ".cctb");
 }
 
 async function runLogsCommand(

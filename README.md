@@ -61,7 +61,7 @@ npm run dev -- telegram engine --instance review-bot
 When using the Claude engine, each instance gets a `workspace/` directory. Drop a `CLAUDE.md` in there for project-level instructions that Claude Code reads natively:
 
 ```
-~/.codex/channels/telegram/review-bot/
+~/.cctb/review-bot/
 ├── agent.md              ← "You are a strict code reviewer"
 ├── workspace/
 │   └── CLAUDE.md         ← "TypeScript project. Use ESLint. Never modify tests."
@@ -137,10 +137,10 @@ Or edit directly:
 
 ```powershell
 # Windows
-notepad %USERPROFILE%\.codex\channels\telegram\work\agent.md
+notepad %USERPROFILE%\.cctb\work\agent.md
 
 # macOS
-open -e ~/.codex/channels/telegram/work/agent.md
+open -e ~/.cctb/work/agent.md
 ```
 
 ---
@@ -618,8 +618,8 @@ npm run dev -- telegram audit --chat 688567588                      # Filter by 
 ## State Layout
 
 ```
-# Windows: %USERPROFILE%\.codex\channels\telegram\<instance>\
-# macOS/Linux: ~/.codex/channels/telegram/<instance>/
+# Windows: %USERPROFILE%\.cctb\<instance>\
+# macOS/Linux: ~/.cctb/<instance>/
 
 <instance>/
 ├── agent.md                # Bot personality & instructions

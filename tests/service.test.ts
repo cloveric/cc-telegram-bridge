@@ -111,7 +111,7 @@ describe("parseServiceInstanceName", () => {
 describe("readInstanceBotTokenFromEnvFile", () => {
   it("reads TELEGRAM_BOT_TOKEN from the instance .env file", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
-    const envPath = path.join(root, ".codex", "channels", "telegram", "alpha", ".env");
+    const envPath = path.join(root, ".cctb", "alpha", ".env");
 
     try {
       await mkdir(path.dirname(envPath), { recursive: true });
@@ -132,7 +132,7 @@ describe("readInstanceBotTokenFromEnvFile", () => {
 describe("createServiceDependenciesForInstance", () => {
   it("does not mutate process.env.TELEGRAM_BOT_TOKEN directly", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
-    const envPath = path.join(root, ".codex", "channels", "telegram", "alpha", ".env");
+    const envPath = path.join(root, ".cctb", "alpha", ".env");
     const originalToken = process.env.TELEGRAM_BOT_TOKEN;
 
     try {
@@ -163,7 +163,7 @@ describe("createServiceDependenciesForInstance", () => {
 
   it("uses the persistent Codex app-server adapter by default", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
-    const envPath = path.join(root, ".codex", "channels", "telegram", "alpha", ".env");
+    const envPath = path.join(root, ".cctb", "alpha", ".env");
 
     try {
       await mkdir(path.dirname(envPath), { recursive: true });
@@ -179,7 +179,7 @@ describe("createServiceDependenciesForInstance", () => {
 
       expect((result.bridge as any).adapter).toBeInstanceOf(CodexAppServerAdapter);
       expect((result.bridge as any).adapter.childEnv.CODEX_HOME).toBe(
-        path.join(root, ".codex", "channels", "telegram", "alpha", "engine-home"),
+        path.join(root, ".cctb", "alpha", "engine-home"),
       );
     } finally {
       await rm(root, { recursive: true, force: true });
@@ -188,13 +188,14 @@ describe("createServiceDependenciesForInstance", () => {
 
   it("copies shared Codex auth files into the isolated engine home", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
-    const stateDir = path.join(root, ".codex", "channels", "telegram", "alpha");
+    const stateDir = path.join(root, ".cctb", "alpha");
     const envPath = path.join(stateDir, ".env");
     const authPath = path.join(root, ".codex", "auth.json");
     const configTomlPath = path.join(root, ".codex", "config.toml");
 
     try {
       await mkdir(stateDir, { recursive: true });
+      await mkdir(path.dirname(authPath), { recursive: true });
       await writeFile(envPath, 'TELEGRAM_BOT_TOKEN="secret-token"\n', "utf8");
       await writeFile(authPath, '{"access_token":"shared-token"}\n', "utf8");
       await writeFile(configTomlPath, 'model = "gpt-5.3-codex"\n', "utf8");
@@ -220,7 +221,7 @@ describe("createServiceDependenciesForInstance", () => {
 
   it("falls back to the process adapter when codex yolo mode is enabled", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
-    const stateDir = path.join(root, ".codex", "channels", "telegram", "alpha");
+    const stateDir = path.join(root, ".cctb", "alpha");
     const envPath = path.join(stateDir, ".env");
     const configPath = path.join(stateDir, "config.json");
 
@@ -245,7 +246,7 @@ describe("createServiceDependenciesForInstance", () => {
 
   it("uses the Claude adapter when the instance engine is claude", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
-    const stateDir = path.join(root, ".codex", "channels", "telegram", "alpha");
+    const stateDir = path.join(root, ".cctb", "alpha");
     const envPath = path.join(stateDir, ".env");
     const configPath = path.join(stateDir, "config.json");
 
@@ -264,7 +265,7 @@ describe("createServiceDependenciesForInstance", () => {
 
       expect((result.bridge as any).adapter).toBeInstanceOf(ClaudeStreamAdapter);
       expect((result.bridge as any).adapter.childEnv.CLAUDE_CONFIG_DIR).toBe(
-        path.join(root, ".codex", "channels", "telegram", "alpha", "engine-home"),
+        path.join(root, ".cctb", "alpha", "engine-home"),
       );
     } finally {
       await rm(root, { recursive: true, force: true });
@@ -273,7 +274,7 @@ describe("createServiceDependenciesForInstance", () => {
 
   it("copies shared Claude auth files into the isolated engine home", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
-    const stateDir = path.join(root, ".codex", "channels", "telegram", "alpha");
+    const stateDir = path.join(root, ".cctb", "alpha");
     const envPath = path.join(stateDir, ".env");
     const configPath = path.join(stateDir, "config.json");
     const globalClaudeDir = path.join(root, ".claude");

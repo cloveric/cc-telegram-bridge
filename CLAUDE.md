@@ -56,4 +56,4 @@ When choosing the next task without asking:
 - Windows-first project
 - One Telegram bot per instance
 - One instance per process
-- State lives under `%USERPROFILE%\.codex\channels\telegram\<instance>\`
+- State lives under `%USERPROFILE%\.cctb\<instance>\`

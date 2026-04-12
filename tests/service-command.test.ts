@@ -14,7 +14,7 @@ describe("telegram service commands", () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
     const messages: string[] = [];
     const spawnDetached = vi.fn();
-    const stateDir = path.join(tempDir, ".codex", "channels", "telegram", "alpha");
+    const stateDir = path.join(tempDir, ".cctb", "alpha");
     const lockPath = resolveInstanceLockPath(stateDir);
 
     try {
@@ -63,7 +63,7 @@ describe("telegram service commands", () => {
   it("waits for a fresh lock before reporting a restart as started", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
     const messages: string[] = [];
-    const stateDir = path.join(tempDir, ".codex", "channels", "telegram", "alpha");
+    const stateDir = path.join(tempDir, ".cctb", "alpha");
     const lockPath = resolveInstanceLockPath(stateDir);
     let sleepCalls = 0;
 
@@ -115,7 +115,7 @@ describe("telegram service commands", () => {
   it("reports service status without a configured token", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
     const messages: string[] = [];
-    const stateDir = path.join(tempDir, ".codex", "channels", "telegram", "alpha");
+    const stateDir = path.join(tempDir, ".cctb", "alpha");
     const lockPath = resolveInstanceLockPath(stateDir);
 
     try {
@@ -164,7 +164,7 @@ describe("telegram service commands", () => {
   it("reports a configured token and bot identity when lookup succeeds", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
     const messages: string[] = [];
-    const stateDir = path.join(tempDir, ".codex", "channels", "telegram", "alpha");
+    const stateDir = path.join(tempDir, ".cctb", "alpha");
     const envPath = path.join(stateDir, ".env");
 
     try {
@@ -192,7 +192,7 @@ describe("telegram service commands", () => {
   it("keeps status usable when bot identity lookup fails", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
     const messages: string[] = [];
-    const stateDir = path.join(tempDir, ".codex", "channels", "telegram", "alpha");
+    const stateDir = path.join(tempDir, ".cctb", "alpha");
     const envPath = path.join(stateDir, ".env");
 
     try {
@@ -253,7 +253,7 @@ describe("telegram service commands", () => {
   it("runs service doctor with a health summary", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
     const messages: string[] = [];
-    const stateDir = path.join(tempDir, ".codex", "channels", "telegram", "alpha");
+    const stateDir = path.join(tempDir, ".cctb", "alpha");
     const envPath = path.join(stateDir, ".env");
     const lockPath = resolveInstanceLockPath(stateDir);
 
@@ -306,7 +306,7 @@ describe("telegram service commands", () => {
   it("reports latest failure category and unresolved tasks in doctor output", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
     const messages: string[] = [];
-    const stateDir = path.join(tempDir, ".codex", "channels", "telegram", "alpha");
+    const stateDir = path.join(tempDir, ".cctb", "alpha");
     const lockPath = resolveInstanceLockPath(stateDir);
 
     try {
@@ -411,7 +411,7 @@ describe("telegram service commands", () => {
   it("reports a poll conflict failure category in doctor output from the audit stream", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
     const messages: string[] = [];
-    const stateDir = path.join(tempDir, ".codex", "channels", "telegram", "alpha");
+    const stateDir = path.join(tempDir, ".cctb", "alpha");
     const lockPath = resolveInstanceLockPath(stateDir);
 
     try {
@@ -453,7 +453,7 @@ describe("telegram service commands", () => {
   it("keeps doctor healthy when tasks are only waiting for manual continuation", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
     const messages: string[] = [];
-    const stateDir = path.join(tempDir, ".codex", "channels", "telegram", "alpha");
+    const stateDir = path.join(tempDir, ".cctb", "alpha");
     const envPath = path.join(stateDir, ".env");
     const lockPath = resolveInstanceLockPath(stateDir);
 
@@ -514,7 +514,7 @@ describe("telegram service commands", () => {
   it("keeps service doctor working when file workflow state is invalid", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
     const messages: string[] = [];
-    const stateDir = path.join(tempDir, ".codex", "channels", "telegram", "alpha");
+    const stateDir = path.join(tempDir, ".cctb", "alpha");
     const lockPath = resolveInstanceLockPath(stateDir);
 
     try {
@@ -556,7 +556,7 @@ describe("telegram service commands", () => {
 
   it("does not relabel internal task-health failures as unreadable workflow state", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
-    const stateDir = path.join(tempDir, ".codex", "channels", "telegram", "alpha");
+    const stateDir = path.join(tempDir, ".cctb", "alpha");
     const lockPath = resolveInstanceLockPath(stateDir);
     const inspectSpy = vi.spyOn((await import("../src/state/file-workflow-store.js")).FileWorkflowStore.prototype, "inspect");
     inspectSpy.mockRejectedValueOnce(new Error("workflow summary exploded"));
@@ -592,7 +592,7 @@ describe("telegram service commands", () => {
   it("reports unknown unresolved tasks in service status when file workflow state is invalid", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
     const messages: string[] = [];
-    const stateDir = path.join(tempDir, ".codex", "channels", "telegram", "alpha");
+    const stateDir = path.join(tempDir, ".cctb", "alpha");
     const lockPath = resolveInstanceLockPath(stateDir);
 
     try {
@@ -631,7 +631,7 @@ describe("telegram service commands", () => {
   it("reports blocking and awaiting-continue task counts in service status", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
     const messages: string[] = [];
-    const stateDir = path.join(tempDir, ".codex", "channels", "telegram", "alpha");
+    const stateDir = path.join(tempDir, ".cctb", "alpha");
     const lockPath = resolveInstanceLockPath(stateDir);
 
     try {
@@ -724,7 +724,7 @@ describe("telegram service commands", () => {
   it("reports unknown session bindings in service status when session state is invalid", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
     const messages: string[] = [];
-    const stateDir = path.join(tempDir, ".codex", "channels", "telegram", "alpha");
+    const stateDir = path.join(tempDir, ".cctb", "alpha");
     const lockPath = resolveInstanceLockPath(stateDir);
 
     try {
@@ -761,7 +761,7 @@ describe("telegram service commands", () => {
   it("reports session warnings in service doctor when session state is invalid", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
     const messages: string[] = [];
-    const stateDir = path.join(tempDir, ".codex", "channels", "telegram", "alpha");
+    const stateDir = path.join(tempDir, ".cctb", "alpha");
     const lockPath = resolveInstanceLockPath(stateDir);
 
     try {
@@ -798,7 +798,7 @@ describe("telegram service commands", () => {
   it("stops a running instance through the CLI", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
     const messages: string[] = [];
-    const stateDir = path.join(tempDir, ".codex", "channels", "telegram", "default");
+    const stateDir = path.join(tempDir, ".cctb", "default");
     const lockPath = resolveInstanceLockPath(stateDir);
     const killProcessTree = vi.fn();
 
@@ -845,7 +845,7 @@ describe("telegram service commands", () => {
   it("restarts an instance by stopping and then starting it", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
     const messages: string[] = [];
-    const stateDir = path.join(tempDir, ".codex", "channels", "telegram", "default");
+    const stateDir = path.join(tempDir, ".cctb", "default");
     const lockPath = resolveInstanceLockPath(stateDir);
     const killProcessTree = vi.fn();
     const spawnDetached = vi.fn();

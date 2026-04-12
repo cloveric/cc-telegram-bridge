@@ -7,7 +7,7 @@ import type { EnvSource } from "../config.js";
 function resolveChannelsDir(env: Pick<EnvSource, "HOME" | "USERPROFILE">): string {
   const homeDir = env.HOME ?? env.USERPROFILE;
   if (!homeDir) throw new Error("HOME or USERPROFILE is required");
-  return path.join(homeDir, ".codex", "channels", "telegram");
+  return path.join(homeDir, ".cctb");
 }
 
 interface InstanceSnapshot {

@@ -14,7 +14,7 @@ import {
 describe("task commands", () => {
   it("reports unreadable workflow state on list", async () => {
     const homeDir = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
-    const workflowPath = path.join(homeDir, ".codex", "channels", "telegram", "alpha", "file-workflow.json");
+    const workflowPath = path.join(homeDir, ".cctb", "alpha", "file-workflow.json");
 
     try {
       await mkdir(path.dirname(workflowPath), { recursive: true });
@@ -31,7 +31,7 @@ describe("task commands", () => {
 
   it("clears the workflow record without deleting paths outside the telegram-files root", async () => {
     const homeDir = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
-    const stateDir = path.join(homeDir, ".codex", "channels", "telegram", "alpha");
+    const stateDir = path.join(homeDir, ".cctb", "alpha");
     const hostileUploadId = ["..", "outside-root"].join(path.sep);
     const outsideDir = path.join(stateDir, "workspace", "outside-root");
     const sentinelPath = path.join(outsideDir, "sentinel.txt");
@@ -71,7 +71,7 @@ describe("task commands", () => {
 
   it("clears a hostile in-root traversal record without deleting a sibling workspace", async () => {
     const homeDir = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
-    const stateDir = path.join(homeDir, ".codex", "channels", "telegram", "alpha");
+    const stateDir = path.join(homeDir, ".cctb", "alpha");
     const hostileUploadId = ["foo", "..", "victim"].join(path.sep);
     const victimDir = path.join(stateDir, "workspace", ".telegram-files", "victim");
     const sentinelPath = path.join(victimDir, "sentinel.txt");
@@ -110,7 +110,7 @@ describe("task commands", () => {
 
   it("skips workspace deletion for win32 alias-style upload ids", async () => {
     const homeDir = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
-    const stateDir = path.join(homeDir, ".codex", "channels", "telegram", "alpha");
+    const stateDir = path.join(homeDir, ".cctb", "alpha");
     const victimDir = path.join(stateDir, "workspace", ".telegram-files", "victim");
     const victimSentinelPath = path.join(victimDir, "sentinel.txt");
 
@@ -148,7 +148,7 @@ describe("task commands", () => {
 
   it("does not delete workspace files before record removal succeeds", async () => {
     const homeDir = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
-    const stateDir = path.join(homeDir, ".codex", "channels", "telegram", "alpha");
+    const stateDir = path.join(homeDir, ".cctb", "alpha");
     const workflowPath = path.join(stateDir, "file-workflow.json");
     const uploadWorkspaceDir = path.join(stateDir, "workspace", ".telegram-files", "upload-123");
     const artifactPath = path.join(uploadWorkspaceDir, "artifact.txt");
@@ -200,7 +200,7 @@ describe("task commands", () => {
 
   it("treats cleanup failure as a warning after record removal succeeds", async () => {
     const homeDir = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
-    const stateDir = path.join(homeDir, ".codex", "channels", "telegram", "alpha");
+    const stateDir = path.join(homeDir, ".cctb", "alpha");
     const workflowPath = path.join(stateDir, "file-workflow.json");
     const uploadWorkspaceDir = path.join(stateDir, "workspace", ".telegram-files", "upload-123");
 
@@ -247,7 +247,7 @@ describe("task commands", () => {
 
   it("repairs unreadable workflow state when record removal hits a repairable error", async () => {
     const homeDir = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
-    const stateDir = path.join(homeDir, ".codex", "channels", "telegram", "alpha");
+    const stateDir = path.join(homeDir, ".cctb", "alpha");
     const workflowPath = path.join(stateDir, "file-workflow.json");
     const removeWorkspaceDir = vi.fn();
 
