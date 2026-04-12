@@ -22,7 +22,7 @@
 </h3>
 
 <p align="center">
-  <em>当你能在 Telegram 上开 10 个原生 bot，OpenClaw 还有什么意义呢？</em>
+  <em>为什么不直接用 Claude Code 和 Codex 更好的 harness 呢？<br>当你能在 Telegram 上开 10 个原生 bot，OpenClaw 还有什么意义呢？</em>
 </p>
 
 <p align="center">
