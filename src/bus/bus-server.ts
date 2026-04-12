@@ -47,6 +47,8 @@ function sendJson(res: http.ServerResponse, status: number, body: unknown): void
   res.end(json);
 }
 
+const MAX_BODY_BYTES = 256 * 1024;
+
 export function createBusServer(
   instanceName: string,
   stateDir: string,
@@ -55,8 +57,20 @@ export function createBusServer(
   const server = http.createServer(async (req, res) => {
     if (req.method === "POST" && req.url === "/api/talk") {
       const chunks: Buffer[] = [];
-      req.on("data", (chunk: Buffer) => chunks.push(chunk));
+      let totalBytes = 0;
+      let aborted = false;
+      req.on("data", (chunk: Buffer) => {
+        totalBytes += chunk.length;
+        if (totalBytes > MAX_BODY_BYTES) {
+          aborted = true;
+          sendJson(res, 413, { success: false, error: "Request body too large" });
+          req.destroy();
+          return;
+        }
+        chunks.push(chunk);
+      });
       req.on("end", async () => {
+        if (aborted) return;
         const body = Buffer.concat(chunks).toString("utf8");
         const talkReq = parseTalkBody(body);
 

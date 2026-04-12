@@ -94,6 +94,10 @@ export class Bridge {
   }
 
   async checkAccess(input: BridgeAccessInput): Promise<BridgeAccessDecision> {
+    if (input.chatType === "bus") {
+      return { kind: "allow" };
+    }
+
     const accessState = await this.accessStore.load();
 
     if (input.chatType !== "private") {

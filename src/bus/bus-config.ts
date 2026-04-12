@@ -7,7 +7,6 @@ export interface BusConfig {
   port: number;
 }
 
-const DEFAULT_BUS_PORT = 9100;
 const DEFAULT_MAX_DEPTH = 3;
 
 export function parseBusConfig(raw: unknown): BusConfig | null {

@@ -32,6 +32,14 @@ export async function delegateToInstance(input: BusDelegateInput): Promise<BusTa
     );
   }
 
+  try {
+    process.kill(target.pid, 0);
+  } catch {
+    throw new Error(
+      `Instance "${input.targetInstance}" has a stale registry entry (PID ${target.pid} is not running)`,
+    );
+  }
+
   const body = JSON.stringify({
     fromInstance: input.fromInstance,
     prompt: input.prompt,
