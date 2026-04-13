@@ -15,6 +15,11 @@ interface InstanceSnapshot {
   engine: string;
   approvalMode: string;
   verbosity: number;
+  effort: string;
+  model: string;
+  locale: string;
+  budgetUsd: number | null;
+  bus: string;
   running: boolean;
   pid: number | null;
   policy: string;
@@ -46,7 +51,7 @@ function pa(line: string): InstanceSnapshot["recentAudit"][0] | null {
 
 async function ci(cd: string, name: string): Promise<InstanceSnapshot> {
   const d = path.join(cd, name);
-  const cfg = await rj<{ engine?: string; approvalMode?: string; verbosity?: number }>(path.join(d, "config.json"), {});
+  const cfg = await rj<{ engine?: string; approvalMode?: string; verbosity?: number; effort?: string; model?: string; locale?: string; budgetUsd?: number; bus?: { peers?: unknown } }>(path.join(d, "config.json"), {});
   const lk = await rj<{ pid?: number } | null>(path.join(d, "instance.lock.json"), null);
   const ac = await rj<{ policy?: string; pairedUsers?: unknown[]; allowlist?: unknown[] }>(path.join(d, "access.json"), {});
   const ss = await rj<{ chats?: unknown[] }>(path.join(d, "session.json"), {});
@@ -60,6 +65,9 @@ async function ci(cd: string, name: string): Promise<InstanceSnapshot> {
   if (lk?.pid) { try { process.kill(lk.pid, 0); running = true; } catch { running = false; } }
   return {
     name, engine: cfg.engine ?? "codex", approvalMode: cfg.approvalMode ?? "normal", verbosity: cfg.verbosity ?? 1,
+    effort: cfg.effort ?? "default", model: cfg.model ?? "default", locale: cfg.locale ?? "en",
+    budgetUsd: typeof cfg.budgetUsd === "number" ? cfg.budgetUsd : null,
+    bus: cfg.bus?.peers ? (cfg.bus.peers === "*" ? "mesh" : Array.isArray(cfg.bus.peers) ? `${(cfg.bus.peers as unknown[]).length} peers` : "off") : "off",
     running, pid: running ? (lk?.pid ?? null) : null, policy: ac.policy ?? "pairing",
     pairedUsers: Array.isArray(ac.pairedUsers) ? ac.pairedUsers.length : 0,
     allowlistCount: Array.isArray(ac.allowlist) ? ac.allowlist.length : 0,
@@ -135,6 +143,8 @@ function renderHtml(instances: InstanceSnapshot[]): string {
     const statusText = inst.running ? "Online" : "Offline";
     const engLabel = inst.engine.charAt(0).toUpperCase() + inst.engine.slice(1);
     const yoloLabel = inst.approvalMode === "bypass" ? " / Unsafe" : inst.approvalMode === "full-auto" ? " / YOLO" : "";
+    const effortLabel = inst.effort !== "default" ? ` / ${inst.effort}` : "";
+    const modelLabel = inst.model !== "default" ? ` / ${inst.model}` : "";
     const costStr = inst.usage.totalCostUsd > 0 ? `$${inst.usage.totalCostUsd.toFixed(4)}` : "--";
     const cacheRatio = (inst.usage.totalInputTokens + inst.usage.totalCachedTokens) > 0
       ? Math.round(inst.usage.totalCachedTokens / (inst.usage.totalInputTokens + inst.usage.totalCachedTokens) * 100) : 0;
@@ -153,7 +163,7 @@ function renderHtml(instances: InstanceSnapshot[]): string {
           <h2>${esc(inst.name)}</h2>
           <div class="card-meta">
             <span class="tag" style="background:${statusColor}">${statusText}</span>
-            <span class="tag tag-outline">${engLabel}${yoloLabel}</span>
+            <span class="tag tag-outline">${engLabel}${modelLabel}${effortLabel}${yoloLabel}</span>
           </div>
         </div>
 
@@ -170,9 +180,12 @@ function renderHtml(instances: InstanceSnapshot[]): string {
           <div>Sessions <strong>${inst.sessionBindings}</strong></div>
           <div>Paired <strong>${inst.pairedUsers}</strong></div>
           <div>Policy <strong>${inst.policy}</strong></div>
-          <div>Verbosity <strong>${inst.verbosity}</strong></div>
+          <div>Locale <strong>${inst.locale}</strong></div>
+          <div>Bus <strong>${inst.bus}</strong></div>
+          <div>Budget <strong>${inst.budgetUsd !== null ? `$${inst.budgetUsd}` : "--"}</strong></div>
           <div>Last OK <strong style="color:#2D8B46">${ft(inst.lastSuccess)}</strong></div>
           <div>Last Err <strong style="color:#C1392B">${ft(inst.lastFailure)}</strong></div>
+          <div>Verbosity <strong>${inst.verbosity}</strong></div>
         </div>
 
         ${inst.lastError ? `<div class="err">${esc(inst.lastError)}</div>` : ""}
