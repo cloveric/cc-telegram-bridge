@@ -273,7 +273,9 @@ export class TelegramApi {
   }
 
   async downloadFile(filePath: string, destinationPath: string): Promise<void> {
-    const response = await fetch(this.buildFileUrl(filePath));
+    const response = await fetch(this.buildFileUrl(filePath), {
+      signal: AbortSignal.timeout(60_000),
+    });
 
     if (!response.ok) {
       throw new Error(`Telegram API request failed for downloadFile: ${response.status} ${response.statusText}`);

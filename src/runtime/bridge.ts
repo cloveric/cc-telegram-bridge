@@ -98,7 +98,12 @@ export class Bridge {
       return { kind: "allow" };
     }
 
-    const accessState = await this.accessStore.load();
+    let accessState: Awaited<ReturnType<AccessStoreLike["load"]>>;
+    try {
+      accessState = await this.accessStore.load();
+    } catch {
+      return { kind: "deny", text: renderUnauthorizedMessage(input.locale) };
+    }
 
     if (input.chatType !== "private") {
       return {

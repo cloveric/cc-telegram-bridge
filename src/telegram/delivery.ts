@@ -77,8 +77,8 @@ async function updateInstanceConfig(stateDir: string, updater: (config: Record<s
 async function appendAuditEventBestEffort(stateDir: string, event: Parameters<typeof appendAuditEvent>[1]): Promise<void> {
   try {
     await appendAuditEvent(stateDir, event);
-  } catch {
-    // Fast-path success responses should remain successful even if audit persistence fails late.
+  } catch (error) {
+    console.error("Failed to persist audit event:", error instanceof Error ? error.message : error);
   }
 }
 

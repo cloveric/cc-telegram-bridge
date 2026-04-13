@@ -507,7 +507,7 @@ describe("TelegramApi", () => {
       await api.downloadFile("documents/file.bin", destinationPath);
 
       await expect(readFile(destinationPath, "utf8")).resolves.toBe("file-bytes");
-      expect(fetchMock).toHaveBeenCalledWith("https://api.telegram.org/file/bottoken/documents/file.bin");
+      expect(fetchMock).toHaveBeenCalledWith("https://api.telegram.org/file/bottoken/documents/file.bin", expect.objectContaining({ signal: expect.any(AbortSignal) }));
     } finally {
       fetchMock.mockRestore();
       await rm(root, { recursive: true, force: true });
