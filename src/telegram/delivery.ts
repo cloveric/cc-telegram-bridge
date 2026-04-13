@@ -348,16 +348,31 @@ async function deliverTelegramResponse(
     return;
   }
 
-  // Extract [send-file:/path] tags — send referenced disk files
-  const sendFilePattern = /\[send-file:([^\]]+)\]/g;
+  // Extract file references from multiple formats:
+  // 1. [send-file:/path]           — explicit bridge tag
+  // 2. ![alt](/absolute/path.png)  — Markdown image
+  // 3. [name](/absolute/path.ext)  — Markdown link to local file
+  const filePatterns = [
+    /\[send-file:([^\]]+)\]/g,
+    /!\[[^\]]*\]\((\/?[A-Za-z]:?\/[^)]+)\)/g,
+    /(?<!!)\[[^\]]*\]\((\/?[A-Za-z]:?\/[^)]+\.(?:png|jpg|jpeg|gif|webp|bmp|pdf|zip|tar|gz|svg))\)/gi,
+  ];
   const filePaths: string[] = [];
   let cleanedText = text;
-  let match: RegExpExecArray | null;
-  while ((match = sendFilePattern.exec(text)) !== null) {
-    filePaths.push(match[1]!.trim());
+  for (const pattern of filePatterns) {
+    let match: RegExpExecArray | null;
+    while ((match = pattern.exec(text)) !== null) {
+      const p = match[1]!.trim();
+      if (p.startsWith("/") && !filePaths.includes(p)) {
+        filePaths.push(p);
+      }
+    }
   }
   if (filePaths.length > 0) {
-    cleanedText = text.replace(sendFilePattern, "").trim();
+    for (const pattern of filePatterns) {
+      cleanedText = cleanedText.replace(pattern, "");
+    }
+    cleanedText = cleanedText.replace(/\n{3,}/g, "\n\n").trim();
   }
 
   // Send text response (if any remains after stripping file tags)
