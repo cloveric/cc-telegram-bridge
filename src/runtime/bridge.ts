@@ -52,7 +52,11 @@ function renderTelegramBridgeCapabilities(): string {
     "```",
     "",
     "The bridge will automatically extract the block and deliver it as a Telegram document attachment.",
-    "Use this for small text or code files. For large files, save them to the workspace instead.",
+    "Use this for small text or code files only.",
+    "",
+    "To send an existing file from disk (images, PDFs, binaries, or any file already saved to the workspace), use this tag anywhere in your reply:",
+    "  [send-file:/absolute/path/to/file.png]",
+    "The bridge will read the file from disk and deliver it to the user. You can include multiple [send-file:...] tags. For images, the bridge automatically compresses them for Telegram. This is the ONLY way to send binary files — do NOT put binary content in ```file:``` blocks.",
     "",
     "IMPORTANT: Telegram is a plain-text chat environment. Do NOT use interactive UI elements such as HTML forms, checkboxes, radio buttons, dropdowns, accordions, tabs, or embedded widgets — they will not render. For multiple-choice questions, use numbered plain-text lists and ask the user to reply with a number or letter. For structured data, use simple text tables or bullet lists. Only basic Markdown (bold, italic, code, links) is supported.",
   ].join("\n");

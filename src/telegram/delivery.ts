@@ -340,6 +340,7 @@ async function deliverTelegramResponse(
   chatId: number,
   text: string,
 ): Promise<void> {
+  // Handle inline text file blocks
   const fileMatch = text.match(/```file:([^\n]+)\n([\s\S]*?)```/);
   if (fileMatch) {
     const [, fileName, fileBody] = fileMatch;
@@ -347,9 +348,40 @@ async function deliverTelegramResponse(
     return;
   }
 
-  const chunks = chunkTelegramMessage(text);
-  for (const chunk of chunks) {
-    await api.sendMessage(chatId, chunk);
+  // Extract [send-file:/path] tags — send referenced disk files
+  const sendFilePattern = /\[send-file:([^\]]+)\]/g;
+  const filePaths: string[] = [];
+  let cleanedText = text;
+  let match: RegExpExecArray | null;
+  while ((match = sendFilePattern.exec(text)) !== null) {
+    filePaths.push(match[1]!.trim());
+  }
+  if (filePaths.length > 0) {
+    cleanedText = text.replace(sendFilePattern, "").trim();
+  }
+
+  // Send text response (if any remains after stripping file tags)
+  if (cleanedText) {
+    const chunks = chunkTelegramMessage(cleanedText);
+    for (const chunk of chunks) {
+      await api.sendMessage(chatId, chunk);
+    }
+  }
+
+  // Send referenced files from disk
+  for (const filePath of filePaths) {
+    try {
+      const { stat } = await import("node:fs/promises");
+      const stats = await stat(filePath);
+      if (!stats.isFile() || stats.size > 50_000_000) {
+        continue;
+      }
+      const contents = await readFile(filePath);
+      const fileName = path.basename(filePath);
+      await sendFileOrPhoto(api, chatId, fileName, contents);
+    } catch {
+      // File not found or unreadable — skip silently
+    }
   }
 }
 
