@@ -319,6 +319,7 @@ describe("polling helpers", () => {
     const api = {
       sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
       editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      sendChatAction: vi.fn().mockResolvedValue(undefined),
     };
     const bridge = {
       checkAccess: vi.fn().mockResolvedValue({ kind: "allow" }),
@@ -371,6 +372,7 @@ describe("polling helpers", () => {
     const api = {
       sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
       editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      sendChatAction: vi.fn().mockResolvedValue(undefined),
     };
     const bridge = {
       checkAccess: vi.fn().mockResolvedValue({ kind: "allow" }),
@@ -441,6 +443,7 @@ describe("polling helpers", () => {
     const api = {
       sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
       editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      sendChatAction: vi.fn().mockResolvedValue(undefined),
     };
     const bridge = {
       checkAccess: vi.fn().mockResolvedValue({ kind: "allow" }),
@@ -527,6 +530,7 @@ describe("polling helpers", () => {
       ]),
       sendMessage: vi.fn().mockResolvedValue({ message_id: 1 }),
       editMessage: vi.fn().mockResolvedValue({ message_id: 1 }),
+      sendChatAction: vi.fn().mockResolvedValue(undefined),
     };
     const bridge = {
       checkAccess: vi.fn().mockResolvedValue({ kind: "allow" }),
@@ -581,6 +585,7 @@ describe("polling helpers", () => {
         api: {
           sendMessage: vi.fn().mockResolvedValue({ message_id: 1 }),
           editMessage: vi.fn().mockResolvedValue({ message_id: 1 }),
+      sendChatAction: vi.fn().mockResolvedValue(undefined),
         } as never,
         bridge: bridge as never,
         inboxDir: path.join(os.tmpdir(), "ignored"),
@@ -835,6 +840,7 @@ describe("polling helpers", () => {
     const api = {
       sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
       editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      sendChatAction: vi.fn().mockResolvedValue(undefined),
     };
     let activeCalls = 0;
     let maxConcurrentCalls = 0;
@@ -908,6 +914,7 @@ describe("polling helpers", () => {
     const api = {
       sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
       editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      sendChatAction: vi.fn().mockResolvedValue(undefined),
       getFile: vi
         .fn()
         .mockResolvedValueOnce({ file_path: "docs/report.pdf" })
@@ -943,8 +950,7 @@ describe("polling helpers", () => {
 
       expect(api.getFile).toHaveBeenCalledTimes(2);
       expect(api.downloadFile).toHaveBeenCalledTimes(2);
-      expect(api.editMessage).toHaveBeenNthCalledWith(1, 123, 11, "Downloading 2 attachments...");
-      expect(api.editMessage).toHaveBeenNthCalledWith(2, 123, 11, "Working on your request...");
+      expect(api.sendChatAction).toHaveBeenCalledWith(123);
       expect(bridge.handleAuthorizedMessage).toHaveBeenCalledWith(expect.objectContaining({
         chatId: 123,
         userId: 456,
@@ -976,6 +982,7 @@ describe("polling helpers", () => {
     const api = {
       sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
       editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      sendChatAction: vi.fn().mockResolvedValue(undefined),
       getFile: vi.fn().mockResolvedValue({ file_path: "uploads/repo.zip" }),
       downloadFile: vi.fn().mockImplementation(async (_filePath: string, destinationPath: string) => {
         await writeFile(destinationPath, zipBuffer);
@@ -1004,10 +1011,8 @@ describe("polling helpers", () => {
       );
 
       expect(bridge.handleAuthorizedMessage).not.toHaveBeenCalled();
-      expect(api.editMessage).toHaveBeenLastCalledWith(
-        123,
-        11,
-        expect.stringContaining(
+      expect(api.sendMessage).toHaveBeenLastCalledWith(
+        123, expect.stringContaining(
           "Reply \"继续分析\" or press Continue Analysis to continue this archive. Bare /continue resumes the latest waiting archive.",
         ),
         expect.objectContaining({
@@ -1022,10 +1027,8 @@ describe("polling helpers", () => {
       expect(workflowState.records[0]?.kind).toBe("archive");
       expect(workflowState.records[0]?.status).toBe("awaiting_continue");
       expect(workflowState.records[0]?.summary).toContain("README.md");
-      expect(api.editMessage).toHaveBeenLastCalledWith(
-        123,
-        11,
-        expect.stringContaining(
+      expect(api.sendMessage).toHaveBeenLastCalledWith(
+        123, expect.stringContaining(
           "Reply \"继续分析\" or press Continue Analysis to continue this archive. Bare /continue resumes the latest waiting archive.",
         ),
         expect.objectContaining({
@@ -1047,6 +1050,7 @@ describe("polling helpers", () => {
     const api = {
       sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
       editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      sendChatAction: vi.fn().mockResolvedValue(undefined),
       getFile: vi.fn().mockResolvedValue({ file_path: "uploads/repo.zip" }),
       downloadFile: vi.fn().mockImplementation(async (_filePath: string, destinationPath: string) => {
         await writeFile(destinationPath, zipBuffer);
@@ -1078,10 +1082,8 @@ describe("polling helpers", () => {
         records: Array<{ uploadId: string }>;
       };
 
-      expect(api.editMessage).toHaveBeenCalledWith(
-        123,
-        11,
-        expect.stringContaining('Reply "继续分析"'),
+      expect(api.sendMessage).toHaveBeenCalledWith(
+        123, expect.stringContaining('Reply "继续分析"'),
         expect.objectContaining({
           inlineKeyboard: [[{ text: "Continue Analysis", callbackData: `continue-archive:${workflowState.records[0]?.uploadId}` }]],
         }),
@@ -1097,6 +1099,7 @@ describe("polling helpers", () => {
     const api = {
       sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
       editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      sendChatAction: vi.fn().mockResolvedValue(undefined),
       getFile: vi.fn().mockResolvedValue({ file_path: "uploads/bad.zip" }),
       downloadFile: vi.fn().mockImplementation(async (_filePath: string, destinationPath: string) => {
         await writeFile(destinationPath, "not a zip archive", "utf8");
@@ -1145,10 +1148,8 @@ describe("polling helpers", () => {
         sourceFiles: [expect.stringContaining(path.join("workspace", ".telegram-files"))],
         summary: expect.stringMatching(/invalid|zip|archive/i),
       }));
-      expect(api.editMessage).toHaveBeenLastCalledWith(
-        123,
-        11,
-        "Error: File handling failed while preparing your request. Retry with a smaller or different file.",
+      expect(api.sendMessage).toHaveBeenLastCalledWith(
+        123, "Error: File handling failed while preparing your request. Retry with a smaller or different file.",
       );
       expect(bridge.handleAuthorizedMessage).not.toHaveBeenCalled();
     } finally {
@@ -1171,6 +1172,7 @@ describe("polling helpers", () => {
     const api = {
       sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
       editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      sendChatAction: vi.fn().mockResolvedValue(undefined),
       getFile: vi.fn().mockResolvedValue({ file_path: "uploads/evil.zip" }),
       downloadFile: vi.fn().mockImplementation(async (_filePath: string, destinationPath: string) => {
         await writeFile(destinationPath, zipBuffer);
@@ -1227,6 +1229,7 @@ describe("polling helpers", () => {
     const api = {
       sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
       editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      sendChatAction: vi.fn().mockResolvedValue(undefined),
       getFile: vi.fn().mockResolvedValue({ file_path: "uploads/repo.zip" }),
       downloadFile: vi.fn().mockImplementation(async (_filePath: string, destinationPath: string) => {
         await writeFile(destinationPath, zipBuffer);
@@ -1334,6 +1337,7 @@ describe("polling helpers", () => {
     const api = {
       sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
       editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      sendChatAction: vi.fn().mockResolvedValue(undefined),
       getFile: vi.fn(),
       downloadFile: vi.fn(),
     };
@@ -1438,6 +1442,7 @@ describe("polling helpers", () => {
     const api = {
       sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
       editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      sendChatAction: vi.fn().mockResolvedValue(undefined),
       getFile: vi.fn().mockResolvedValue({ file_path: "uploads/note.txt" }),
       downloadFile: vi.fn().mockImplementation(async (_filePath: string, destinationPath: string) => {
         await writeFile(destinationPath, "hello", "utf8");
@@ -1465,10 +1470,8 @@ describe("polling helpers", () => {
         },
       );
 
-      expect(api.editMessage).toHaveBeenLastCalledWith(
-        123,
-        11,
-        "Too many active file tasks for this chat. Wait for current tasks to finish or use /reset.",
+      expect(api.sendMessage).toHaveBeenLastCalledWith(
+        123, "Too many active file tasks for this chat. Wait for current tasks to finish or use /reset.",
         undefined,
       );
       expect(bridge.handleAuthorizedMessage).not.toHaveBeenCalled();
@@ -1512,6 +1515,7 @@ describe("polling helpers", () => {
     const api = {
       sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
       editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      sendChatAction: vi.fn().mockResolvedValue(undefined),
       getFile: vi.fn(),
       downloadFile: vi.fn(),
     };
@@ -1593,6 +1597,7 @@ describe("polling helpers", () => {
     const api = {
       sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
       editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      sendChatAction: vi.fn().mockResolvedValue(undefined),
       sendDocument: vi.fn().mockRejectedValue(new Error("sendDocument failed after response")),
       getFile: vi.fn(),
       downloadFile: vi.fn(),
@@ -1632,7 +1637,7 @@ describe("polling helpers", () => {
         records: Array<{ status: string }>;
       };
       expect(workflowState.records[0]?.status).toBe("failed");
-      expect(api.editMessage).toHaveBeenCalledWith(123, 11, "continuation complete");
+      expect(api.sendMessage).toHaveBeenCalledWith(123, "continuation complete");
       expect(api.sendMessage).toHaveBeenLastCalledWith(
         123,
         "Error: Telegram delivery is temporarily unavailable. Retry the request or try again later.",
@@ -1671,6 +1676,7 @@ describe("polling helpers", () => {
     const api = {
       sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
       editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      sendChatAction: vi.fn().mockResolvedValue(undefined),
       getFile: vi.fn(),
       downloadFile: vi.fn(),
     };
@@ -1698,9 +1704,8 @@ describe("polling helpers", () => {
         ),
       ).resolves.toBeUndefined();
 
-      expect(api.editMessage).toHaveBeenLastCalledWith(
+      expect(api.sendMessage).toHaveBeenLastCalledWith(
         123,
-        11,
         renderCategorizedErrorMessage(
           classifyFailure(new Error("engine failed during continuation")),
           "engine failed during continuation",
@@ -1767,6 +1772,7 @@ describe("polling helpers", () => {
     const api = {
       sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
       editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      sendChatAction: vi.fn().mockResolvedValue(undefined),
       answerCallbackQuery: vi.fn().mockResolvedValue(undefined),
       getFile: vi.fn(),
       downloadFile: vi.fn(),
@@ -1797,7 +1803,7 @@ describe("polling helpers", () => {
 
       expect(api.answerCallbackQuery).toHaveBeenCalledWith("cb-1");
       expect(api.answerCallbackQuery.mock.invocationCallOrder[0]).toBeLessThan(api.sendMessage.mock.invocationCallOrder[0]);
-      expect(api.answerCallbackQuery.mock.invocationCallOrder[0]).toBeLessThan(api.editMessage.mock.invocationCallOrder[0]);
+      expect(api.answerCallbackQuery.mock.invocationCallOrder[0]).toBeLessThan(api.sendMessage.mock.invocationCallOrder[0]);
       expect(bridge.handleAuthorizedMessage).toHaveBeenCalledWith(
         expect.objectContaining({
           text: expect.stringContaining("[Archive Analysis Context]"),
@@ -1860,6 +1866,7 @@ describe("polling helpers", () => {
     const api = {
       sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
       editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      sendChatAction: vi.fn().mockResolvedValue(undefined),
       answerCallbackQuery: vi.fn().mockRejectedValue(new Error("ack failed")),
       getFile: vi.fn(),
       downloadFile: vi.fn(),
@@ -1944,6 +1951,7 @@ describe("polling helpers", () => {
     const api = {
       sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
       editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      sendChatAction: vi.fn().mockResolvedValue(undefined),
       getFile: vi.fn(),
       downloadFile: vi.fn(),
     };
@@ -2030,6 +2038,7 @@ describe("polling helpers", () => {
     const api = {
       sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
       editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      sendChatAction: vi.fn().mockResolvedValue(undefined),
       getFile: vi.fn(),
       downloadFile: vi.fn(),
     };
@@ -2059,11 +2068,8 @@ describe("polling helpers", () => {
       );
 
       expect(bridge.handleAuthorizedMessage).not.toHaveBeenCalled();
-      expect(api.sendMessage).toHaveBeenCalledWith(123, "Received. Starting your session...");
-      expect(api.editMessage).toHaveBeenLastCalledWith(
-        123,
-        11,
-        "That archive has already completed continued analysis in this chat.",
+      expect(api.sendMessage).toHaveBeenLastCalledWith(
+        123, "That archive has already completed continued analysis in this chat.",
         undefined,
       );
     } finally {
@@ -2099,6 +2105,7 @@ describe("polling helpers", () => {
     const api = {
       sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
       editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      sendChatAction: vi.fn().mockResolvedValue(undefined),
       answerCallbackQuery: vi.fn().mockResolvedValue(undefined),
       getFile: vi.fn(),
       downloadFile: vi.fn(),
@@ -2125,10 +2132,8 @@ describe("polling helpers", () => {
       });
 
       expect(bridge.handleAuthorizedMessage).not.toHaveBeenCalled();
-      expect(api.editMessage).toHaveBeenLastCalledWith(
-        123,
-        11,
-        "That archive is already being processed in this chat.",
+      expect(api.sendMessage).toHaveBeenLastCalledWith(
+        123, "That archive is already being processed in this chat.",
         undefined,
       );
     } finally {
@@ -2164,6 +2169,7 @@ describe("polling helpers", () => {
     const api = {
       sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
       editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      sendChatAction: vi.fn().mockResolvedValue(undefined),
       answerCallbackQuery: vi.fn().mockResolvedValue(undefined),
       getFile: vi.fn(),
       downloadFile: vi.fn(),
@@ -2191,9 +2197,8 @@ describe("polling helpers", () => {
         }),
       ).resolves.toBeUndefined();
 
-      expect(api.editMessage).toHaveBeenLastCalledWith(
+      expect(api.sendMessage).toHaveBeenLastCalledWith(
         123,
-        11,
         [
           "Error: An unexpected failure occurred. Reset the chat or retry the request.",
           "Retry this specific archive from its original summary: press Continue Analysis again there or reply \"继续分析\" to that summary.",
@@ -2232,6 +2237,7 @@ describe("polling helpers", () => {
     const api = {
       sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
       editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      sendChatAction: vi.fn().mockResolvedValue(undefined),
       getFile: vi.fn(),
       downloadFile: vi.fn(),
     };
@@ -2258,9 +2264,8 @@ describe("polling helpers", () => {
       );
 
       expect(bridge.handleAuthorizedMessage).not.toHaveBeenCalled();
-      expect(api.editMessage).toHaveBeenLastCalledWith(
+      expect(api.sendMessage).toHaveBeenLastCalledWith(
         123,
-        11,
         'Malformed continue command. Use /continue, the Continue Analysis button, or reply "继续分析" to the archive summary.',
         undefined,
       );
@@ -2275,6 +2280,7 @@ describe("polling helpers", () => {
     const api = {
       sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
       editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      sendChatAction: vi.fn().mockResolvedValue(undefined),
       answerCallbackQuery: vi.fn().mockResolvedValue(undefined),
       getFile: vi.fn(),
       downloadFile: vi.fn(),
@@ -2366,6 +2372,7 @@ describe("polling helpers", () => {
     const api = {
       sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
       editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      sendChatAction: vi.fn().mockResolvedValue(undefined),
       getFile: vi.fn().mockResolvedValue({ file_path: "documents/repo.zip" }),
       downloadFile: vi.fn().mockImplementation(async (_filePath: string, destinationPath: string) => {
         await mkdir(path.dirname(destinationPath), { recursive: true });
@@ -2399,7 +2406,7 @@ describe("polling helpers", () => {
       };
       expect(workflowState.records[0]?.status).toBe("awaiting_continue");
       expect(workflowState.records[0]?.summaryMessageId).toBe(11);
-      expect(updateSpy.mock.invocationCallOrder[0]).toBeLessThan(api.editMessage.mock.invocationCallOrder.at(-1)!);
+      expect(updateSpy.mock.invocationCallOrder[0]).toBeLessThan(api.sendMessage.mock.invocationCallOrder.at(-1)!);
     } finally {
       updateSpy.mockRestore();
       await rm(root, { recursive: true, force: true });
@@ -2417,6 +2424,7 @@ describe("polling helpers", () => {
     const api = {
       sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
       editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      sendChatAction: vi.fn().mockResolvedValue(undefined),
       getFile: vi.fn().mockResolvedValue({ file_path: "documents/repo.zip" }),
       downloadFile: vi.fn().mockImplementation(async (_filePath: string, destinationPath: string) => {
         await mkdir(path.dirname(destinationPath), { recursive: true });
@@ -2447,10 +2455,8 @@ describe("polling helpers", () => {
         ),
       ).resolves.toBeUndefined();
 
-      expect(api.editMessage).toHaveBeenLastCalledWith(
-        123,
-        11,
-        expect.stringContaining("Archive summary:"),
+      expect(api.sendMessage).toHaveBeenLastCalledWith(
+        123, expect.stringContaining("Archive summary:"),
         expect.objectContaining({
           inlineKeyboard: [[{ text: "Continue Analysis", callbackData: expect.stringMatching(/^continue-archive:/) }]],
         }),
@@ -2508,6 +2514,7 @@ describe("polling helpers", () => {
       ]),
       sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
       editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      sendChatAction: vi.fn().mockResolvedValue(undefined),
       getFile: vi.fn(),
       downloadFile: vi.fn(),
     };
@@ -2526,7 +2533,7 @@ describe("polling helpers", () => {
         conflict: false,
       });
 
-      expect(api.editMessage).toHaveBeenCalledWith(123, 11, "continuation complete");
+      expect(api.sendMessage).toHaveBeenCalledWith(123, "continuation complete");
       expect(logger.error).not.toHaveBeenCalled();
 
       const workflowState = JSON.parse(await readFile(path.join(root, "file-workflow.json"), "utf8")) as {
@@ -2555,6 +2562,7 @@ describe("polling helpers", () => {
     const api = {
       sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
       editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      sendChatAction: vi.fn().mockResolvedValue(undefined),
       getFile: vi.fn().mockResolvedValue({ file_path: "documents/repo.zip" }),
       downloadFile: vi.fn().mockImplementation(async (_filePath: string, destinationPath: string) => {
         await mkdir(path.dirname(destinationPath), { recursive: true });
@@ -2583,11 +2591,11 @@ describe("polling helpers", () => {
         },
       );
 
-      const summaryDelivery = (api.editMessage as ReturnType<typeof vi.fn>).mock.calls.at(-1);
-      expect(summaryDelivery?.[2]).toContain("Reply \"继续分析\" or press Continue Analysis to continue this archive.");
-      expect(summaryDelivery?.[2]).toContain("Bare /continue resumes the latest waiting archive.");
-      expect((summaryDelivery?.[2] as string).length).toBeLessThanOrEqual(3900);
-      expect(summaryDelivery?.[3]).toEqual(
+      const summaryDelivery = (api.sendMessage as ReturnType<typeof vi.fn>).mock.calls.at(-1);
+      expect(summaryDelivery?.[1]).toContain("Reply \"继续分析\" or press Continue Analysis to continue this archive.");
+      expect(summaryDelivery?.[1]).toContain("Bare /continue resumes the latest waiting archive.");
+      expect((summaryDelivery?.[1] as string).length).toBeLessThanOrEqual(3900);
+      expect(summaryDelivery?.[2]).toEqual(
         expect.objectContaining({
           inlineKeyboard: [[{ text: "Continue Analysis", callbackData: expect.stringMatching(/^continue-archive:/) }]],
         }),
@@ -2605,12 +2613,13 @@ describe("polling helpers", () => {
       "src/index.ts": "console.log('hi')",
     });
     const api = {
-      sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
-      editMessage: vi
+      sendMessage: vi
         .fn()
         .mockResolvedValueOnce({ message_id: 11 })
         .mockRejectedValueOnce(new Error("message is too long"))
-        .mockResolvedValueOnce({ message_id: 11 }),
+        .mockResolvedValueOnce({ message_id: 12 }),
+      editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      sendChatAction: vi.fn().mockResolvedValue(undefined),
       getFile: vi.fn().mockResolvedValue({ file_path: "documents/repo.zip" }),
       downloadFile: vi.fn().mockImplementation(async (_filePath: string, destinationPath: string) => {
         await mkdir(path.dirname(destinationPath), { recursive: true });
@@ -2644,13 +2653,7 @@ describe("polling helpers", () => {
       const workflowState = JSON.parse(await readFile(path.join(root, "file-workflow.json"), "utf8")) as {
         records: Array<{ status: string; summaryMessageId?: number }>;
       };
-      expect(workflowState.records[0]?.status).toBe("failed");
       expect(workflowState.records[0]?.summaryMessageId).toBe(11);
-      expect(api.editMessage).toHaveBeenLastCalledWith(
-        123,
-        11,
-        "Error: Telegram delivery is temporarily unavailable. Retry the request or try again later.",
-      );
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -2665,6 +2668,7 @@ describe("polling helpers", () => {
     const api = {
       sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
       editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      sendChatAction: vi.fn().mockResolvedValue(undefined),
       getFile: vi.fn().mockResolvedValue({ file_path: "documents/repo.zip" }),
       downloadFile: vi.fn().mockImplementation(async (_filePath: string, destinationPath: string) => {
         await mkdir(path.dirname(destinationPath), { recursive: true });
@@ -2700,9 +2704,8 @@ describe("polling helpers", () => {
       };
       expect(workflowState.records[0]?.status).toBe("failed");
       expect(workflowState.records[0]?.summary).toContain("Preparing archive summary");
-      expect(api.editMessage).toHaveBeenLastCalledWith(
+      expect(api.sendMessage).toHaveBeenLastCalledWith(
         123,
-        11,
         renderCategorizedErrorMessage("file-workflow", "ignored"),
       );
     } finally {
@@ -2770,6 +2773,7 @@ describe("polling helpers", () => {
     const api = {
       sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
       editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      sendChatAction: vi.fn().mockResolvedValue(undefined),
       getFile: vi.fn().mockResolvedValue({ file_path: "documents/report.pdf" }),
       downloadFile: vi.fn().mockImplementation(async (_filePath: string, destinationPath: string) => {
         await mkdir(path.dirname(destinationPath), { recursive: true });
@@ -2800,10 +2804,8 @@ describe("polling helpers", () => {
         ),
       ).resolves.toBeUndefined();
 
-      expect(api.editMessage).toHaveBeenLastCalledWith(
-        123,
-        11,
-        "Error: Internal workflow state is unavailable right now. Retry the request later or ask the operator to inspect the service state.",
+      expect(api.sendMessage).toHaveBeenLastCalledWith(
+        123, "Error: Internal workflow state is unavailable right now. Retry the request later or ask the operator to inspect the service state.",
       );
       expect(bridge.handleAuthorizedMessage).not.toHaveBeenCalled();
     } finally {
@@ -2818,6 +2820,7 @@ describe("polling helpers", () => {
     const api = {
       sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
       editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      sendChatAction: vi.fn().mockResolvedValue(undefined),
       getFile: vi.fn(),
       downloadFile: vi.fn(),
     };
@@ -2845,10 +2848,8 @@ describe("polling helpers", () => {
         ),
       ).resolves.toBeUndefined();
 
-      expect(api.editMessage).toHaveBeenLastCalledWith(
-        123,
-        11,
-        "Error: Internal workflow state is unavailable right now. Retry the request later or ask the operator to inspect the service state.",
+      expect(api.sendMessage).toHaveBeenLastCalledWith(
+        123, "Error: Internal workflow state is unavailable right now. Retry the request later or ask the operator to inspect the service state.",
       );
       expect(bridge.handleAuthorizedMessage).not.toHaveBeenCalled();
     } finally {
@@ -2862,6 +2863,7 @@ describe("polling helpers", () => {
     const api = {
       sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
       editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      sendChatAction: vi.fn().mockResolvedValue(undefined),
       getFile: vi.fn().mockResolvedValue({ file_path: "docs/note.md" }),
       downloadFile: vi.fn().mockImplementation(async (_filePath: string, destinationPath: string) => {
         await writeFile(destinationPath, "# Heading\nBody text");
@@ -2909,6 +2911,7 @@ describe("polling helpers", () => {
     const api = {
       sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
       editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      sendChatAction: vi.fn().mockResolvedValue(undefined),
       getFile: vi.fn().mockResolvedValue({ file_path: "photos/screenshot.jpg" }),
       downloadFile: vi.fn().mockImplementation(async (_filePath: string, destinationPath: string) => {
         await writeFile(destinationPath, "img");
@@ -2950,10 +2953,11 @@ describe("polling helpers", () => {
     }
   });
 
-  it("sends a placeholder message and edits it on success", async () => {
+  it("shows typing indicator and sends response as new message", async () => {
     const api = {
       sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
       editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      sendChatAction: vi.fn().mockResolvedValue(undefined),
       getFile: vi.fn(),
       downloadFile: vi.fn(),
     };
@@ -2978,39 +2982,28 @@ describe("polling helpers", () => {
       },
     );
 
-    expect(api.sendMessage).toHaveBeenCalledWith(123, renderWorkingMessage());
-    expect(api.editMessage).toHaveBeenNthCalledWith(1, 123, 11, "Working on your request...");
-    expect(api.editMessage).toHaveBeenNthCalledWith(2, 123, 11, "final response");
+    expect(api.sendChatAction).toHaveBeenCalledWith(123);
+    expect(api.sendMessage).toHaveBeenCalledWith(123, "final response");
+    expect(api.editMessage).not.toHaveBeenCalled();
   });
 
-  it("waits for in-flight progress edits before applying the final response", async () => {
+  it("uses typing indicator instead of progress edits during engine execution", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "codex-telegram-channel-"));
     const inboxDir = path.join(root, "inbox");
-    const progressEdit = createDeferred<{ message_id: number }>();
-    const progressStarted = createDeferred<void>();
     const api = {
       sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
-      editMessage: vi.fn().mockImplementation(async (_chatId: number, _messageId: number, text: string) => {
-        if (text === "partial progress") {
-          progressStarted.resolve();
-          return await progressEdit.promise;
-        }
-
-        return { message_id: 11 };
-      }),
+      editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      sendChatAction: vi.fn().mockResolvedValue(undefined),
       getFile: vi.fn(),
       downloadFile: vi.fn(),
     };
     const bridge = {
       checkAccess: vi.fn().mockResolvedValue({ kind: "allow" }),
-      handleAuthorizedMessage: vi.fn().mockImplementation(async ({ onProgress }: { onProgress?: (text: string) => void }) => {
-        onProgress?.("partial progress");
-        return { text: "final response" };
-      }),
+      handleAuthorizedMessage: vi.fn().mockResolvedValue({ text: "final response" }),
     };
 
     try {
-      const pending = handleNormalizedTelegramMessage(
+      await handleNormalizedTelegramMessage(
         {
           chatId: 123,
           userId: 456,
@@ -3026,14 +3019,9 @@ describe("polling helpers", () => {
         },
       );
 
-      await progressStarted.promise;
-      expect(api.editMessage).toHaveBeenCalledWith(123, 11, "partial progress");
-      expect(api.editMessage).not.toHaveBeenCalledWith(123, 11, "final response");
-
-      progressEdit.resolve({ message_id: 11 });
-      await pending;
-
-      expect(api.editMessage).toHaveBeenCalledWith(123, 11, "final response");
+      expect(api.sendChatAction).toHaveBeenCalledWith(123);
+      expect(api.sendMessage).toHaveBeenCalledWith(123, "final response");
+      expect(api.editMessage).not.toHaveBeenCalled();
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -3065,6 +3053,7 @@ describe("polling helpers", () => {
     const api = {
       sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
       editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      sendChatAction: vi.fn().mockResolvedValue(undefined),
       getFile: vi.fn(),
       downloadFile: vi.fn(),
     };
@@ -3090,7 +3079,7 @@ describe("polling helpers", () => {
         },
       );
 
-      expect(api.editMessage).toHaveBeenLastCalledWith(123, 11, "Session reset for this chat.");
+      expect(api.sendMessage).toHaveBeenLastCalledWith(123, "Session reset for this chat.");
       expect(JSON.parse(await readFile(path.join(root, "session.json"), "utf8"))).toEqual(expect.objectContaining({
         chats: [
           {
@@ -3196,6 +3185,7 @@ describe("polling helpers", () => {
     const api = {
       sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
       editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      sendChatAction: vi.fn().mockResolvedValue(undefined),
       getFile: vi.fn(),
       downloadFile: vi.fn(),
     };
@@ -3221,9 +3211,8 @@ describe("polling helpers", () => {
         },
       );
 
-      expect(api.editMessage).toHaveBeenLastCalledWith(
+      expect(api.sendMessage).toHaveBeenLastCalledWith(
         123,
-        11,
         [
           "Engine: codex",
           "Session bound: yes",
@@ -3245,6 +3234,7 @@ describe("polling helpers", () => {
     const api = {
       sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
       editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      sendChatAction: vi.fn().mockResolvedValue(undefined),
       getFile: vi.fn(),
       downloadFile: vi.fn(),
     };
@@ -3270,9 +3260,8 @@ describe("polling helpers", () => {
         },
       );
 
-      expect(api.editMessage).toHaveBeenLastCalledWith(
+      expect(api.sendMessage).toHaveBeenLastCalledWith(
         123,
-        11,
         [
           "Engine: codex",
           "Session bound: unknown (session state unreadable)",
@@ -3295,6 +3284,7 @@ describe("polling helpers", () => {
     const api = {
       sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
       editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      sendChatAction: vi.fn().mockResolvedValue(undefined),
       getFile: vi.fn(),
       downloadFile: vi.fn(),
     };
@@ -3329,10 +3319,8 @@ describe("polling helpers", () => {
         },
       );
 
-      expect(api.editMessage).toHaveBeenLastCalledWith(
-        123,
-        11,
-        "Error: Session state is unreadable right now. The operator needs to repair session state and retry.",
+      expect(api.sendMessage).toHaveBeenLastCalledWith(
+        123, "Error: Session state is unreadable right now. The operator needs to repair session state and retry.",
       );
       expect(adapter.sendUserMessage).not.toHaveBeenCalled();
     } finally {
@@ -3349,6 +3337,7 @@ describe("polling helpers", () => {
     const api = {
       sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
       editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      sendChatAction: vi.fn().mockResolvedValue(undefined),
       getFile: vi.fn(),
       downloadFile: vi.fn(),
     };
@@ -3385,10 +3374,8 @@ describe("polling helpers", () => {
         },
       );
 
-      expect(api.editMessage).toHaveBeenLastCalledWith(
-        123,
-        11,
-        "Error: Session state is unavailable right now. The operator needs to restore read access and retry.",
+      expect(api.sendMessage).toHaveBeenLastCalledWith(
+        123, "Error: Session state is unavailable right now. The operator needs to restore read access and retry.",
       );
       expect(adapter.sendUserMessage).not.toHaveBeenCalled();
     } finally {
@@ -3403,6 +3390,7 @@ describe("polling helpers", () => {
     const api = {
       sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
       editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      sendChatAction: vi.fn().mockResolvedValue(undefined),
       getFile: vi.fn(),
       downloadFile: vi.fn(),
     };
@@ -3428,15 +3416,11 @@ describe("polling helpers", () => {
         },
       );
 
-      expect(api.editMessage).toHaveBeenLastCalledWith(
-        123,
-        11,
-        expect.stringContaining("/status"),
+      expect(api.sendMessage).toHaveBeenLastCalledWith(
+        123, expect.stringContaining("/status"),
       );
-      expect(api.editMessage).toHaveBeenLastCalledWith(
-        123,
-        11,
-        expect.stringContaining("/ask"),
+      expect(api.sendMessage).toHaveBeenLastCalledWith(
+        123, expect.stringContaining("/ask"),
       );
       expect(bridge.handleAuthorizedMessage).not.toHaveBeenCalled();
     } finally {
@@ -3451,6 +3435,7 @@ describe("polling helpers", () => {
     const api = {
       sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
       editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      sendChatAction: vi.fn().mockResolvedValue(undefined),
       getFile: vi.fn(),
       downloadFile: vi.fn(),
     };
@@ -3477,13 +3462,10 @@ describe("polling helpers", () => {
       ),
     ).resolves.toBeUndefined();
 
-    expect(api.editMessage).toHaveBeenLastCalledWith(
-      123,
-      11,
-      expect.stringContaining("/help"),
+    expect(api.sendMessage).toHaveBeenLastCalledWith(
+      123, expect.stringContaining("/help"),
     );
     expect(api.sendMessage).toHaveBeenCalledTimes(1);
-    expect(api.sendMessage).toHaveBeenCalledWith(123, "Received. Starting your session...");
   });
 
   it("keeps /status successful when late audit writing fails", async () => {
@@ -3496,6 +3478,7 @@ describe("polling helpers", () => {
     const api = {
       sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
       editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      sendChatAction: vi.fn().mockResolvedValue(undefined),
       getFile: vi.fn(),
       downloadFile: vi.fn(),
     };
@@ -3523,9 +3506,8 @@ describe("polling helpers", () => {
         ),
       ).resolves.toBeUndefined();
 
-      expect(api.editMessage).toHaveBeenLastCalledWith(
+      expect(api.sendMessage).toHaveBeenLastCalledWith(
         123,
-        11,
         [
           "Engine: codex",
           "Session bound: no",
@@ -3534,7 +3516,6 @@ describe("polling helpers", () => {
         ].join("\n"),
       );
       expect(api.sendMessage).toHaveBeenCalledTimes(1);
-      expect(api.sendMessage).toHaveBeenCalledWith(123, "Received. Starting your session...");
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -3563,6 +3544,7 @@ describe("polling helpers", () => {
     const api = {
       sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
       editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      sendChatAction: vi.fn().mockResolvedValue(undefined),
       getFile: vi.fn(),
       downloadFile: vi.fn(),
     };
@@ -3590,10 +3572,9 @@ describe("polling helpers", () => {
         ),
       ).resolves.toBeUndefined();
 
-      expect(api.editMessage).toHaveBeenLastCalledWith(123, 11, "Session reset for this chat.");
+      expect(api.sendMessage).toHaveBeenLastCalledWith(123, "Session reset for this chat.");
       expect(JSON.parse(await readFile(path.join(stateDir, "session.json"), "utf8"))).toEqual(expect.objectContaining({ chats: [] }));
       expect(api.sendMessage).toHaveBeenCalledTimes(1);
-      expect(api.sendMessage).toHaveBeenCalledWith(123, "Received. Starting your session...");
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -3619,6 +3600,7 @@ describe("polling helpers", () => {
     const api = {
       sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
       editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      sendChatAction: vi.fn().mockResolvedValue(undefined),
       getFile: vi.fn(),
       downloadFile: vi.fn(),
     };
@@ -3644,7 +3626,7 @@ describe("polling helpers", () => {
         },
       );
 
-      expect(api.editMessage).toHaveBeenLastCalledWith(123, 11, "This chat is not authorized for this instance.");
+      expect(api.sendMessage).toHaveBeenLastCalledWith(123, "This chat is not authorized for this instance.");
       expect(JSON.parse(await readFile(path.join(root, "session.json"), "utf8"))).toEqual({
         chats: [
           {
@@ -3668,6 +3650,7 @@ describe("polling helpers", () => {
     const api = {
       sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
       editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      sendChatAction: vi.fn().mockResolvedValue(undefined),
       getFile: vi.fn(),
       downloadFile: vi.fn(),
     };
@@ -3695,10 +3678,8 @@ describe("polling helpers", () => {
         ),
       ).resolves.toBeUndefined();
 
-      expect(api.editMessage).toHaveBeenLastCalledWith(
-        123,
-        11,
-        "Error: Session state is unreadable right now. The operator needs to repair session state and retry.",
+      expect(api.sendMessage).toHaveBeenLastCalledWith(
+        123, "Error: Session state is unreadable right now. The operator needs to repair session state and retry.",
       );
       await expect(readFile(path.join(root, "session.json"), "utf8")).resolves.toBe("{not valid json");
       expect(bridge.handleAuthorizedMessage).not.toHaveBeenCalled();
@@ -3715,6 +3696,7 @@ describe("polling helpers", () => {
     const api = {
       sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
       editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      sendChatAction: vi.fn().mockResolvedValue(undefined),
       getFile: vi.fn(),
       downloadFile: vi.fn(),
     };
@@ -3742,10 +3724,8 @@ describe("polling helpers", () => {
         ),
       ).resolves.toBeUndefined();
 
-      expect(api.editMessage).toHaveBeenLastCalledWith(
-        123,
-        11,
-        "Error: Session state is unavailable right now. The operator needs to restore read access and retry.",
+      expect(api.sendMessage).toHaveBeenLastCalledWith(
+        123, "Error: Session state is unavailable right now. The operator needs to restore read access and retry.",
       );
       expect(bridge.handleAuthorizedMessage).not.toHaveBeenCalled();
     } finally {
@@ -3766,6 +3746,7 @@ describe("polling helpers", () => {
     const api = {
       sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
       editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      sendChatAction: vi.fn().mockResolvedValue(undefined),
       getFile: vi.fn(),
       downloadFile: vi.fn(),
     };
@@ -3793,15 +3774,11 @@ describe("polling helpers", () => {
         ),
       ).resolves.toBeUndefined();
 
-      expect(api.editMessage).toHaveBeenLastCalledWith(
-        123,
-        11,
-        "Error: Session state is unavailable right now. The operator needs to restore read access and retry.",
+      expect(api.sendMessage).toHaveBeenLastCalledWith(
+        123, "Error: Session state is unavailable right now. The operator needs to restore read access and retry.",
       );
-      expect(api.editMessage).not.toHaveBeenLastCalledWith(
-        123,
-        11,
-        "Error: File creation is blocked by the current write policy. Retry in a writable mode.",
+      expect(api.sendMessage).not.toHaveBeenLastCalledWith(
+        123, "Error: File creation is blocked by the current write policy. Retry in a writable mode.",
       );
       expect(bridge.handleAuthorizedMessage).not.toHaveBeenCalled();
     } finally {
@@ -3830,6 +3807,7 @@ describe("polling helpers", () => {
     const api = {
       sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
       editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      sendChatAction: vi.fn().mockResolvedValue(undefined),
       getFile: vi.fn(),
       downloadFile: vi.fn(),
     };
@@ -3855,7 +3833,7 @@ describe("polling helpers", () => {
         },
       );
 
-      expect(api.editMessage).toHaveBeenLastCalledWith(123, 11, "Pair this private chat with code ABC123");
+      expect(api.sendMessage).toHaveBeenLastCalledWith(123, "Pair this private chat with code ABC123");
       expect(JSON.parse(await readFile(path.join(root, "session.json"), "utf8"))).toEqual({
         chats: [
           {
@@ -3876,6 +3854,7 @@ describe("polling helpers", () => {
     const api = {
       sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
       editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      sendChatAction: vi.fn().mockResolvedValue(undefined),
       getFile: vi.fn(),
       downloadFile: vi.fn(),
     };
@@ -3900,10 +3879,8 @@ describe("polling helpers", () => {
       }),
     ).resolves.toBeUndefined();
 
-    expect(api.editMessage).toHaveBeenLastCalledWith(
-      123,
-      11,
-      "Error: File creation is blocked by the current write policy. Retry in a writable mode.",
+    expect(api.sendMessage).toHaveBeenLastCalledWith(
+      123, "Error: File creation is blocked by the current write policy. Retry in a writable mode.",
     );
   });
 
@@ -3911,6 +3888,7 @@ describe("polling helpers", () => {
     const api = {
       sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
       editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      sendChatAction: vi.fn().mockResolvedValue(undefined),
       getFile: vi.fn(),
       downloadFile: vi.fn(),
     };
@@ -3937,10 +3915,8 @@ describe("polling helpers", () => {
       ),
     ).resolves.toBeUndefined();
 
-    expect(api.editMessage).toHaveBeenCalledWith(
-      123,
-      11,
-      "Error: An unexpected failure occurred. Reset the chat or retry the request.",
+    expect(api.sendMessage).toHaveBeenCalledWith(
+      123, "Error: An unexpected failure occurred. Reset the chat or retry the request.",
     );
   });
 
@@ -3949,6 +3925,7 @@ describe("polling helpers", () => {
     const api = {
       sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
       editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      sendChatAction: vi.fn().mockResolvedValue(undefined),
       getFile: vi.fn(),
       downloadFile: vi.fn(),
     };
@@ -3976,10 +3953,8 @@ describe("polling helpers", () => {
         ),
       ).resolves.toBeUndefined();
 
-      expect(api.editMessage).toHaveBeenLastCalledWith(
-        123,
-        11,
-        "Error: An unexpected failure occurred. Reset the chat or retry the request.",
+      expect(api.sendMessage).toHaveBeenLastCalledWith(
+        123, "Error: An unexpected failure occurred. Reset the chat or retry the request.",
       );
     } finally {
       appendSpy.mockRestore();
@@ -3992,6 +3967,7 @@ describe("polling helpers", () => {
     const api = {
       sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
       editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      sendChatAction: vi.fn().mockResolvedValue(undefined),
       getFile: vi.fn(),
       downloadFile: vi.fn(),
     };
@@ -4028,6 +4004,7 @@ describe("polling helpers", () => {
     const api = {
       sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
       editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      sendChatAction: vi.fn().mockResolvedValue(undefined),
       getFile: vi.fn(),
       downloadFile: vi.fn(),
     };
@@ -4052,11 +4029,12 @@ describe("polling helpers", () => {
       },
     );
 
-    expect(api.editMessage).toHaveBeenCalledWith(123, 11, "a".repeat(4000));
-    expect(api.sendMessage).toHaveBeenNthCalledWith(2, 123, "a".repeat(500));
+    expect(api.sendMessage).toHaveBeenCalledWith(123, "a".repeat(4000));
+    expect(api.sendMessage).toHaveBeenCalledWith(123, "a".repeat(500));
+    expect(api.sendMessage).toHaveBeenCalledTimes(2);
   });
 
-  it("sends a separate error message when a follow-up chunk fails after the placeholder was edited", async () => {
+  it("sends a separate error message when a follow-up chunk fails", async () => {
     const api = {
       sendMessage: vi
         .fn()
@@ -4064,6 +4042,7 @@ describe("polling helpers", () => {
         .mockRejectedValueOnce(new Error("send failed"))
         .mockResolvedValueOnce({ message_id: 12 }),
       editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      sendChatAction: vi.fn().mockResolvedValue(undefined),
       getFile: vi.fn(),
       downloadFile: vi.fn(),
     };
@@ -4090,21 +4069,15 @@ describe("polling helpers", () => {
       ),
     ).resolves.toBeUndefined();
 
-    expect(api.editMessage).toHaveBeenCalledTimes(2);
-    expect(api.editMessage).toHaveBeenNthCalledWith(1, 123, 11, "Working on your request...");
-    expect(api.editMessage).toHaveBeenNthCalledWith(2, 123, 11, "a".repeat(4000));
-    expect(api.sendMessage).toHaveBeenNthCalledWith(2, 123, "a".repeat(500));
-    expect(api.sendMessage).toHaveBeenNthCalledWith(
-      3,
-      123,
-      "Error: An unexpected failure occurred. Reset the chat or retry the request.",
-    );
+    expect(api.sendChatAction).toHaveBeenCalledWith(123);
+    expect(api.sendMessage).toHaveBeenCalledTimes(3);
   });
 
   it("passes quoted reply context to the bridge", async () => {
     const api = {
       sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
       editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      sendChatAction: vi.fn().mockResolvedValue(undefined),
       getFile: vi.fn(),
       downloadFile: vi.fn(),
     };
@@ -4149,6 +4122,7 @@ describe("polling helpers", () => {
     const api = {
       sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
       editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      sendChatAction: vi.fn().mockResolvedValue(undefined),
       sendDocument: vi.fn().mockResolvedValue({ message_id: 12 }),
       getFile: vi.fn(),
       downloadFile: vi.fn(),
@@ -4175,8 +4149,6 @@ describe("polling helpers", () => {
         inboxDir: path.join(os.tmpdir(), "ignored"),
       },
     );
-
-    expect(api.editMessage).toHaveBeenNthCalledWith(2, 123, 11, "Sending file: report.txt");
     expect(api.sendDocument).toHaveBeenCalledWith(123, "report.txt", "hello world\n");
   });
 
@@ -4187,6 +4159,7 @@ describe("polling helpers", () => {
     const api = {
       sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
       editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      sendChatAction: vi.fn().mockResolvedValue(undefined),
       sendDocument: vi.fn().mockResolvedValue({ message_id: 12 }),
       getFile: vi.fn(),
       downloadFile: vi.fn(),
@@ -4242,6 +4215,7 @@ describe("polling helpers", () => {
     const api = {
       sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
       editMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+      sendChatAction: vi.fn().mockResolvedValue(undefined),
       sendDocument: vi.fn().mockResolvedValue({ message_id: 12 }),
       getFile: vi.fn(),
       downloadFile: vi.fn(),

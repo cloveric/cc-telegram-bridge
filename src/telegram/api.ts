@@ -299,6 +299,10 @@ export class TelegramApi {
     return this.postJson("getMe", {}, isTelegramBotIdentity);
   }
 
+  async sendChatAction(chatId: number, action: "typing" = "typing"): Promise<void> {
+    await this.postJson("sendChatAction", { chat_id: chatId, action }, (v): v is true => v === true);
+  }
+
   async setMyCommands(commands: Array<{ command: string; description: string }>): Promise<void> {
     await this.postJson("setMyCommands", { commands }, (v): v is true => v === true);
   }

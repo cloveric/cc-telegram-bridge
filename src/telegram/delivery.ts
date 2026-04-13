@@ -322,26 +322,17 @@ async function downloadAttachments(
 async function deliverTelegramResponse(
   api: TelegramApi,
   chatId: number,
-  placeholderMessageId: number,
   text: string,
-  onPlaceholderDelivered: () => void,
 ): Promise<void> {
   const fileMatch = text.match(/```file:([^\n]+)\n([\s\S]*?)```/);
   if (fileMatch) {
     const [, fileName, fileBody] = fileMatch;
-    await api.editMessage(chatId, placeholderMessageId, `Sending file: ${fileName.trim()}`);
-    onPlaceholderDelivered();
     await api.sendDocument(chatId, fileName.trim(), fileBody);
     return;
   }
 
   const chunks = chunkTelegramMessage(text);
-  const [firstChunk = ""] = chunks;
-
-  await api.editMessage(chatId, placeholderMessageId, firstChunk);
-  onPlaceholderDelivered();
-
-  for (const chunk of chunks.slice(1)) {
+  for (const chunk of chunks) {
     await api.sendMessage(chatId, chunk);
   }
 }
@@ -351,12 +342,8 @@ export async function handleNormalizedTelegramMessage(
   context: TelegramDeliveryContext,
 ): Promise<void> {
   const startedAt = Date.now();
-  let placeholderMessageId: number | undefined;
-  let placeholderShowsResponse = false;
-  let progressEditsClosed = false;
-  let progressEditChain = Promise.resolve();
-  let progressEditCounter = 0;
-  let lastAllowedProgressEditCounter = Number.POSITIVE_INFINITY;
+  let responded = false;
+  let typingInterval: ReturnType<typeof setInterval> | undefined;
   let workflowRecordId: string | undefined;
   let archiveSummaryDelivered = false;
   let telegramOutDirPath: string | undefined;
@@ -367,6 +354,19 @@ export async function handleNormalizedTelegramMessage(
   const cfg = await loadInstanceConfig(stateDir);
   const locale = cfg.locale;
 
+  const startTyping = () => {
+    context.api.sendChatAction(normalized.chatId).catch(() => {});
+    typingInterval = setInterval(() => {
+      context.api.sendChatAction(normalized.chatId).catch(() => {});
+    }, 4000);
+  };
+  const stopTyping = () => {
+    if (typingInterval) {
+      clearInterval(typingInterval);
+      typingInterval = undefined;
+    }
+  };
+
   try {
     if (normalized.callbackQueryId) {
       try {
@@ -375,8 +375,7 @@ export async function handleNormalizedTelegramMessage(
         // Callback acks are advisory; continuation should still proceed.
       }
     }
-    const placeholder = await context.api.sendMessage(normalized.chatId, renderWorkingMessage(locale));
-    placeholderMessageId = placeholder.message_id;
+    startTyping();
 
     const accessDecision = await context.bridge.checkAccess({
       chatId: normalized.chatId,
@@ -386,9 +385,9 @@ export async function handleNormalizedTelegramMessage(
     });
 
     if (accessDecision.kind === "reply" || accessDecision.kind === "deny") {
-      await context.api.editMessage(
+      stopTyping();
+      await context.api.sendMessage(
         normalized.chatId,
-        placeholderMessageId,
         accessDecision.text ?? renderErrorMessage(renderUnauthorizedMessage(locale), locale),
       );
       await appendAuditEvent(path.dirname(context.inboxDir), {
@@ -408,6 +407,7 @@ export async function handleNormalizedTelegramMessage(
     }
 
     if (isResetCommand(normalized.text)) {
+      stopTyping();
       const inspectedState = await sessionStore.inspect();
       if (inspectedState.warning) {
         throw new SessionStateError(
@@ -420,8 +420,8 @@ export async function handleNormalizedTelegramMessage(
 
       await sessionStore.removeByChatId(normalized.chatId);
       const resetMessage = renderSessionResetMessage(false, locale);
-      await context.api.editMessage(normalized.chatId, placeholderMessageId, resetMessage);
-      placeholderShowsResponse = true;
+      await context.api.sendMessage(normalized.chatId, resetMessage);
+      responded = true;
       await appendAuditEventBestEffort(path.dirname(context.inboxDir), {
         type: "update.handle",
         instanceName: context.instanceName,
@@ -440,7 +440,8 @@ export async function handleNormalizedTelegramMessage(
     }
 
     if (isCompactCommand(normalized.text)) {
-      await context.api.editMessage(normalized.chatId, placeholderMessageId,
+      stopTyping();
+      await context.api.sendMessage(normalized.chatId,
         locale === "zh" ? "正在压缩会话上下文..." : "Compacting session context...");
 
       try {
@@ -457,8 +458,8 @@ export async function handleNormalizedTelegramMessage(
           ? `上下文已压缩。\n\n${result.text}`
           : `Context compacted.\n\n${result.text}`;
         const chunks = chunkTelegramMessage(compactMsg);
-        await context.api.editMessage(normalized.chatId, placeholderMessageId, chunks[0]!);
-        placeholderShowsResponse = true;
+        await context.api.sendMessage(normalized.chatId, chunks[0]!);
+        responded = true;
         for (const chunk of chunks.slice(1)) {
           await context.api.sendMessage(normalized.chatId, chunk);
         }
@@ -467,8 +468,8 @@ export async function handleNormalizedTelegramMessage(
         const fallbackMsg = locale === "zh"
           ? "引擎不支持 compact，已重置会话（效果相同）。"
           : "Engine does not support compact. Session reset instead (same effect).";
-        await context.api.editMessage(normalized.chatId, placeholderMessageId, fallbackMsg);
-        placeholderShowsResponse = true;
+        await context.api.sendMessage(normalized.chatId, fallbackMsg);
+        responded = true;
       }
 
       await appendAuditEventBestEffort(path.dirname(context.inboxDir), {
@@ -484,9 +485,10 @@ export async function handleNormalizedTelegramMessage(
     }
 
     if (isHelpCommand(normalized.text)) {
+      stopTyping();
       const helpMessage = renderTelegramHelpMessage(locale);
-      await context.api.editMessage(normalized.chatId, placeholderMessageId, helpMessage);
-      placeholderShowsResponse = true;
+      await context.api.sendMessage(normalized.chatId, helpMessage);
+      responded = true;
       await appendAuditEventBestEffort(path.dirname(context.inboxDir), {
         type: "update.handle",
         instanceName: context.instanceName,
@@ -505,6 +507,7 @@ export async function handleNormalizedTelegramMessage(
     }
 
     if (isStatusCommand(normalized.text)) {
+      stopTyping();
       const sessionResult = await sessionStore.findByChatIdSafe(normalized.chatId);
       const workflowResult = await workflowStore.inspect();
       const chatRecords = workflowResult.warning
@@ -524,8 +527,8 @@ export async function handleNormalizedTelegramMessage(
         sessionWarning: sessionResult.warning,
         taskStateWarning: workflowResult.warning,
       }, locale);
-      await context.api.editMessage(normalized.chatId, placeholderMessageId, statusMessage);
-      placeholderShowsResponse = true;
+      await context.api.sendMessage(normalized.chatId, statusMessage);
+      responded = true;
       await appendAuditEventBestEffort(path.dirname(context.inboxDir), {
         type: "update.handle",
         instanceName: context.instanceName,
@@ -545,25 +548,26 @@ export async function handleNormalizedTelegramMessage(
 
     const effortCmd = parseEffortCommand(normalized.text);
     if (effortCmd) {
+      stopTyping();
       if (!effortCmd.level) {
         const current = cfg.effort ?? "default";
         const msg = locale === "zh" ? `当前 effort: ${current}` : `Current effort: ${current}`;
-        await context.api.editMessage(normalized.chatId, placeholderMessageId, msg);
+        await context.api.sendMessage(normalized.chatId, msg);
       } else if (VALID_EFFORT_LEVELS.includes(effortCmd.level as EffortLevel)) {
         await updateInstanceConfig(stateDir, (c) => { c.effort = effortCmd.level; });
         const msg = locale === "zh" ? `Effort 已设为 ${effortCmd.level}。` : `Effort set to ${effortCmd.level}.`;
-        await context.api.editMessage(normalized.chatId, placeholderMessageId, msg);
+        await context.api.sendMessage(normalized.chatId, msg);
       } else if (effortCmd.level === "off" || effortCmd.level === "default") {
         await updateInstanceConfig(stateDir, (c) => { delete c.effort; });
         const msg = locale === "zh" ? "Effort 已恢复默认。" : "Effort reset to default.";
-        await context.api.editMessage(normalized.chatId, placeholderMessageId, msg);
+        await context.api.sendMessage(normalized.chatId, msg);
       } else {
         const msg = locale === "zh"
           ? "用法: /effort [low|medium|high|max|off]"
           : "Usage: /effort [low|medium|high|max|off]";
-        await context.api.editMessage(normalized.chatId, placeholderMessageId, msg);
+        await context.api.sendMessage(normalized.chatId, msg);
       }
-      placeholderShowsResponse = true;
+      responded = true;
       await appendAuditEventBestEffort(stateDir, {
         type: "update.handle",
         instanceName: context.instanceName,
@@ -578,20 +582,21 @@ export async function handleNormalizedTelegramMessage(
 
     const modelCmd = parseModelCommand(normalized.text);
     if (modelCmd) {
+      stopTyping();
       if (!modelCmd.model) {
         const current = cfg.model ?? "default";
         const msg = locale === "zh" ? `当前模型: ${current}` : `Current model: ${current}`;
-        await context.api.editMessage(normalized.chatId, placeholderMessageId, msg);
+        await context.api.sendMessage(normalized.chatId, msg);
       } else if (modelCmd.model === "off" || modelCmd.model === "default") {
         await updateInstanceConfig(stateDir, (c) => { delete c.model; });
         const msg = locale === "zh" ? "模型已恢复默认。" : "Model reset to default.";
-        await context.api.editMessage(normalized.chatId, placeholderMessageId, msg);
+        await context.api.sendMessage(normalized.chatId, msg);
       } else {
         await updateInstanceConfig(stateDir, (c) => { c.model = modelCmd.model; });
         const msg = locale === "zh" ? `模型已设为 ${modelCmd.model}。` : `Model set to ${modelCmd.model}.`;
-        await context.api.editMessage(normalized.chatId, placeholderMessageId, msg);
+        await context.api.sendMessage(normalized.chatId, msg);
       }
-      placeholderShowsResponse = true;
+      responded = true;
       await appendAuditEventBestEffort(stateDir, {
         type: "update.handle",
         instanceName: context.instanceName,
@@ -606,7 +611,8 @@ export async function handleNormalizedTelegramMessage(
 
     const btwCmd = parseBtwCommand(normalized.text);
     if (btwCmd) {
-      await context.api.editMessage(normalized.chatId, placeholderMessageId, renderExecutionMessage(locale));
+      // Keep typing running — engine execution follows
+      await context.api.sendMessage(normalized.chatId, renderExecutionMessage(locale));
       try {
         const btwChatId = -(2_000_000_000 + Math.floor(Math.random() * 1_000_000_000));
         const result = await context.bridge.handleAuthorizedMessage({
@@ -618,16 +624,16 @@ export async function handleNormalizedTelegramMessage(
           files: [],
         });
         const chunks = chunkTelegramMessage(result.text);
-        await context.api.editMessage(normalized.chatId, placeholderMessageId, chunks[0]!);
-        placeholderShowsResponse = true;
+        await context.api.sendMessage(normalized.chatId, chunks[0]!);
+        responded = true;
         for (const chunk of chunks.slice(1)) {
           await context.api.sendMessage(normalized.chatId, chunk);
         }
       } catch (error) {
         const detail = error instanceof Error ? error.message : String(error);
         const msg = locale === "zh" ? `旁问失败：${detail}` : `Side question failed: ${detail}`;
-        await context.api.editMessage(normalized.chatId, placeholderMessageId, msg);
-        placeholderShowsResponse = true;
+        await context.api.sendMessage(normalized.chatId, msg);
+        responded = true;
       }
       await appendAuditEventBestEffort(path.dirname(context.inboxDir), {
         type: "update.handle",
@@ -645,16 +651,16 @@ export async function handleNormalizedTelegramMessage(
     if (askCommand) {
       const currentInstance = context.instanceName ?? "default";
       if (askCommand.targetInstance === currentInstance) {
-        await context.api.editMessage(normalized.chatId, placeholderMessageId,
+        await context.api.sendMessage(normalized.chatId,
           locale === "zh" ? "不能委托给自己。" : "Cannot delegate to yourself.");
-        placeholderShowsResponse = true;
+        responded = true;
         return;
       }
 
       const askLabel = locale === "zh"
         ? `正在转发给 ${askCommand.targetInstance}...`
         : `Delegating to ${askCommand.targetInstance}...`;
-      await context.api.editMessage(normalized.chatId, placeholderMessageId, askLabel);
+      await context.api.sendMessage(normalized.chatId, askLabel);
 
       try {
         const result = await delegateToInstance({
@@ -669,8 +675,8 @@ export async function handleNormalizedTelegramMessage(
           ? `[来自 ${askCommand.targetInstance}]\n\n${result.text}`
           : `[From ${askCommand.targetInstance}]\n\n${result.text}`;
         const chunks = chunkTelegramMessage(askResponse);
-        await context.api.editMessage(normalized.chatId, placeholderMessageId, chunks[0]!);
-        placeholderShowsResponse = true;
+        await context.api.sendMessage(normalized.chatId, chunks[0]!);
+        responded = true;
         for (const chunk of chunks.slice(1)) {
           await context.api.sendMessage(normalized.chatId, chunk);
         }
@@ -693,8 +699,8 @@ export async function handleNormalizedTelegramMessage(
         const errorMsg = locale === "zh"
           ? `委托给 ${askCommand.targetInstance} 失败：${detail}`
           : `Delegation to ${askCommand.targetInstance} failed: ${detail}`;
-        await context.api.editMessage(normalized.chatId, placeholderMessageId, errorMsg);
-        placeholderShowsResponse = true;
+        await context.api.sendMessage(normalized.chatId, errorMsg);
+        responded = true;
         await appendAuditEventBestEffort(stateDir, {
           type: "update.handle",
           instanceName: context.instanceName,
@@ -714,14 +720,14 @@ export async function handleNormalizedTelegramMessage(
       const busConfig = await loadBusConfig(stateDir);
       const targets = busConfig?.parallel ?? [];
       if (targets.length === 0) {
-        await context.api.editMessage(normalized.chatId, placeholderMessageId,
+        await context.api.sendMessage(normalized.chatId,
           locale === "zh" ? "未配置 parallel bot。在 config.json 的 bus.parallel 中添加实例名。" : "No parallel bots configured. Add instance names to bus.parallel in config.json.");
-        placeholderShowsResponse = true;
+        responded = true;
         return;
       }
 
       const currentInstance = context.instanceName ?? "default";
-      await context.api.editMessage(normalized.chatId, placeholderMessageId,
+      await context.api.sendMessage(normalized.chatId,
         locale === "zh" ? `正在并行查询 ${targets.length + 1} 个 bot...` : `Querying ${targets.length + 1} bots in parallel...`);
 
       let fanOutcome: "success" | "error" = "success";
@@ -753,17 +759,17 @@ export async function handleNormalizedTelegramMessage(
 
         const fanResponse = sections.join("\n\n---\n\n");
         const chunks = chunkTelegramMessage(fanResponse);
-        await context.api.editMessage(normalized.chatId, placeholderMessageId, chunks[0]!);
-        placeholderShowsResponse = true;
+        await context.api.sendMessage(normalized.chatId, chunks[0]!);
+        responded = true;
         for (const chunk of chunks.slice(1)) {
           await context.api.sendMessage(normalized.chatId, chunk);
         }
       } catch (error) {
         fanOutcome = "error";
         const detail = error instanceof Error ? error.message : String(error);
-        await context.api.editMessage(normalized.chatId, placeholderMessageId,
+        await context.api.sendMessage(normalized.chatId,
           locale === "zh" ? `并行执行失败：${detail}` : `Parallel execution failed: ${detail}`);
-        placeholderShowsResponse = true;
+        responded = true;
       }
 
       await appendAuditEventBestEffort(stateDir, {
@@ -783,21 +789,21 @@ export async function handleNormalizedTelegramMessage(
       const busConfig = await loadBusConfig(stateDir);
       const verifier = busConfig?.verifier;
       if (!verifier) {
-        await context.api.editMessage(normalized.chatId, placeholderMessageId,
+        await context.api.sendMessage(normalized.chatId,
           locale === "zh" ? "未配置验证 bot。在 config.json 的 bus.verifier 中设置实例名。" : "No verifier configured. Set bus.verifier in config.json.");
-        placeholderShowsResponse = true;
+        responded = true;
         return;
       }
 
       const currentInstance = context.instanceName ?? "default";
       if (verifier === currentInstance) {
-        await context.api.editMessage(normalized.chatId, placeholderMessageId,
+        await context.api.sendMessage(normalized.chatId,
           locale === "zh" ? "验证 bot 不能是自己。" : "Verifier cannot be the same instance.");
-        placeholderShowsResponse = true;
+        responded = true;
         return;
       }
 
-      await context.api.editMessage(normalized.chatId, placeholderMessageId,
+      await context.api.sendMessage(normalized.chatId,
         locale === "zh" ? "正在执行..." : "Executing...");
 
       let verifyOutcome: "success" | "error" = "success";
@@ -811,7 +817,7 @@ export async function handleNormalizedTelegramMessage(
           files: [],
         });
 
-        await context.api.editMessage(normalized.chatId, placeholderMessageId,
+        await context.api.sendMessage(normalized.chatId,
           locale === "zh" ? `正在让 ${verifier} 验证...` : `Sending to ${verifier} for verification...`);
 
         const verifyResult = await delegateToInstance({
@@ -835,17 +841,17 @@ export async function handleNormalizedTelegramMessage(
         ].join("\n");
 
         const chunks = chunkTelegramMessage(verifyResponse);
-        await context.api.editMessage(normalized.chatId, placeholderMessageId, chunks[0]!);
-        placeholderShowsResponse = true;
+        await context.api.sendMessage(normalized.chatId, chunks[0]!);
+        responded = true;
         for (const chunk of chunks.slice(1)) {
           await context.api.sendMessage(normalized.chatId, chunk);
         }
       } catch (error) {
         verifyOutcome = "error";
         const detail = error instanceof Error ? error.message : String(error);
-        await context.api.editMessage(normalized.chatId, placeholderMessageId,
+        await context.api.sendMessage(normalized.chatId,
           locale === "zh" ? `验证流程失败：${detail}` : `Verification failed: ${detail}`);
-        placeholderShowsResponse = true;
+        responded = true;
       }
 
       await appendAuditEventBestEffort(stateDir, {
@@ -860,25 +866,12 @@ export async function handleNormalizedTelegramMessage(
       return;
     }
 
-    if (normalized.attachments.length > 0) {
-      await context.api.editMessage(
-        normalized.chatId,
-        placeholderMessageId,
-        renderAttachmentDownloadMessage(normalized.attachments.length, locale),
-      );
-    }
-
     const allDownloaded = await downloadAttachments(context.api, context.inboxDir, normalized.attachments);
 
     const voiceDownloads = allDownloaded.filter((d) => d.attachment.kind === "voice");
     const downloadedAttachments = allDownloaded.filter((d) => d.attachment.kind !== "voice");
 
     if (voiceDownloads.length > 0) {
-      await context.api.editMessage(
-        normalized.chatId,
-        placeholderMessageId,
-        locale === "zh" ? "正在转写语音…" : "Transcribing voice…",
-      );
       for (const voice of voiceDownloads) {
         try {
           const transcript = await transcribeVoice(voice.localPath);
@@ -887,8 +880,8 @@ export async function handleNormalizedTelegramMessage(
           }
         } catch {
           const fallbackMsg = locale === "zh" ? "语音转写失败，请发送文字消息。" : "Voice transcription failed. Please send a text message.";
-          await context.api.editMessage(normalized.chatId, placeholderMessageId, fallbackMsg);
-          placeholderShowsResponse = true;
+          await context.api.sendMessage(normalized.chatId, fallbackMsg);
+          responded = true;
           return;
         }
       }
@@ -917,24 +910,24 @@ export async function handleNormalizedTelegramMessage(
     }
 
     if (workflowResult?.kind === "reply") {
+      stopTyping();
       workflowRecordId = workflowResult.workflowRecordId;
       const deliveryText = workflowRecordId ? boundArchiveSummaryForTelegram(workflowResult.text) : workflowResult.text;
-      if (downloadedAttachments.length > 0 && workflowResult.workflowRecordId) {
-        await workflowStore.update(workflowResult.workflowRecordId, (record) => {
-          record.summaryMessageId = placeholderMessageId;
-        });
-      }
-      await context.api.editMessage(
+      const summaryMsg = await context.api.sendMessage(
         normalized.chatId,
-        placeholderMessageId,
         deliveryText,
         downloadedAttachments.length > 0 && workflowResult.workflowRecordId
           ? buildContinueAnalysisKeyboard(workflowResult.workflowRecordId)
           : undefined,
       );
+      if (downloadedAttachments.length > 0 && workflowResult.workflowRecordId) {
+        await workflowStore.update(workflowResult.workflowRecordId, (record) => {
+          record.summaryMessageId = summaryMsg.message_id;
+        });
+      }
       if (workflowRecordId) {
         archiveSummaryDelivered = true;
-        placeholderShowsResponse = true;
+        responded = true;
       }
       await appendAuditEventBestEffort(stateDir, {
         type: "update.handle",
@@ -959,32 +952,7 @@ export async function handleNormalizedTelegramMessage(
       ? workflowResult.files
       : downloadedAttachments.map((attachment) => attachment.localPath);
 
-    await context.api.editMessage(normalized.chatId, placeholderMessageId, renderExecutionMessage(locale));
-
-    const verbosity = cfg.verbosity;
-    let lastProgressEdit = 0;
-    const PROGRESS_THROTTLE_MS = verbosity === 2 ? 1000 : 2000;
-    const progressMessageId = placeholderMessageId;
-    const onProgress = (partialText: string) => {
-      if (verbosity === 0) return;
-      if (progressMessageId === undefined) return;
-      const now = Date.now();
-      if (now - lastProgressEdit < PROGRESS_THROTTLE_MS) return;
-      if (!partialText || partialText.length < 5) return;
-      lastProgressEdit = now;
-      const preview = partialText.length > 4000 ? `${partialText.slice(-4000)}\n\n...` : partialText;
-      const progressId = ++progressEditCounter;
-      progressEditChain = progressEditChain
-        .catch(() => {})
-        .then(async () => {
-          if (progressId > lastAllowedProgressEditCounter) {
-            return;
-          }
-
-          await context.api.editMessage(normalized.chatId, progressMessageId, preview);
-        })
-        .catch(() => {});
-    };
+    // Typing indicator is already running from startTyping()
 
     if (cfg.budgetUsd !== undefined) {
       const usageStore = new UsageStore(stateDir);
@@ -993,12 +961,9 @@ export async function handleNormalizedTelegramMessage(
         const budgetMsg = locale === "zh"
           ? `预算已用尽：$${usage.totalCostUsd.toFixed(4)} / $${cfg.budgetUsd.toFixed(2)}。使用 \`telegram budget set <usd>\` 提高预算或 \`telegram budget clear\` 清除。`
           : `Budget exhausted: $${usage.totalCostUsd.toFixed(4)} used of $${cfg.budgetUsd.toFixed(2)}. Raise the budget with \`telegram budget set <usd>\` or clear it with \`telegram budget clear\`.`;
-        await context.api.editMessage(
-          normalized.chatId,
-          placeholderMessageId,
-          budgetMsg,
-        );
-        placeholderShowsResponse = true;
+        stopTyping();
+        await context.api.sendMessage(normalized.chatId, budgetMsg);
+        responded = true;
         await appendAuditEventBestEffort(stateDir, {
           type: "update.reply",
           instanceName: context.instanceName,
@@ -1044,13 +1009,10 @@ export async function handleNormalizedTelegramMessage(
       text: requestText,
       replyContext,
       files: requestFiles,
-      onProgress,
       requestOutputDir: telegramOutDirPath,
     });
 
-    progressEditsClosed = true;
-    lastAllowedProgressEditCounter = progressEditCounter;
-    await progressEditChain;
+    stopTyping();
 
     if (result.usage) {
       const usageStore = new UsageStore(stateDir);
@@ -1077,9 +1039,8 @@ export async function handleNormalizedTelegramMessage(
       }
     }
 
-    await deliverTelegramResponse(context.api, normalized.chatId, placeholderMessageId, result.text, () => {
-      placeholderShowsResponse = true;
-    });
+    await deliverTelegramResponse(context.api, normalized.chatId, result.text);
+    responded = true;
 
     if (telegramOutDirPath) {
       const describedFiles = await describeTelegramOutFiles(telegramOutDirPath);
@@ -1131,9 +1092,7 @@ export async function handleNormalizedTelegramMessage(
       ? `${renderCategorizedErrorMessage(failureCategory, message, locale)}\n${failureHint}`
       : renderCategorizedErrorMessage(failureCategory, message, locale);
     let workflowCleanupError: unknown;
-    progressEditsClosed = true;
-    lastAllowedProgressEditCounter = progressEditCounter;
-    await progressEditChain;
+    stopTyping();
 
     if (workflowRecordId) {
       try {
@@ -1153,22 +1112,8 @@ export async function handleNormalizedTelegramMessage(
       }
     }
 
-    if (placeholderShowsResponse && !archiveSummaryDelivered) {
-      await context.api.sendMessage(
-        normalized.chatId,
-        errorMessage,
-      );
-    } else if (!archiveSummaryDelivered && placeholderMessageId !== undefined) {
-      await context.api.editMessage(
-        normalized.chatId,
-        placeholderMessageId,
-        errorMessage,
-      );
-    } else if (!archiveSummaryDelivered) {
-      await context.api.sendMessage(
-        normalized.chatId,
-        errorMessage,
-      );
+    if (!archiveSummaryDelivered) {
+      await context.api.sendMessage(normalized.chatId, errorMessage);
     }
 
     await appendAuditEventBestEffort(path.dirname(context.inboxDir), {
