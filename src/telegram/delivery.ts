@@ -316,6 +316,25 @@ async function downloadAttachments(
   return downloadedFiles;
 }
 
+const IMAGE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"]);
+
+function isImageFile(filename: string): boolean {
+  return IMAGE_EXTENSIONS.has(path.extname(filename).toLowerCase());
+}
+
+async function sendFileOrPhoto(api: TelegramApi, chatId: number, filename: string, contents: Uint8Array | string): Promise<void> {
+  if (isImageFile(filename)) {
+    const payload = typeof contents === "string" ? new TextEncoder().encode(contents) : contents;
+    try {
+      await api.sendPhoto(chatId, filename, payload);
+      return;
+    } catch {
+      // Fall back to sendDocument if sendPhoto fails (e.g. image too large)
+    }
+  }
+  await api.sendDocument(chatId, filename, contents);
+}
+
 async function deliverTelegramResponse(
   api: TelegramApi,
   chatId: number,
@@ -324,7 +343,7 @@ async function deliverTelegramResponse(
   const fileMatch = text.match(/```file:([^\n]+)\n([\s\S]*?)```/);
   if (fileMatch) {
     const [, fileName, fileBody] = fileMatch;
-    await api.sendDocument(chatId, fileName.trim(), fileBody);
+    await sendFileOrPhoto(api, chatId, fileName.trim(), fileBody);
     return;
   }
 
@@ -1052,7 +1071,7 @@ export async function handleNormalizedTelegramMessage(
 
       for (const file of limitedFiles.accepted) {
         const contents = await readFile(file.path);
-        await context.api.sendDocument(normalized.chatId, file.name, contents);
+        await sendFileOrPhoto(context.api, normalized.chatId, file.name, contents);
       }
     }
 

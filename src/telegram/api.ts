@@ -235,6 +235,53 @@ export class TelegramApi {
     return json.result;
   }
 
+  async sendPhoto(chatId: number, filename: string, contents: Uint8Array, caption?: string): Promise<TelegramMessage> {
+    const boundary = `----cc-telegram-bridge-${Math.random().toString(16).slice(2)}`;
+    let head =
+      `--${boundary}\r\n` +
+      `Content-Disposition: form-data; name="chat_id"\r\n\r\n${chatId}\r\n` +
+      `--${boundary}\r\n` +
+      `Content-Disposition: form-data; name="photo"; filename="${filename}"\r\n` +
+      `Content-Type: application/octet-stream\r\n\r\n`;
+    if (caption) {
+      head =
+        `--${boundary}\r\n` +
+        `Content-Disposition: form-data; name="chat_id"\r\n\r\n${chatId}\r\n` +
+        `--${boundary}\r\n` +
+        `Content-Disposition: form-data; name="caption"\r\n\r\n${caption}\r\n` +
+        `--${boundary}\r\n` +
+        `Content-Disposition: form-data; name="photo"; filename="${filename}"\r\n` +
+        `Content-Type: application/octet-stream\r\n\r\n`;
+    }
+    const tail = `\r\n--${boundary}--\r\n`;
+    const body = new Uint8Array(
+      Buffer.concat([
+        Buffer.from(head, "utf8"),
+        Buffer.from(contents),
+        Buffer.from(tail, "utf8"),
+      ]),
+    );
+
+    const response = await fetch(this.buildUrl("sendPhoto"), {
+      method: "POST",
+      headers: {
+        "Content-Type": `multipart/form-data; boundary=${boundary}`,
+      },
+      body,
+    });
+
+    if (!response.ok) {
+      throw new Error(`Telegram API request failed for sendPhoto: ${response.status} ${response.statusText}`);
+    }
+
+    const json = await response.json();
+    if (!isTelegramApiResponse<TelegramMessage>(json) || !json.ok || !isTelegramMessage(json.result)) {
+      throw new Error("Telegram API response had an unexpected shape for sendPhoto");
+    }
+
+    return json.result;
+  }
+
   async editMessage(
     chatId: number,
     messageId: number,
