@@ -11,6 +11,7 @@ import {
 import { loadBusConfig } from "./bus/bus-config.js";
 import { createBusServer, startBusServer, stopBusServer, type BusTalkRequest, type BusTalkResponse } from "./bus/bus-server.js";
 import { registerInstance, deregisterInstance, resolveChannelRoot } from "./bus/bus-registry.js";
+import { UsageStore } from "./state/usage-store.js";
 
 async function main(): Promise<void> {
   try {
@@ -71,6 +72,18 @@ async function main(): Promise<void> {
             text: req.prompt,
             files: [],
           });
+
+          // Record token usage for bus calls
+          if (result.usage) {
+            const usageStore = new UsageStore(config.stateDir);
+            await usageStore.record({
+              inputTokens: result.usage.inputTokens,
+              outputTokens: result.usage.outputTokens,
+              cachedTokens: result.usage.cachedTokens,
+              costUsd: result.usage.costUsd,
+            });
+          }
+
           return {
             success: true,
             text: result.text,
