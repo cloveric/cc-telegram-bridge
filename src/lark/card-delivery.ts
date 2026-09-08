@@ -1,4 +1,5 @@
 import type { Locale } from "../telegram/message-renderer.js";
+import { renderLarkContinuationCard } from "./card-renderer.js";
 import { redactLarkErrorDetail } from "./redaction.js";
 import type { LarkChannelLike, LarkSendOptions } from "./types.js";
 
@@ -18,6 +19,28 @@ export async function sendLarkCardWithFallback(input: {
       text: renderLarkCardFallbackText(input.fallbackText, input.locale, error),
     }, input.options);
     return { messageId: sent.messageId, fallback: true };
+  }
+}
+
+/** Deliver chunks 2..N after a run card has already rendered chunk 1. */
+export async function deliverLarkContinuationCards(input: {
+  channel: Pick<LarkChannelLike, "send">;
+  chatId: string;
+  chunks: string[];
+  replyOptions: LarkSendOptions | undefined;
+  locale: Locale;
+}): Promise<void> {
+  const total = input.chunks.length;
+  for (let index = 1; index < total; index++) {
+    const chunk = input.chunks[index]!;
+    await sendLarkCardWithFallback({
+      channel: input.channel,
+      chatId: input.chatId,
+      card: renderLarkContinuationCard(chunk, index + 1, total, input.locale),
+      fallbackText: chunk,
+      options: input.replyOptions,
+      locale: input.locale,
+    });
   }
 }
 

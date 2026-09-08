@@ -32,7 +32,7 @@ import {
   renderLarkDroppedBurstNotice,
   requestLarkApproval,
 } from "./card-actions.js";
-import { sendLarkCardWithFallback } from "./card-delivery.js";
+import { deliverLarkContinuationCards, sendLarkCardWithFallback } from "./card-delivery.js";
 import {
   ELEMENT_CONTENT_MAX_BYTES,
   LARK_CARD_ANSWER_MAX,
@@ -42,7 +42,6 @@ import {
   hasLarkFileBlockDirective,
   initialLarkRunState,
   liveRunCardStreamElement,
-  renderLarkContinuationCard,
   renderLarkNotificationCard,
   renderLarkQueueWaitCard,
   renderLarkRunCard,
@@ -170,31 +169,6 @@ function isWholeResponseFileBlockText(text: string): boolean {
     && Buffer.byteLength(fileMatch[2] ?? "", "utf8") > 0
     && text.replace(fileMatch[0], "").trim().length === 0,
   );
-}
-
-// Deliver chunks 2..N of a long answer as standalone continuation cards (card 1, the
-// run card, already carries chunk 1). Each is its own push so it lands in order and as a
-// separate notification; sendLarkCardWithFallback drops to plain text per card so a
-// chunk is never lost if a card render is rejected.
-async function deliverLarkContinuationCards(input: {
-  channel: Pick<LarkChannelLike, "send">;
-  chatId: string;
-  chunks: string[];
-  replyOptions: LarkSendOptions | undefined;
-  locale: Locale;
-}): Promise<void> {
-  const total = input.chunks.length;
-  for (let index = 1; index < total; index++) {
-    const chunk = input.chunks[index]!;
-    await sendLarkCardWithFallback({
-      channel: input.channel,
-      chatId: input.chatId,
-      card: renderLarkContinuationCard(chunk, index + 1, total, input.locale),
-      fallbackText: chunk,
-      options: input.replyOptions,
-      locale: input.locale,
-    });
-  }
 }
 
 type LarkTurnTermination =

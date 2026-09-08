@@ -6944,6 +6944,127 @@ describe("lark service", () => {
     }
   });
 
+  it("spills a long Lark cron result into continuation cards without repeating the first chunk", async () => {
+    const stateDir = await mkdtemp(path.join(os.tmpdir(), "cctb-lark-cron-agent-overflow-"));
+    const channel = fakeChannel();
+    const runtime = createLarkServiceRuntime();
+    const longAnswer = `CRON_HEAD ${"甲".repeat(5_500)}\nCRON_TAIL ${"乙".repeat(500)}`;
+    const bridge = {
+      checkAccess: vi.fn(async () => ({ kind: "allow" as const })),
+      handleAuthorizedMessage: vi.fn(async () => ({ text: longAnswer })),
+    };
+    const executor = buildLarkCronExecutor({
+      channel,
+      bridge,
+      runtime,
+      stateDir,
+      deliverResponse: deliverLarkResponse,
+      createRunCard: createLarkRunCardController,
+    });
+
+    try {
+      await executor({
+        id: "cronoverflow1",
+        channel: "lark",
+        chatId: stableLarkNumericId("lark:oc_chat"),
+        userId: stableLarkNumericId("user:ou_user"),
+        chatType: "private",
+        conversationKey: "lark:oc_chat",
+        larkChatId: "oc_chat",
+        cronExpr: "0 9 * * *",
+        timezone: "Asia/Shanghai",
+        prompt: "daily summary",
+        enabled: true,
+        runOnce: false,
+        sessionMode: "new_per_run",
+        deliveryMode: "agent",
+        mute: false,
+        silent: false,
+        timeoutMins: 30,
+        maxFailures: 3,
+        createdAt: "2026-05-25T00:00:00.000Z",
+        updatedAt: "2026-05-25T00:00:00.000Z",
+        failureCount: 0,
+        runHistory: [],
+      });
+
+      const continuationCards = larkContinuationCardsSent(channel);
+      expect(continuationCards.length).toBeGreaterThanOrEqual(1);
+      expect(continuationCards.join("\n")).toContain("CRON_TAIL");
+      expect(continuationCards.join("\n")).not.toContain("CRON_HEAD");
+
+      const repeatedFullAnswer = channel.send.mock.calls.filter((call: unknown[]) => {
+        const payload = call[1] as { text?: string; markdown?: string } | undefined;
+        return (typeof payload?.text === "string" && payload.text.includes("CRON_HEAD"))
+          || (typeof payload?.markdown === "string" && payload.markdown.includes("CRON_HEAD"));
+      });
+      expect(repeatedFullAnswer.length).toBe(0);
+    } finally {
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("stores a document-sized Lark cron result without repeating it inline", async () => {
+    const stateDir = await mkdtemp(path.join(os.tmpdir(), "cctb-lark-cron-agent-document-"));
+    const channel = fakeChannel();
+    const longAnswer = `CRON_DOC_HEAD ${"甲".repeat(40_000)} CRON_DOC_TAIL`;
+    const createDocument = vi.fn(async (docInput: { content: string }) => ({
+      url: "https://feishu.cn/docx/CRONDOC",
+      title: docInput.content.slice(0, 20),
+    }));
+    const runtime = createLarkServiceRuntime({ createDocument });
+    const bridge = {
+      checkAccess: vi.fn(async () => ({ kind: "allow" as const })),
+      handleAuthorizedMessage: vi.fn(async () => ({ text: longAnswer })),
+    };
+    const executor = buildLarkCronExecutor({
+      channel,
+      bridge,
+      runtime,
+      stateDir,
+      deliverResponse: deliverLarkResponse,
+      createRunCard: createLarkRunCardController,
+    });
+
+    try {
+      await executor({
+        id: "crondocument1",
+        channel: "lark",
+        chatId: stableLarkNumericId("lark:oc_chat"),
+        userId: stableLarkNumericId("user:ou_user"),
+        chatType: "private",
+        conversationKey: "lark:oc_chat",
+        larkChatId: "oc_chat",
+        cronExpr: "0 9 * * *",
+        timezone: "Asia/Shanghai",
+        prompt: "daily document",
+        enabled: true,
+        runOnce: false,
+        sessionMode: "new_per_run",
+        deliveryMode: "agent",
+        mute: false,
+        silent: false,
+        timeoutMins: 30,
+        maxFailures: 3,
+        createdAt: "2026-05-25T00:00:00.000Z",
+        updatedAt: "2026-05-25T00:00:00.000Z",
+        failureCount: 0,
+        runHistory: [],
+      });
+
+      expect(createDocument).toHaveBeenCalledWith(expect.objectContaining({ content: longAnswer, as: "user" }));
+      expect(JSON.stringify(channel.send.mock.calls)).toContain("https://feishu.cn/docx/CRONDOC");
+      const repeatedFullAnswer = channel.send.mock.calls.filter((call: unknown[]) => {
+        const payload = call[1] as { text?: string; markdown?: string } | undefined;
+        return (typeof payload?.text === "string" && payload.text.includes("CRON_DOC_HEAD"))
+          || (typeof payload?.markdown === "string" && payload.markdown.includes("CRON_DOC_HEAD"));
+      });
+      expect(repeatedFullAnswer.length).toBe(0);
+    } finally {
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  });
+
   it("renders empty Lark cron agent replies in the stored Lark locale", async () => {
     const stateDir = await mkdtemp(path.join(os.tmpdir(), "cctb-lark-cron-empty-en-"));
     const channel = fakeChannel();

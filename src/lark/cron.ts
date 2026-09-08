@@ -7,10 +7,17 @@ import type { CronExecutor } from "../runtime/cron-scheduler.js";
 import type { CronJobRecord } from "../state/cron-store-schema.js";
 import { loadInstanceConfig } from "../telegram/instance-config.js";
 import { claimLarkRunSlot } from "./bus.js";
-import { sendLarkCardWithFallback } from "./card-delivery.js";
-import { renderLarkReminderCard } from "./card-renderer.js";
+import { deliverLarkContinuationCards, sendLarkCardWithFallback } from "./card-delivery.js";
+import {
+  ELEMENT_CONTENT_MAX_BYTES,
+  LARK_MAX_OVERFLOW_CARDS,
+  cleanCardText,
+  renderLarkReminderCard,
+  splitLarkAnswerIntoCardChunks,
+} from "./card-renderer.js";
 import { hasLarkPostTurnDelivery, sendLarkMarkdown, type LarkDeliveryResult } from "./delivery.js";
 import { larkAccessChatIdFromConversationKey, stableLarkNumericId } from "./message-normalizer.js";
+import { LARK_OVERFLOW_DOC_MIN_CHARS, postLarkOverflowAnswerDoc } from "./overflow-doc.js";
 import type { LarkServiceRuntime } from "./runtime.js";
 import type { LarkBridgeLike, LarkChannelLike, LarkSendOptions } from "./types.js";
 
@@ -188,13 +195,49 @@ export function buildLarkCronExecutor(input: {
           return;
         }
         const finalText = result.text || renderLarkEmptyCronAgentReply(job);
-        const requiresVisibleDeliveryPhase = hasLarkPostTurnDelivery(result.text);
+        const cardDisplayText = runCard ? cleanCardText(finalText) : finalText;
+        const answerChunks = runCard ? splitLarkAnswerIntoCardChunks(cardDisplayText) : [cardDisplayText];
+        const spillToContinuationCards = Boolean(runCard)
+          && answerChunks.length > 1
+          && answerChunks.length <= LARK_MAX_OVERFLOW_CARDS;
+        const needsOverflowDocument = Boolean(runCard)
+          && answerChunks.length > LARK_MAX_OVERFLOW_CARDS;
+        const requiresVisibleDeliveryPhase = spillToContinuationCards
+          || needsOverflowDocument
+          || hasLarkPostTurnDelivery(result.text);
+        const runCardAnswerText = spillToContinuationCards ? answerChunks[0]! : cardDisplayText;
         let answerShownInCard = false;
         try {
           if (runCard) {
             answerShownInCard = (await (requiresVisibleDeliveryPhase
-              ? runCard.beginDelivery(finalText)
-              : runCard.finish(finalText))).shown;
+              ? runCard.beginDelivery(runCardAnswerText)
+              : runCard.finish(runCardAnswerText))).shown;
+          }
+          let overflowDelivered = false;
+          if (spillToContinuationCards && answerShownInCard) {
+            await deliverLarkContinuationCards({
+              channel: input.channel,
+              chatId: job.larkChatId!,
+              chunks: answerChunks,
+              replyOptions: replyFields,
+              locale,
+            });
+            overflowDelivered = true;
+          } else if (
+            runCard
+            && !answerShownInCard
+            && (finalText.length > LARK_OVERFLOW_DOC_MIN_CHARS
+              || Buffer.byteLength(finalText, "utf8") > ELEMENT_CONTENT_MAX_BYTES)
+          ) {
+            const overflow = await postLarkOverflowAnswerDoc({
+              channel: input.channel,
+              createDocument: input.runtime.createDocument,
+              chatId: job.larkChatId!,
+              replyOptions: replyFields,
+              text: finalText,
+              locale,
+            });
+            overflowDelivered = overflow.delivered;
           }
           if (input.deliverResponse) {
             const deliveryResult = await input.deliverResponse({
@@ -211,7 +254,7 @@ export function buildLarkCronExecutor(input: {
               bridgeUserId: job.userId,
               larkThreadId: job.larkThreadId,
               larkMessageId: job.larkMessageId,
-              sendText: runCard ? !answerShownInCard : true,
+              sendText: runCard ? !answerShownInCard && !overflowDelivered : true,
               ...replyFields,
             });
             if (deliveryResult && !deliveryResult.ok) {
@@ -223,7 +266,7 @@ export function buildLarkCronExecutor(input: {
             });
           }
           if (requiresVisibleDeliveryPhase) {
-            await runCard?.finish(finalText);
+            await runCard?.finish(runCardAnswerText);
           }
         } catch (error) {
           await runCard?.failDelivery(
