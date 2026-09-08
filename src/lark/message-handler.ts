@@ -62,7 +62,12 @@ import {
   isLarkLocalEngineCommand,
   isStopCommand,
 } from "./commands.js";
-import { deliverLarkResponse, hasLarkPostTurnDelivery, sendLarkMarkdown } from "./delivery.js";
+import {
+  deliverLarkResponse,
+  deliverLarkUserInputRequest,
+  hasLarkPostTurnDelivery,
+  sendLarkMarkdown,
+} from "./delivery.js";
 import {
   isLarkDeliveryFollowupRequest,
   larkDeliveryFollowupRepairPrompt,
@@ -1848,7 +1853,10 @@ async function runNormalizedLarkMessage(
         activeHandle.hasRunCard = Boolean(runCard);
       }
       const handleEngineEvent = async (event: EngineStreamEvent): Promise<void> => {
-        if (event.type !== "task_notification" || !event.suppressUserDelivery) {
+        if (
+          event.type !== "user_input_request" &&
+          (event.type !== "task_notification" || !event.suppressUserDelivery)
+        ) {
           await runCard?.apply(event);
         }
         await appendLarkTimelineEvent(input.stateDir, normalized, {
@@ -1856,6 +1864,32 @@ async function runNormalizedLarkMessage(
           detail: event.type,
           metadata: engineEventTimelineMetadata(event),
         });
+
+        if (event.type === "user_input_request") {
+          try {
+            await deliverLarkUserInputRequest({
+              channel: input.channel,
+              chatId: normalized.chatId,
+              toolInput: event.toolInput,
+              conversationKey: normalized.conversationKey,
+              bridgeChatType: normalized.bridgeChatType,
+              replyTo: normalized.messageId,
+              replyInThread: Boolean(normalized.threadId),
+              locale,
+            });
+          } catch (error) {
+            await appendLarkTimelineEvent(input.stateDir, normalized, {
+              type: "engine.event.delivery_failed",
+              outcome: "error",
+              detail: redactLarkErrorDetail(error),
+              metadata: {
+                eventType: event.type,
+                requestId: event.requestId,
+              },
+            });
+          }
+          return;
+        }
 
         if (event.type !== "task_notification" || event.settlesCurrentTurn || event.suppressUserDelivery) {
           return;

@@ -121,6 +121,15 @@ export type EngineStreamEvent =
       sessionId?: string;
     }
   | {
+      /** Codex accepted a non-blocking request for user input. The host must
+       * surface it separately; it is not the turn's final assistant message. */
+      type: "user_input_request";
+      toolName: "request_user_input_async";
+      toolInput: unknown;
+      requestId?: string;
+      sessionId?: string;
+    }
+  | {
       type: "result";
       text: string;
       sessionId?: string;

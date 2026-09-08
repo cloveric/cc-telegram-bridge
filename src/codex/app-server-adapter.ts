@@ -220,6 +220,32 @@ export interface CodexToolItemEvent {
   isError: boolean;
 }
 
+interface CodexAsyncUserInputRequest {
+  requestId?: string;
+  toolInput: {
+    questions: unknown[];
+  };
+}
+
+function extractCodexAsyncUserInputRequest(item: unknown): CodexAsyncUserInputRequest | null {
+  if (!item || typeof item !== "object") {
+    return null;
+  }
+  const record = item as Record<string, unknown>;
+  if (
+    record.type !== "agentMessage" ||
+    record.delivery !== "async" ||
+    !Array.isArray(record.questions) ||
+    record.questions.length === 0
+  ) {
+    return null;
+  }
+  return {
+    ...(typeof record.id === "string" && record.id ? { requestId: record.id } : {}),
+    toolInput: { questions: record.questions },
+  };
+}
+
 /**
  * Map a completed Codex app-server item to a tool event for the Lark run card.
  * Codex reports tool work as typed items (commandExecution / fileChange /
@@ -420,6 +446,7 @@ function readTurnItems(value: unknown): { text: string; generatedImagePaths: str
       typeof item === "object" &&
       item !== null &&
       (item as { type?: unknown }).type === "agentMessage" &&
+      (item as { delivery?: unknown }).delivery !== "async" &&
       typeof (item as { text?: unknown }).text === "string" &&
       (item as { text: string }).text.trim()
     ) {
@@ -1390,12 +1417,22 @@ export class CodexAppServerAdapter implements CodexAdapter {
           this.addGeneratedImageTag(pending, threadId, generatedImagePath);
         }
       }
-      if (
+      const asyncUserInput = extractCodexAsyncUserInputRequest(item);
+      if (threadId && asyncUserInput) {
+        this.emitEngineEvent(threadId, {
+          type: "user_input_request",
+          toolName: "request_user_input_async",
+          toolInput: asyncUserInput.toolInput,
+          ...(asyncUserInput.requestId ? { requestId: asyncUserInput.requestId } : {}),
+          sessionId: threadId,
+        }, pending ?? null);
+      } else if (
         pending &&
         typeof item === "object" &&
         item !== null &&
         "type" in item &&
         (item as { type?: unknown }).type === "agentMessage" &&
+        (item as { delivery?: unknown }).delivery !== "async" &&
         "text" in item &&
         typeof (item as { text?: unknown }).text === "string"
       ) {

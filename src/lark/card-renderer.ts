@@ -182,6 +182,9 @@ export function applyLarkEngineEvent(
       // Bookkeeping-only event (timeline pairing for the restart busy guard);
       // nothing to render on the run card.
       return state;
+    case "user_input_request":
+      // Delivered as a standalone interactive card by the Lark transport.
+      return state;
     case "task_notification":
       // No-op for the run card: a background-task notification is surfaced on
       // its own — a settling one finalizes the turn as the formal answer (the

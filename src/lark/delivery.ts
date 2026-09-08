@@ -55,6 +55,35 @@ export interface LarkDeliveryResult {
   textDelivered: boolean;
 }
 
+export async function deliverLarkUserInputRequest(input: {
+  channel: LarkChannelLike;
+  chatId: string;
+  toolInput: unknown;
+  conversationKey?: string;
+  bridgeChatType?: "private" | "group";
+  replyTo?: string;
+  replyInThread?: boolean;
+  locale: Locale;
+}): Promise<void> {
+  const payload = payloadObject(input.toolInput);
+  const cardPayload = normalizeLarkRequestUserInputPayload(payload, input.locale);
+  const card = buildLarkToolCard(
+    cardPayload,
+    input.conversationKey,
+    input.bridgeChatType,
+    input.replyInThread,
+    input.locale,
+  );
+  await sendLarkCardWithFallback({
+    channel: input.channel,
+    chatId: input.chatId,
+    card,
+    fallbackText: renderLarkToolCardFallback(cardPayload, input.locale),
+    options: larkReplyOptions(input.replyTo, input.replyInThread),
+    locale: input.locale,
+  });
+}
+
 /** Whether a response carries work that must finish after the engine result. */
 export function hasLarkPostTurnDelivery(text: string): boolean {
   return Boolean(
@@ -662,14 +691,10 @@ async function executeLarkToolTag(input: {
   if (
     input.name === "lark.choice" ||
     input.name === "send.choice" ||
-    input.name === "request_user_input" ||
-    input.name === "lark.request_user_input" ||
     input.name === "lark.plan" ||
     input.name === "plan.choice"
   ) {
-    const cardPayload = input.name === "request_user_input" || input.name === "lark.request_user_input"
-      ? normalizeLarkRequestUserInputPayload(payload, input.locale)
-      : normalizeLarkChoicePayload(payload, input.locale);
+    const cardPayload = normalizeLarkChoicePayload(payload, input.locale);
     const card = buildLarkToolCard(
       cardPayload,
       input.conversationKey,
@@ -683,6 +708,25 @@ async function executeLarkToolTag(input: {
       card,
       fallbackText: renderLarkToolCardFallback(cardPayload, input.locale),
       options: larkReplyOptions(input.replyTo, input.replyInThread),
+      locale: input.locale,
+    });
+    return true;
+  }
+
+  if (
+    input.name === "request_user_input" ||
+    input.name === "lark.request_user_input" ||
+    input.name === "request_user_input_async" ||
+    input.name === "lark.request_user_input_async"
+  ) {
+    await deliverLarkUserInputRequest({
+      channel: input.channel,
+      chatId: input.chatId,
+      toolInput: input.payload,
+      conversationKey: input.conversationKey,
+      bridgeChatType: input.bridgeChatType,
+      replyTo: input.replyTo,
+      replyInThread: input.replyInThread,
       locale: input.locale,
     });
     return true;
@@ -1724,8 +1768,14 @@ function normalizeLarkRequestUserInputPayload(payload: Record<string, unknown> |
     return normalizeLarkChoicePayload(payload, locale);
   }
   const questionId = stringValue(question.id);
-  const title = stringValue(question.header) ?? stringValue(payload.title) ?? defaultLarkToolCardTitle(locale);
-  const prompt = stringValue(question.question) ?? stringValue(payload.prompt) ?? "";
+  const title = stringValue(question.header) ??
+    stringValue(question.title) ??
+    stringValue(payload.title) ??
+    defaultLarkToolCardTitle(locale);
+  const prompt = stringValue(question.question) ??
+    stringValue(question.title) ??
+    stringValue(payload.prompt) ??
+    "";
   const rawOptions = Array.isArray(question.options) ? question.options : [];
   const options = rawOptions
     .map((option): Record<string, unknown> | null => {

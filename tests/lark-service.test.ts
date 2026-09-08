@@ -11375,6 +11375,51 @@ describe("lark service", () => {
     }
   });
 
+  it("renders Codex async user-input events as an immediate interactive choice card", async () => {
+    const stateDir = await mkdtemp(path.join(os.tmpdir(), "cctb-lark-codex-async-choice-"));
+    const channel = fakeChannel();
+    const bridge = {
+      handleAuthorizedMessage: vi.fn(async (input: Parameters<LarkBridgeLike["handleAuthorizedMessage"]>[0]) => {
+        await input.onEngineEvent?.({
+          type: "user_input_request",
+          toolName: "request_user_input_async",
+          toolInput: {
+            questions: [{
+              title: "这套 8 张小红书图文用哪种风格？",
+              options: ["高精度手绘科技科普（推荐）", "编辑插画水彩／现代绘本", "日式精致插画／马克笔"],
+            }],
+          },
+          requestId: "question-1",
+          sessionId: "codex-thread-1",
+        });
+        return { text: "已继续准备其余素材。" };
+      }),
+    };
+
+    try {
+      await handleLarkMessage({
+        channel,
+        bridge,
+        runtime: createLarkServiceRuntime(),
+        stateDir,
+        message: fakeLarkMessage({
+          messageId: "om_codex_async_choice",
+          content: "制作小红书图文",
+        }),
+      });
+
+      const rendered = JSON.stringify(channel.send.mock.calls);
+      expect(rendered).toContain("这套 8 张小红书图文用哪种风格？");
+      expect(rendered).toContain("高精度手绘科技科普（推荐）");
+      expect(rendered).toContain("编辑插画水彩／现代绘本");
+      expect(rendered).toContain("日式精致插画／马克笔");
+      expect(rendered).toContain('"cctb_lark":"choice"');
+      expect(rendered).toContain('"conversationKey":"lark:oc_chat"');
+    } finally {
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  });
+
   it("renders long Lark choices as readable option sections instead of long button labels", async () => {
     const stateDir = await mkdtemp(path.join(os.tmpdir(), "cctb-lark-choice-rich-"));
     const channel = fakeChannel();

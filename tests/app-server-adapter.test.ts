@@ -1757,6 +1757,82 @@ describe("CodexAppServerAdapter", () => {
     ]);
   });
 
+  it("emits Codex async user-input questions without replacing the final answer", async () => {
+    const { child, spawnFn } = createSpawnHarness();
+    const adapter = new CodexAppServerAdapter("codex", process.cwd(), spawnFn);
+    const engineEvents: unknown[] = [];
+
+    const promise = adapter.sendUserMessage("telegram-12345", {
+      text: "prepare the post",
+      files: [],
+      onEngineEvent: (event) => {
+        engineEvents.push(event);
+      },
+    });
+
+    await waitFor(() => child.stdin.lines.length >= 1);
+    child.stdout.emitData('{"id":1,"result":{"platformOs":"windows"}}\n');
+    await waitFor(() => child.stdin.lines.length >= 2);
+    child.stdout.emitData('{"id":2,"result":{"thread":{"id":"thread-123"}}}\n');
+    await waitFor(() => child.stdin.lines.length >= 3);
+
+    child.stdout.emitData(JSON.stringify({
+      method: "item/completed",
+      params: {
+        threadId: "thread-123",
+        item: {
+          id: "question-1",
+          type: "agentMessage",
+          text: "Which style should I use?\n- Hand-drawn\n- Watercolor",
+          delivery: "async",
+          questions: [{
+            title: "Which style should I use?",
+            options: ["Hand-drawn", "Watercolor"],
+          }],
+        },
+      },
+    }) + "\n");
+    child.stdout.emitData('{"method":"item/completed","params":{"threadId":"thread-123","item":{"type":"agentMessage","text":"Draft preparation continues."}}}\n');
+    child.stdout.emitData(JSON.stringify({
+      method: "turn/completed",
+      params: {
+        threadId: "thread-123",
+        turn: {
+          id: "turn-1",
+          items: [
+            { type: "agentMessage", text: "Draft preparation continues." },
+            {
+              id: "question-1",
+              type: "agentMessage",
+              text: "Which style should I use?",
+              delivery: "async",
+              questions: [{ title: "Which style should I use?", options: ["Hand-drawn", "Watercolor"] }],
+            },
+          ],
+          status: "completed",
+          error: null,
+        },
+      },
+    }) + "\n");
+
+    await expect(promise).resolves.toMatchObject({
+      text: "Draft preparation continues.",
+      sessionId: "thread-123",
+    });
+    expect(engineEvents).toContainEqual({
+      type: "user_input_request",
+      toolName: "request_user_input_async",
+      toolInput: {
+        questions: [{
+          title: "Which style should I use?",
+          options: ["Hand-drawn", "Watercolor"],
+        }],
+      },
+      requestId: "question-1",
+      sessionId: "thread-123",
+    });
+  });
+
   it("recovers generated image paths from thread/read without resending input attachments", async () => {
     const { child, spawnFn } = createSpawnHarness();
     const adapter = new CodexAppServerAdapter("codex", process.cwd(), spawnFn);
