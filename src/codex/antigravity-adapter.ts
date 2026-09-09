@@ -958,9 +958,14 @@ export class ProcessAntigravityAdapter implements CodexAdapter {
   private resolvePersistentTurn(worker: AntigravityWorker, pending: AntigravityPendingTurn): void {
     if (worker.pendingTurn !== pending) return;
     this.clearPendingTurn(worker, pending);
+    const text = pending.resultText.trim();
+    if (!text) {
+      pending.reject(new Error("Antigravity completed without returning a response"));
+      return;
+    }
     const usage = sumStepUsage(pending.stepUsage.values());
     pending.resolve({
-      text: pending.resultText.trim() || "Antigravity completed.",
+      text,
       sessionId: worker.currentSessionId,
       ...(usage ? { usage } : {}),
       childPid: worker.child.pid,
@@ -1227,9 +1232,14 @@ export class ProcessAntigravityAdapter implements CodexAdapter {
         settled = true;
         clearTimers();
         clearAbortListener();
+        const text = resultText.trim();
+        if (!text) {
+          reject(new Error("Antigravity completed without returning a response"));
+          return;
+        }
         const usage = sumStepUsage(stepUsage.values());
         resolve({
-          text: resultText.trim() || "Antigravity completed.",
+          text,
           sessionId: sessionId!,
           ...(usage ? { usage } : {}),
           childPid: child.pid,

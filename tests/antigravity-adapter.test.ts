@@ -220,6 +220,22 @@ describe("ProcessAntigravityAdapter", () => {
     await expect(promise).resolves.toMatchObject({ text: "streamed answer" });
   });
 
+  it("rejects a successful result that contains no response or streamed answer", async () => {
+    const { spawnAntigravity, child, calls } = createSpawnHarness();
+    const adapter = new ProcessAntigravityAdapter("agy", { HOME: "/tmp/home" }, spawnAntigravity);
+
+    const promise = adapter.sendUserMessage("telegram-12345", { text: "Create images", files: [] });
+    await vi.waitFor(() => expect(calls).toHaveLength(1));
+    child.stdout.emitData(jsonLine({ event: "init", conversation_id: CONVERSATION_ID, init: {} }));
+    child.stdout.emitData(jsonLine({
+      event: "result",
+      result: { conversation_id: CONVERSATION_ID, status: "SUCCESS", response: "" },
+    }));
+
+    await expect(promise).rejects.toThrow("Antigravity completed without returning a response");
+    await adapter.destroy();
+  });
+
   it("settles each successful result while keeping the stream worker open", async () => {
     const { spawnAntigravity, child, calls } = createSpawnHarness();
     const adapter = new ProcessAntigravityAdapter("agy", { HOME: "/tmp/home" }, spawnAntigravity);
@@ -667,6 +683,22 @@ describe("ProcessAntigravityAdapter", () => {
     expect(prompt).not.toContain("<user_message>\n/goal");
     expect(child.stdin.writes).toEqual([]);
     expect(child.stdin.ended).toBe(true);
+  });
+
+  it("rejects an empty successful native /goal result", async () => {
+    const { spawnAntigravity, child, calls } = createSpawnHarness();
+    const adapter = new ProcessAntigravityAdapter("agy", { HOME: "/tmp/home" }, spawnAntigravity);
+
+    const goal = adapter.sendUserMessage("telegram-12345", { text: "/goal create images", files: [] });
+    await vi.waitFor(() => expect(calls).toHaveLength(1));
+    child.stdout.emitData(jsonLine({ event: "init", conversation_id: CONVERSATION_ID, init: {} }));
+    child.stdout.emitData(jsonLine({
+      event: "result",
+      result: { conversation_id: CONVERSATION_ID, status: "SUCCESS", response: "" },
+    }));
+    child.close(0);
+
+    await expect(goal).rejects.toThrow("Antigravity completed without returning a response");
   });
 
   it("recycles a persistent conversation worker before running native /goal", async () => {
