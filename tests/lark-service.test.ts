@@ -349,7 +349,7 @@ describe("lark service", () => {
         bridge,
         runtime: createLarkServiceRuntime(),
         stateDir,
-        message: fakeLarkMessage({ messageId: "om_delivery_followup_partial", content: "图呢" }),
+        message: fakeLarkMessage({ messageId: "om_delivery_followup_partial", content: "图给我看看" }),
       })).resolves.toBe(true);
 
       expect(imageCreateMock(channel)).toHaveBeenCalledTimes(1);

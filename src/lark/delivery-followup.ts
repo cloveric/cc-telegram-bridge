@@ -64,6 +64,11 @@ const TAIL = "(?:了|啊|呀|呢|吧)?[？?!！。.]?";
 const DELIVERY_FOLLOWUP_PATTERNS: RegExp[] = [
   // Bare status questions: 好了吗 / 图呢 / 再发一次
   /^(?:好了吗|好了没|完成了吗|完成了没|发了吗|发了没|发出来了吗|发出来没|图片呢|图呢|文件呢|附件呢|结果呢|再发(?:一次|一遍|一下)?|重新发(?:一次|一遍|一下)?)[？?!！。.]?$/u,
+  // Direct artifact requests: 图给我看看 / 把文件发我 / 给我看看图片.
+  // These are delivery follow-ups even without an explicit "没收到" phrase.
+  new RegExp(`^(?:把|将)?(?:${DELIVERY_MODIFIER})*${DELIVERY_NOUN}(?:给我|让我)(?:看(?:看|一下)?|瞧瞧)${TAIL}$`, "u"),
+  new RegExp(`^(?:把|将)?(?:${DELIVERY_MODIFIER})*${DELIVERY_NOUN}(?:发|传)(?:给)?我(?:看(?:看|一下)?|瞧瞧)?${TAIL}$`, "u"),
+  new RegExp(`^(?:给我|让我)(?:看(?:看|一下)?|瞧瞧)(?:${DELIVERY_MODIFIER})*${DELIVERY_NOUN}${TAIL}$`, "u"),
   // Negation first: (怎么)(我)没收到(那个)(文件) — noun optional, so "我没有收到" still matches.
   new RegExp(`^(?:怎么|为什么|为啥)?${SUBJECT}${NEGATION}(?:${DELIVERY_MODIFIER})*(?:${DELIVERY_NOUN})?${TAIL}$`, "u"),
   // Noun first: (刚才的)(图)(我)没收到 — the other common word order.
