@@ -332,7 +332,7 @@ describe("larkAgentInstructions", () => {
     // bot's own chats (creating groups / inviting / sending) — that trips cross-app.
     expect(instructions).toContain("NOT IM on this bot's own chats");
     expect(instructions).toContain("open_id cross app");
-    expect(instructions).toContain("Sheets: start `sheets +info`");
+    expect(instructions).toContain("Sheets: start `sheets +workbook-info`");
     expect(instructions).toContain("do not treat Sheets as Docs/Base");
     expect(instructions).toContain("structured Sheets values");
     expect(instructions).toContain("OAuth private only");

@@ -193,7 +193,7 @@ node dist/src/index.js lark cli identity user-default
 node dist/src/index.js lark cli identity bot-only
 node dist/src/index.js lark secrets list
 printf '{"protocolVersion":1,"ids":["app-<app_id>"]}\n' | node dist/src/index.js lark secrets get
-node dist/src/index.js lark auth start --recommend --domain docs,drive --scope "sheets:spreadsheet:create sheets:spreadsheet:write_only sheets:spreadsheet:read sheets:spreadsheet.meta:read"
+node dist/src/index.js lark auth start --domain docs,drive --scope "sheets:spreadsheet:create sheets:spreadsheet:write_only sheets:spreadsheet:read sheets:spreadsheet.meta:read"
 node dist/src/index.js lark auth finish <device-code>
 node dist/src/index.js lark auth status --verify
 ```

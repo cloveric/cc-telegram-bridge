@@ -3143,7 +3143,7 @@ describe("runCli", () => {
       expect(handled).toBe(true);
       const output = messages.join("\n");
       expect(output).toContain("auth: attention needed");
-      expect(output).toContain("node dist/src/index.js lark auth start --recommend --domain docs,drive");
+      expect(output).toContain("node dist/src/index.js lark auth start --domain docs,drive");
       expect(output).toContain("sheets:spreadsheet:create sheets:spreadsheet:write_only sheets:spreadsheet:read sheets:spreadsheet.meta:read");
       expect(output).toContain("node dist/src/index.js lark auth finish <device-code>");
       expect(output).not.toContain("secret-from-file");

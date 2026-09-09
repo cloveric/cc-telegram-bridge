@@ -130,7 +130,7 @@ export async function runLarkWizard(env: LarkRuntimeEnv, logger: LarkWizardLogge
     logger.log("Full Lark-native document creation requires lark-cli >= 1.0.41.");
     logger.log("For user-backed Docs/Drive/Sheets actions and bot-created document auto-grant, run these in a private terminal/chat:");
     logger.log("Run: node dist/src/index.js lark cli identity user-default");
-    logger.log('Run: node dist/src/index.js lark auth start --recommend --domain docs,drive --scope "sheets:spreadsheet:create sheets:spreadsheet:write_only sheets:spreadsheet:read sheets:spreadsheet.meta:read"');
+    logger.log('Run: node dist/src/index.js lark auth start --domain docs,drive --scope "sheets:spreadsheet:create sheets:spreadsheet:write_only sheets:spreadsheet:read sheets:spreadsheet.meta:read"');
     logger.log("Run: node dist/src/index.js lark auth finish <device-code>");
     logger.log("Run: node dist/src/index.js lark auth status --verify");
   } catch (error) {

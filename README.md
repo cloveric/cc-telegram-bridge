@@ -373,7 +373,7 @@ export CCTB_LARK_INSTANCE=ccfgg1
 
 node dist/src/index.js lark setup --detached --install-cli --identity bot-only
 node dist/src/index.js lark yolo unsafe
-node dist/src/index.js lark auth start --recommend --domain docs,drive --scope "sheets:spreadsheet:create sheets:spreadsheet:write_only sheets:spreadsheet:read sheets:spreadsheet.meta:read"
+node dist/src/index.js lark auth start --domain docs,drive --scope "sheets:spreadsheet:create sheets:spreadsheet:write_only sheets:spreadsheet:read sheets:spreadsheet.meta:read"
 node dist/src/index.js lark auth finish <device-code>
 node dist/src/index.js lark slash sync
 node dist/src/index.js lark service restart

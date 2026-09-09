@@ -3509,7 +3509,7 @@ function buildLarkSetupNextSteps(needsAttention: boolean): string[] {
   ];
 }
 
-const RECOMMENDED_LARK_USER_AUTH_START_COMMAND = 'node dist/src/index.js lark auth start --recommend --domain docs,drive --scope "sheets:spreadsheet:create sheets:spreadsheet:write_only sheets:spreadsheet:read sheets:spreadsheet.meta:read"';
+const RECOMMENDED_LARK_USER_AUTH_START_COMMAND = 'node dist/src/index.js lark auth start --domain docs,drive --scope "sheets:spreadsheet:create sheets:spreadsheet:write_only sheets:spreadsheet:read sheets:spreadsheet.meta:read"';
 
 function hasActionableLarkDoctorProblem(doctor: string): boolean {
   return doctor
