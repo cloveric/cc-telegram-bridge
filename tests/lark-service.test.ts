@@ -326,6 +326,92 @@ describe("lark service", () => {
     }
   });
 
+  it("delivers verified follow-up artifacts streamed before an engine interruption", async () => {
+    const stateDir = await mkdtemp(path.join(os.tmpdir(), "cctb-lark-delivery-followup-partial-"));
+    const workspace = path.join(stateDir, "workspace");
+    const imagePath = path.join(workspace, "recovered-cover.png");
+    await mkdir(workspace, { recursive: true });
+    await writeFile(imagePath, "image bytes");
+    const channel = fakeChannel();
+    const bridge: LarkBridgeLike = {
+      handleAuthorizedMessage: vi.fn(async (input) => {
+        const prefix = "P1 封面（本轮补发）\n";
+        const directive = `[send-image:${imagePath}]`;
+        await input.onEngineEvent?.({ type: "assistant_text", text: prefix, delta: true });
+        await input.onEngineEvent?.({ type: "assistant_text", text: directive, delta: true });
+        throw new Error("The stream was interrupted. Please continue the task you were working on.");
+      }),
+    };
+
+    try {
+      await expect(handleLarkMessage({
+        channel,
+        bridge,
+        runtime: createLarkServiceRuntime(),
+        stateDir,
+        message: fakeLarkMessage({ messageId: "om_delivery_followup_partial", content: "图呢" }),
+      })).resolves.toBe(true);
+
+      expect(imageCreateMock(channel)).toHaveBeenCalledTimes(1);
+      const rendered = JSON.stringify(channel.send.mock.calls) + JSON.stringify(channel.updateCard.mock.calls);
+      expect(rendered).toContain("部分完成");
+      expect(rendered).toContain("P1 封面");
+      expect(rendered).not.toContain("执行失败");
+      const timeline = parseTimelineEvents(await readFile(path.join(stateDir, "timeline.log.jsonl"), "utf8"));
+      expect(timeline).toContainEqual(expect.objectContaining({
+        type: "engine.event",
+        outcome: "recovered",
+        detail: "delivery_followup_partial_recovered",
+      }));
+      expect(timeline).toContainEqual(expect.objectContaining({
+        type: "turn.completed",
+        outcome: "partial",
+      }));
+    } finally {
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("does not deliver buffered follow-up artifacts after a user stop", async () => {
+    const stateDir = await mkdtemp(path.join(os.tmpdir(), "cctb-lark-delivery-followup-stopped-"));
+    const workspace = path.join(stateDir, "workspace");
+    const imagePath = path.join(workspace, "stopped-cover.png");
+    await mkdir(workspace, { recursive: true });
+    await writeFile(imagePath, "image bytes");
+    const channel = fakeChannel();
+    const bridge: LarkBridgeLike = {
+      handleAuthorizedMessage: vi.fn(async (input) => {
+        await input.onEngineEvent?.({
+          type: "assistant_text",
+          text: `[send-image:${imagePath}]`,
+          delta: true,
+        });
+        throw new Error("Task was stopped by user");
+      }),
+    };
+
+    try {
+      await expect(handleLarkMessage({
+        channel,
+        bridge,
+        runtime: createLarkServiceRuntime(),
+        stateDir,
+        message: fakeLarkMessage({ messageId: "om_delivery_followup_stopped", content: "图呢" }),
+      })).resolves.toBe(true);
+
+      expect(imageCreateMock(channel)).not.toHaveBeenCalled();
+      const rendered = JSON.stringify(channel.send.mock.calls) + JSON.stringify(channel.updateCard.mock.calls);
+      expect(rendered).toContain("已中断");
+      expect(rendered).not.toContain("部分完成");
+      const timeline = parseTimelineEvents(await readFile(path.join(stateDir, "timeline.log.jsonl"), "utf8"));
+      expect(timeline).not.toContainEqual(expect.objectContaining({
+        detail: "delivery_followup_partial_recovered",
+      }));
+    } finally {
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  });
+
   it("retries a tool-backed answer that truncates a previous delivered response", async () => {
     const stateDir = await mkdtemp(path.join(os.tmpdir(), "cctb-lark-stale-answer-"));
     const conversationKey = "lark:oc_chat";

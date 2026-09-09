@@ -2010,6 +2010,9 @@ async function runNormalizedLarkMessage(
         }
       };
       const deliveryFollowupGuardActive = isLarkDeliveryFollowupRequest(commandText);
+      let suppressedDeliveryFollowupState: LarkRunState | undefined = deliveryFollowupGuardActive
+        ? initialLarkRunState(normalized.conversationKey, normalized.bridgeChatType)
+        : undefined;
       let initialTurnSawToolActivity = false;
       let initialTurnSawUnsafeToolActivity = false;
       const handleInitialEngineEvent = async (event: EngineStreamEvent): Promise<void> => {
@@ -2024,6 +2027,7 @@ async function runNormalizedLarkMessage(
           // post-turn guard inspects the complete answer. Keep only answer text
           // off the card here; tools, thinking, errors, and tasks still flow.
           if (event.type === "assistant_text" || event.type === "result") {
+            suppressedDeliveryFollowupState = applyLarkEngineEvent(suppressedDeliveryFollowupState!, event);
             await appendLarkTimelineEvent(input.stateDir, normalized, {
               type: "engine.event",
               detail: event.type,
@@ -2142,6 +2146,7 @@ async function runNormalizedLarkMessage(
 
       return await runAuthorizedLarkTurnWithReactions(input, normalized, async () => {
         const resolveRunCardFinalText = (text: string): string => runCard?.resolveFinalText(text) ?? text;
+        const deliveryPreflight = { stateDir: input.stateDir, requestOutputDir, workspaceOverride };
         const bridgeTurnInput: Parameters<LarkBridgeLike["handleAuthorizedMessage"]>[0] = {
           chatId: normalized.bridgeAccessChatId,
           userId: normalized.bridgeUserId,
@@ -2180,7 +2185,39 @@ async function runNormalizedLarkMessage(
           },
         };
         runCard?.beginAnswerAttempt();
-        let result = await input.bridge.handleAuthorizedMessage(bridgeTurnInput);
+        let recoveredEngineError: unknown;
+        let result: Awaited<ReturnType<LarkBridgeLike["handleAuthorizedMessage"]>>;
+        try {
+          result = await input.bridge.handleAuthorizedMessage(bridgeTurnInput);
+        } catch (error) {
+          if (classifyLarkTurnTermination(error, runController.signal).kind !== "error") {
+            throw error;
+          }
+          const candidate = suppressedDeliveryFollowupState
+            ? resolveLarkFinalAnswerText(suppressedDeliveryFollowupState, "").trim()
+            : "";
+          const preflight = candidate
+            ? await preflightLarkResponseDeliveryDirectives(candidate, deliveryPreflight)
+            : undefined;
+          if (
+            !preflight?.sawDirective
+            || preflight.artifactCount === 0
+            || preflight.issues.length > 0
+          ) {
+            throw error;
+          }
+          recoveredEngineError = error;
+          result = { text: candidate };
+          await appendLarkTimelineEvent(input.stateDir, normalized, {
+            type: "engine.event",
+            outcome: "recovered",
+            detail: "delivery_followup_partial_recovered",
+            metadata: {
+              artifactCount: preflight.artifactCount,
+              engineError: redactLarkErrorDetail(error),
+            },
+          });
+        }
         result = { ...result, text: resolveRunCardFinalText(result.text) };
         if (await shouldRetryLarkStaleResponse({
           stateDir: input.stateDir,
@@ -2215,7 +2252,6 @@ async function runNormalizedLarkMessage(
         }
         // Use the sender's complete root set and preflight, not only an optional
         // workspace override. Most instances use the default state workspace.
-        const deliveryPreflight = { stateDir: input.stateDir, requestOutputDir, workspaceOverride };
         if (await shouldRepairLarkDeliveryFollowup(commandText, result.text, deliveryPreflight)) {
           await appendLarkTimelineEvent(input.stateDir, normalized, {
             type: "engine.event",
@@ -2486,6 +2522,11 @@ async function runNormalizedLarkMessage(
                     ? "The result was generated, but attachments or follow-up content could not be confirmed."
                     : "结果已生成，但附件或后续内容未确认送达。",
                 )
+              : recoveredEngineError !== undefined
+                ? await runCard.finishPartial(
+                    runCardAnswerText,
+                    renderLarkUserFacingError(recoveredEngineError, "engine", locale),
+                  )
               : await runCard.finish(runCardAnswerText)
             : deliveryCardResult
           : undefined;
@@ -2507,17 +2548,21 @@ async function runNormalizedLarkMessage(
             },
           });
         }
+        const recoveredPartial = recoveredEngineError !== undefined;
         await appendLarkTimelineEvent(input.stateDir, normalized, {
           type: "turn.completed",
-          outcome: deliveryFailed ? "partial" : "success",
-          ...(deliveryFailed ? {
+          outcome: deliveryFailed || recoveredPartial ? "partial" : "success",
+          ...(deliveryFailed || recoveredPartial ? {
             detail: deliveryPreflightFailed
               ? "engine completed; artifact delivery preflight failed"
-              : "engine completed; post-turn delivery unconfirmed",
+              : postTurnDeliveryFailed
+                ? "engine completed; post-turn delivery unconfirmed"
+                : "engine interrupted after recoverable artifact response",
           } : {}),
           metadata: {
             responseChars: result.text.length,
             attachments: normalized.attachments.length,
+            ...(recoveredPartial ? { recoveredEnginePartial: true } : {}),
           },
         });
         return true;
@@ -2701,6 +2746,8 @@ export interface LarkRunCardController {
   finish(text: string): Promise<LarkRunFinishResult>;
   /** Preserve the generated answer while surfacing a post-engine delivery failure. */
   failDelivery(text: string, errorText: string): Promise<LarkRunFinishResult>;
+  /** Preserve and label a verified partial answer when the engine terminates after producing it. */
+  finishPartial(text: string, errorText: string): Promise<LarkRunFinishResult>;
   fail(text: string): Promise<"error" | "partial">;
   interrupt(): Promise<void>;
   idleTimeout(minutes: number): Promise<void>;
@@ -3133,6 +3180,19 @@ export async function createLarkRunCardController(input: {
       state = {
         ...state,
         status: "delivery_error",
+        errorText,
+        footer: null,
+      };
+      cancelScheduledUpdate();
+      return await enqueuePatch(() => finalize(finalText));
+    },
+    finishPartial: async (text, errorText): Promise<LarkRunFinishResult> => {
+      const finalText = resolveLarkFinalAnswerText(state, text, answerAttemptStartBlock);
+      state = { ...state, finalAnswerBlockStart: answerAttemptStartBlock };
+      state = applyLarkEngineEvent(state, { type: "result", text: finalText });
+      state = {
+        ...state,
+        status: "partial",
         errorText,
         footer: null,
       };
