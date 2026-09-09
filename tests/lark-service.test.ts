@@ -28,6 +28,7 @@ import { createLarkRunCardController } from "../src/lark/message-handler.js";
 import { LarkGroupModeStore } from "../src/lark/group-mode-store.js";
 import { stableLarkNumericId } from "../src/lark/message-normalizer.js";
 import { CronStore } from "../src/state/cron-store.js";
+import type { CronJobRecord } from "../src/state/cron-store-schema.js";
 import { FileWorkflowStore } from "../src/state/file-workflow-store.js";
 import { MiniBusStore } from "../src/state/mini-bus-store.js";
 import { BoardStore } from "../src/state/board-store.js";
@@ -6814,13 +6815,15 @@ describe("lark service", () => {
     }
   });
 
-  it("passes stored Lark cron locale into agent-mode scheduled tasks", async () => {
+  it("honors locale and session mode for Lark cron agent tasks", async () => {
     const stateDir = await mkdtemp(path.join(os.tmpdir(), "cctb-lark-cron-agent-locale-"));
     const channel = fakeChannel();
     const runtime = createLarkServiceRuntime();
     const bridge = {
       checkAccess: vi.fn(async () => ({ kind: "allow" as const })),
-      handleAuthorizedMessage: vi.fn(async () => ({ text: "agent result" })),
+      handleAuthorizedMessage: vi.fn(async (_input: Parameters<LarkBridgeLike["handleAuthorizedMessage"]>[0]) => ({
+        text: "agent result",
+      })),
     };
     const executor = buildLarkCronExecutor({
       channel,
@@ -6830,7 +6833,7 @@ describe("lark service", () => {
     });
 
     try {
-      await executor({
+      const job: CronJobRecord = {
         id: "1234abcd",
         channel: "lark",
         chatId: stableLarkNumericId("lark:oc_chat"),
@@ -6854,11 +6857,14 @@ describe("lark service", () => {
         failureCount: 0,
         runHistory: [],
         locale: "en",
-      });
+      };
+
+      await executor(job);
 
       expect(bridge.handleAuthorizedMessage).toHaveBeenCalledWith(expect.objectContaining({
         locale: "en",
         conversationKey: "lark:oc_chat",
+        sessionIdOverride: expect.stringMatching(/^telegram-cron-1234abcd-/),
         text: "daily summary",
       }));
       expect(channel.send).toHaveBeenCalledWith(
@@ -6866,6 +6872,10 @@ describe("lark service", () => {
         { markdown: "agent result" },
         {},
       );
+
+      bridge.handleAuthorizedMessage.mockClear();
+      await executor({ ...job, sessionMode: "reuse" });
+      expect(bridge.handleAuthorizedMessage.mock.calls[0]?.[0]?.sessionIdOverride).toBeUndefined();
     } finally {
       await rm(stateDir, { recursive: true, force: true });
     }

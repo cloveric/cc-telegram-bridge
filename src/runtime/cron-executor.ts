@@ -4,6 +4,7 @@ import type { NormalizedTelegramMessage } from "../telegram/update-normalizer.js
 import type { CronJobRecord } from "../state/cron-store-schema.js";
 import type { handleNormalizedTelegramMessage } from "../telegram/delivery.js";
 import { CronAccessDeniedError } from "./cron-errors.js";
+import { createFreshCronSessionId } from "./cron-session.js";
 import { getTelegramConversationKey } from "../telegram/conversation-key.js";
 
 export interface CronExecutorContext {
@@ -165,10 +166,6 @@ export interface BuildCronExecutorOptions extends CronExecutorContext {
  *    triggers do not have Telegram update_ids and must not pollute the
  *    watermark or `enqueuedUpdateIds` dedup set)
  */
-function createCronSessionId(job: CronJobRecord): string {
-  return `telegram-cron-${job.id}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-}
-
 export function buildCronExecutor(options: BuildCronExecutorOptions): (job: CronJobRecord, abortSignal?: AbortSignal) => Promise<void> {
   const handler = options.handler;
   return async (job: CronJobRecord, abortSignal?: AbortSignal): Promise<void> => {
@@ -211,7 +208,7 @@ export function buildCronExecutor(options: BuildCronExecutorOptions): (job: Cron
       updateId: undefined,
       source: "cron",
       abortSignal,
-      sessionIdOverride: job.sessionMode === "new_per_run" ? createCronSessionId(job) : undefined,
+      sessionIdOverride: job.sessionMode === "new_per_run" ? createFreshCronSessionId(job) : undefined,
     });
   };
 }

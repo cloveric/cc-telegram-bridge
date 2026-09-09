@@ -3,6 +3,7 @@ import path from "node:path";
 
 import { checkBudgetAvailability, recordBridgeTurnUsage } from "../runtime/bridge-turn.js";
 import { CronAccessDeniedError } from "../runtime/cron-errors.js";
+import { createFreshCronSessionId } from "../runtime/cron-session.js";
 import type { CronExecutor } from "../runtime/cron-scheduler.js";
 import type { CronJobRecord } from "../state/cron-store-schema.js";
 import { loadInstanceConfig } from "../telegram/instance-config.js";
@@ -161,6 +162,7 @@ export function buildLarkCronExecutor(input: {
             files: [],
             requestOutputDir,
             workspaceOverride: input.workspaceOverride,
+            sessionIdOverride: job.sessionMode === "new_per_run" ? createFreshCronSessionId(job) : undefined,
             abortSignal: controller.signal,
             disableRuntimeTimeout: cfg.disableRuntimeTimeout === true,
             instructions: input.agentInstructions?.(),

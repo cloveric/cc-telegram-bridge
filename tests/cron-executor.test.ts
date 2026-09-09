@@ -316,6 +316,16 @@ describe("buildCronExecutor", () => {
     expect(context.abortSignal).toBe(signal);
     expect(context.sessionIdOverride).toMatch(/^telegram-cron-abcd1234-/);
   });
+
+  it("does not override the persisted session for reuse jobs", async () => {
+    const handler = vi.fn().mockResolvedValue(undefined);
+    const executor = buildCronExecutor({ api: {} as never, bridge: makeBridge(), inboxDir: "/tmp", handler });
+
+    await executor(makeJob({ sessionMode: "reuse" }));
+
+    const [, context] = handler.mock.calls[0]!;
+    expect(context.sessionIdOverride).toBeUndefined();
+  });
 });
 
 describe("sendCronFailureNotification", () => {

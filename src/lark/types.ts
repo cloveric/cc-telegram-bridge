@@ -144,6 +144,7 @@ export interface LarkBridgeLike {
     workspaceOverride?: string;
     instructions?: string;
     extraEnv?: Record<string, string>;
+    sessionIdOverride?: string;
     abortSignal?: AbortSignal;
     disableRuntimeTimeout?: boolean;
     onTurnLockWait?: (event: BridgeTurnLockWaitEvent) => void | Promise<void>;
