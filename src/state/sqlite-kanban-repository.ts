@@ -27,7 +27,7 @@ import { withFileMutex } from "./file-mutex.js";
 import { CURRENT_SCHEMA_VERSION } from "./schema-version.js";
 import { STATE_DIR_MODE, STATE_FILE_MODE } from "./state-permissions.js";
 
-export const KANBAN_SCHEMA_VERSION = 1;
+export const KANBAN_SCHEMA_VERSION = 2;
 const DEFAULT_BUSY_TIMEOUT_MS = 5_000;
 const MIGRATION_SENTINEL_SCHEMA_VERSION = Number.MAX_SAFE_INTEGER;
 
@@ -291,8 +291,9 @@ CREATE TABLE IF NOT EXISTS claims (
 CREATE TABLE IF NOT EXISTS events (
   sequence INTEGER PRIMARY KEY AUTOINCREMENT,
   board_id INTEGER NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
-  task_id TEXT REFERENCES tasks(id) ON DELETE SET NULL,
-  run_id TEXT REFERENCES runs(id) ON DELETE SET NULL,
+  -- Immutable audit correlation survives deletion of the mutable task/run rows.
+  task_id TEXT,
+  run_id TEXT,
   event_type TEXT NOT NULL,
   actor_json TEXT,
   payload_json TEXT NOT NULL DEFAULT '{}',
@@ -895,6 +896,40 @@ async function applySchema(database: sqlite3.Database): Promise<void> {
   }
   if (currentVersion < 1) {
     await exec(database, SCHEMA_SQL);
+    await exec(database, `PRAGMA user_version = ${KANBAN_SCHEMA_VERSION}`);
+    return;
+  }
+  if (currentVersion < 2) {
+    await exec(database, `
+      CREATE TABLE events_v2 (
+        sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+        board_id INTEGER NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
+        -- Immutable audit correlation survives deletion of the mutable task/run rows.
+        task_id TEXT,
+        run_id TEXT,
+        event_type TEXT NOT NULL,
+        actor_json TEXT,
+        payload_json TEXT NOT NULL DEFAULT '{}',
+        idempotency_key TEXT,
+        created_at TEXT NOT NULL
+      ) STRICT;
+
+      INSERT INTO events_v2 (
+        sequence, board_id, task_id, run_id, event_type,
+        actor_json, payload_json, idempotency_key, created_at
+      )
+      SELECT
+        sequence, board_id, task_id, run_id, event_type,
+        actor_json, payload_json, idempotency_key, created_at
+      FROM events
+      ORDER BY sequence;
+
+      DROP TABLE events;
+      ALTER TABLE events_v2 RENAME TO events;
+
+      CREATE UNIQUE INDEX unique_event_idempotency_key
+      ON events(idempotency_key) WHERE idempotency_key IS NOT NULL;
+    `);
     await exec(database, `PRAGMA user_version = ${KANBAN_SCHEMA_VERSION}`);
   }
 }

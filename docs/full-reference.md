@@ -1074,7 +1074,7 @@ authoritative events and subscriptions, archive/restore/delete, statistics,
 redacted import/export, diagnostics, repair, and asset GC. These APIs currently
 serve internal callers and preserve all commands above. The expanded channel
 commands, Web Kanban/SSE, and five-engine Kanban MCP surface are Phases 3 and 4
-and are not exposed by `v0.1.322`.
+and are not exposed as of `v0.1.323`.
 
 ### Mini Bus: topic/thread-to-topic/thread workflows
 

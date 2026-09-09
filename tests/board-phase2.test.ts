@@ -210,6 +210,10 @@ describe("BoardService Phase 2 lifecycle and evidence", () => {
       });
       expect(deleted).toEqual({ taskId: parent.id, boardSlug: "product", deleted: true });
       await expect(service.getTask(parent.id)).resolves.toBeNull();
+      await expect(service.listEvents({ taskId: parent.id })).resolves.toEqual([
+        expect.objectContaining({ taskId: parent.id, eventType: "task.created" }),
+        expect.objectContaining({ taskId: parent.id, eventType: "task.deleted" }),
+      ]);
       expect(await service.getTask(child.id)).not.toHaveProperty("parentTaskId");
       await expect(service.deleteTask(parent.id, {
         confirmTaskId: parent.id,

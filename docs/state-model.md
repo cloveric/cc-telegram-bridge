@@ -541,7 +541,7 @@ Related migration and asset paths:
 
 Stores durable, instance-isolated Kanban task state for `/board` commands. It is intentionally separate from Mini Bus and Agent Bus topology: the board tracks work, while bus layers decide who can execute work. There is no cross-instance global board.
 
-Schema version 1 creates `meta`, `boards`, `board_contexts`, `tasks`, `task_dependencies`, `task_labels`, `checklist_items`, `artifacts`, `attachments`, `comments`, `runs`, `claims`, `events`, `notification_subscriptions`, and `migration_history`. Phase 1 created the complete schema so Phase 2 could activate richer records without a schema-version migration. Phase 2 now uses these tables for boards, scheduling, parent/child links, comments, attachments, claims, authoritative events, subscriptions, dispatcher state, and richer run evidence.
+Schema version 1 created `meta`, `boards`, `board_contexts`, `tasks`, `task_dependencies`, `task_labels`, `checklist_items`, `artifacts`, `attachments`, `comments`, `runs`, `claims`, `events`, `notification_subscriptions`, and `migration_history`. Phase 1 created the complete table set so Phase 2 could activate richer records without adding tables. Schema version 2 rebuilds only `events`: its task and run IDs are immutable audit correlations rather than foreign keys, so deleting mutable task/run rows cannot erase historical associations. Phase 2 uses these tables for boards, scheduling, parent/child links, comments, attachments, claims, authoritative events, subscriptions, dispatcher state, and richer run evidence.
 
 Current `BoardService` compatibility projection (stored across normalized tables):
 

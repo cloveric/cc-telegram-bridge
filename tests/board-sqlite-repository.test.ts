@@ -38,6 +38,26 @@ function databaseRun(databasePath: string, sql: string, params: unknown[] = []):
   });
 }
 
+function databaseExec(databasePath: string, sql: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const database = new sqlite3.Database(databasePath, (openError) => {
+      if (openError) {
+        reject(openError);
+        return;
+      }
+      database.exec(sql, (execError) => {
+        database.close(() => {
+          if (execError) {
+            reject(execError);
+          } else {
+            resolve();
+          }
+        });
+      });
+    });
+  });
+}
+
 function legacyBoardFixture(): Record<string, unknown> {
   return {
     schemaVersion: CURRENT_SCHEMA_VERSION,
@@ -146,6 +166,73 @@ describe("SQLite Kanban persistence", () => {
         foreignKeyViolations: 0,
         activeRunConflicts: 0,
       });
+    } finally {
+      await removeTempRoot(root);
+    }
+  });
+
+  it("migrates version 1 events without losing task or run history after deletion", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "tarocub-kanban-events-v2-"));
+    try {
+      const store = new BoardStore(root);
+      const task = await store.createTask({
+        title: "Persistent audit history",
+        createdBy: { chatId: 1, userId: 2, conversationKey: "chat:1" },
+      });
+      const running = await store.startTask(task.id);
+      const runId = running.runs.at(-1)!.id;
+      await store.failTask(task.id, "expected test failure");
+      const eventsBeforeMigration = await store.listEvents({ taskId: task.id });
+      const databasePath = resolveKanbanDatabasePath(root);
+
+      await databaseExec(databasePath, `
+        PRAGMA foreign_keys = OFF;
+        BEGIN IMMEDIATE;
+        ALTER TABLE events RENAME TO events_v2_source;
+        CREATE TABLE events (
+          sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+          board_id INTEGER NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
+          task_id TEXT REFERENCES tasks(id) ON DELETE SET NULL,
+          run_id TEXT REFERENCES runs(id) ON DELETE SET NULL,
+          event_type TEXT NOT NULL,
+          actor_json TEXT,
+          payload_json TEXT NOT NULL DEFAULT '{}',
+          idempotency_key TEXT,
+          created_at TEXT NOT NULL
+        ) STRICT;
+        INSERT INTO events (
+          sequence, board_id, task_id, run_id, event_type,
+          actor_json, payload_json, idempotency_key, created_at
+        )
+        SELECT
+          sequence, board_id, task_id, run_id, event_type,
+          actor_json, payload_json, idempotency_key, created_at
+        FROM events_v2_source;
+        DROP TABLE events_v2_source;
+        CREATE UNIQUE INDEX unique_event_idempotency_key
+        ON events(idempotency_key) WHERE idempotency_key IS NOT NULL;
+        PRAGMA user_version = 1;
+        COMMIT;
+      `);
+
+      const migrated = new BoardStore(root);
+      await expect(migrated.listEvents({ taskId: task.id })).resolves.toEqual(eventsBeforeMigration);
+      await expect(migrated.diagnostics()).resolves.toMatchObject({
+        ok: true,
+        schemaVersion: KANBAN_SCHEMA_VERSION,
+      });
+
+      await migrated.deleteTask(task.id, { confirmTaskId: task.id });
+      const retainedEvents = await migrated.listEvents({ taskId: task.id });
+      expect(retainedEvents.slice(0, -1)).toEqual(eventsBeforeMigration);
+      expect(retainedEvents.at(-1)).toMatchObject({
+        taskId: task.id,
+        eventType: "task.deleted",
+      });
+      expect(retainedEvents.filter((event) => event.runId).map((event) => event.runId)).toEqual([
+        runId,
+        runId,
+      ]);
     } finally {
       await removeTempRoot(root);
     }
