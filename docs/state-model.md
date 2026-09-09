@@ -541,7 +541,7 @@ Related migration and asset paths:
 
 Stores durable, instance-isolated Kanban task state for `/board` commands. It is intentionally separate from Mini Bus and Agent Bus topology: the board tracks work, while bus layers decide who can execute work. There is no cross-instance global board.
 
-Schema version 1 creates `meta`, `boards`, `board_contexts`, `tasks`, `task_dependencies`, `task_labels`, `checklist_items`, `artifacts`, `attachments`, `comments`, `runs`, `claims`, `events`, `notification_subscriptions`, and `migration_history`. Phase 1 uses the `main` board and current task projection; later parity phases activate the reserved richer surfaces through the same repository.
+Schema version 1 creates `meta`, `boards`, `board_contexts`, `tasks`, `task_dependencies`, `task_labels`, `checklist_items`, `artifacts`, `attachments`, `comments`, `runs`, `claims`, `events`, `notification_subscriptions`, and `migration_history`. Phase 1 created the complete schema so Phase 2 could activate richer records without a schema-version migration. Phase 2 now uses these tables for boards, scheduling, parent/child links, comments, attachments, claims, authoritative events, subscriptions, dispatcher state, and richer run evidence.
 
 Current `BoardService` compatibility projection (stored across normalized tables):
 
@@ -550,7 +550,7 @@ Current `BoardService` compatibility projection (stored across normalized tables
 - `tasks[]`
   - `id`
   - `title`
-  - `status`: `todo`, `ready`, `running`, `review`, `blocked`, `done`, or `archived`
+  - `status`: `triage`, `todo`, `scheduled`, `ready`, `running`, `review`, `blocked`, `done`, or `archived`
   - `description?`
   - `acceptanceCriteria[]`
   - `priority`: `low`, `normal`, `high`, or `urgent`
@@ -586,7 +586,7 @@ Current `BoardService` compatibility projection (stored across normalized tables
     - `conversationKey`
   - `runs[]`
     - `id`
-    - `status`: `running`, `review_requested`, `done`, or `failed`
+    - `status`: `running`, `review_requested`, `succeeded`, `done` (legacy read alias), `failed`, `blocked`, `cancelled`, or `timed_out`
     - `startedAt`
     - `lastHeartbeatAt?`
     - `heartbeatNote?`
@@ -596,7 +596,7 @@ Current `BoardService` compatibility projection (stored across normalized tables
 
 ### Authoritative data
 
-This database is authoritative for Board task ids, task status, dependencies, assignees, blocked reasons, completion summaries, and lightweight run history.
+This database is authoritative for Board and task ids, task status, dependencies, parent/child links, schedules, assignees, blocked reasons, completion summaries, claims, comments, attachments, subscriptions, dispatcher state, the append-only Board event stream, and run history/evidence.
 
 It is also authoritative for card metadata used by planner/dispatcher flows: description, acceptance criteria, priority, labels, checklist, artifacts, review requirement, optional workspace metadata, run heartbeat evidence, and WIP limits.
 
@@ -606,6 +606,9 @@ It is not authoritative for access control, Mini Bus peers, or Agent Bus peer co
 
 - all production channel operations enter through `BoardService`
 - each state transition uses a short SQLite `BEGIN IMMEDIATE` transaction
+- mutations accept an optional expected revision and idempotency key; stale revisions fail closed, raw idempotency keys are hashed before persistence, and successful replays return the first result
+- every Phase 2 mutation appends an authoritative Board event in the same transaction as its projection update
+- task, comment, event, run-log, error, and export strings pass through the shared credential-pattern redactor before persistence or delivery
 - foreign keys, WAL mode, a bounded busy timeout, full synchronization, and owner-only permissions are enabled
 - normalized tables and constraints protect task ids, dependency edges, run ids, and the one-active-run-per-task invariant
 - task ids are normalized as `B<number>`
@@ -624,6 +627,10 @@ It is not authoritative for access control, Mini Bus peers, or Agent Bus peer co
 - `fail` closes the active run as failed and moves the task to `blocked`
 - blocking a running task closes its active run as failed before moving the task to `blocked`
 - tasks with `review.required` move to `review` after completion and record the run as `review_requested`; dependents are promoted only after approval
+- claims use expiring opaque lease tokens in the owner-only database; lease tokens are excluded from events and exports, and a stale claim generation cannot be mistaken for a later worker's claim during idempotent replay
+- automatic dispatch is opt-in per board, honors WIP/schedule/dependency/retry constraints, and recovers expired claims/runs before deciding whether a circuit breaker permits new work
+- owned attachments are copied under `kanban-assets/` by content hash after realpath, symlink, size, and digest validation
+- export omits actor identifiers, detailed logs, and workspace paths by default; import validates the complete graph and all identifier collisions before publishing assets or state
 - completed tasks retain their original source chat/topic metadata for auditability
 
 ### Recovery rules
@@ -636,13 +643,15 @@ It is not authoritative for access control, Mini Bus peers, or Agent Bus peer co
 - a published database with the matching unswapped legacy source -> finish the interrupted sentinel step using the recorded migration receipt
 - old/missing counters are normalized from the maximum stored task/run ids
 - stale-run recovery scans active runs directly, so it also repairs legacy task/run status drift
+- expired active claims atomically time out their run, block the task, remove the claim, and append `task.claim_expired`; expired idle claims return to their prior schedulable state
+- repair creates an owner-only backup before reconciling expired claims and inconsistent task/run projections; destructive repair and asset GC require explicit confirmation
 - migration backups are never deleted automatically
 
 ### Sensitivity
 
 High sensitivity.
 
-The database, WAL/SHM files, retained migration backups, and asset directory can contain durable task titles, operator intent, summaries, chat IDs, user IDs, topic IDs, local paths, and workflow topology hints. They are mode `0600` (files) or `0700` (directories).
+The database, WAL/SHM files, retained migration backups, exports, and asset directory can contain durable task titles, operator intent, summaries, chat IDs, user IDs, topic IDs, local paths, and workflow topology hints. Credential-pattern redaction reduces accidental secret retention but does not lower this classification. They are mode `0600` (files) or `0700` (directories).
 
 ## `mini-bus.json`
 

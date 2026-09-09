@@ -1,6 +1,16 @@
 import { z } from "zod";
 
-export const BoardTaskStatusSchema = z.enum(["todo", "ready", "running", "review", "blocked", "done", "archived"]);
+export const BoardTaskStatusSchema = z.enum([
+  "triage",
+  "todo",
+  "scheduled",
+  "ready",
+  "running",
+  "review",
+  "blocked",
+  "done",
+  "archived",
+]);
 export const BoardTaskPrioritySchema = z.enum(["low", "normal", "high", "urgent"]);
 
 export const BoardTaskActorSchema = z.object({
@@ -12,13 +22,23 @@ export const BoardTaskActorSchema = z.object({
 
 export const BoardTaskRunSchema = z.object({
   id: z.string().min(1),
-  status: z.enum(["running", "review_requested", "done", "failed"]),
+  // `done` is retained as a read-compatible alias for pre-SQLite records.
+  status: z.enum(["running", "review_requested", "succeeded", "done", "failed", "blocked", "cancelled", "timed_out"]),
   startedAt: z.string(),
   lastHeartbeatAt: z.string().optional(),
   heartbeatNote: z.string().optional(),
   completedAt: z.string().optional(),
   summary: z.string().optional(),
   error: z.string().optional(),
+  logText: z.string().optional(),
+  inputTokens: z.number().int().nonnegative().optional(),
+  outputTokens: z.number().int().nonnegative().optional(),
+  costUsd: z.number().nonnegative().optional(),
+  attempt: z.number().int().positive().optional(),
+  engine: z.string().min(1).optional(),
+  model: z.string().min(1).optional(),
+  effort: z.string().min(1).optional(),
+  dispatchTarget: z.string().min(1).optional(),
 }).passthrough();
 
 export const BoardChecklistItemSchema = z.object({
@@ -46,8 +66,18 @@ export const BoardTaskWorkspaceSchema = z.object({
   branch: z.string().min(1).optional(),
 }).passthrough();
 
+export const BoardTaskExecutionSchema = z.object({
+  engine: z.string().min(1).optional(),
+  model: z.string().min(1).optional(),
+  effort: z.string().min(1).optional(),
+  timeoutMs: z.number().int().nonnegative().optional(),
+  maxRetries: z.number().int().nonnegative().optional(),
+}).passthrough();
+
 export const BoardTaskRecordSchema = z.object({
   id: z.string().min(1),
+  boardSlug: z.string().min(1).optional(),
+  parentTaskId: z.string().min(1).optional(),
   title: z.string().min(1),
   status: BoardTaskStatusSchema,
   createdAt: z.string(),
@@ -66,6 +96,13 @@ export const BoardTaskRecordSchema = z.object({
   dependencies: z.array(z.string()).optional(),
   runs: z.array(BoardTaskRunSchema).optional(),
   workspace: BoardTaskWorkspaceSchema.optional(),
+  scheduledAt: z.string().optional(),
+  timezone: z.string().min(1).optional(),
+  execution: BoardTaskExecutionSchema.optional(),
+  revision: z.number().int().positive().optional(),
+  archivedFromStatus: BoardTaskStatusSchema.optional(),
+  retryCount: z.number().int().nonnegative().optional(),
+  nextRetryAt: z.string().optional(),
   createdBy: BoardTaskActorSchema,
 }).passthrough();
 
@@ -88,6 +125,7 @@ export type BoardChecklistItem = z.infer<typeof BoardChecklistItemSchema>;
 export type BoardArtifact = z.infer<typeof BoardArtifactSchema>;
 export type BoardReviewGate = z.infer<typeof BoardReviewGateSchema>;
 export type BoardTaskWorkspace = z.infer<typeof BoardTaskWorkspaceSchema>;
+export type BoardTaskExecution = z.infer<typeof BoardTaskExecutionSchema>;
 export type BoardWipLimits = {
   global: number;
   perAssignee: number;
@@ -95,6 +133,8 @@ export type BoardWipLimits = {
 };
 export type BoardTaskRecord = {
   id: string;
+  boardSlug: string;
+  parentTaskId?: string;
   title: string;
   status: BoardTaskStatus;
   createdAt: string;
@@ -113,7 +153,89 @@ export type BoardTaskRecord = {
   dependencies: string[];
   runs: BoardTaskRun[];
   workspace?: BoardTaskWorkspace;
+  scheduledAt?: string;
+  timezone?: string;
+  execution: BoardTaskExecution;
+  revision: number;
+  archivedFromStatus?: BoardTaskStatus;
+  retryCount: number;
+  nextRetryAt?: string;
   createdBy: BoardTaskActor;
+};
+
+export type BoardDispatcherPolicy = "manual" | "automatic";
+
+export type BoardSettings = {
+  limits: BoardWipLimits;
+  leaseDurationMs: number;
+  defaultTimeoutMs: number;
+  defaultMaxRetries: number;
+  retryBaseDelayMs: number;
+  circuitBreakerThreshold: number;
+  circuitBreakerCooldownMs: number;
+  consecutiveInfrastructureFailures: number;
+  circuitOpenUntil?: string;
+  automaticReview: boolean;
+};
+
+export type BoardRecord = {
+  id: number;
+  slug: string;
+  name: string;
+  settings: BoardSettings;
+  dispatcherPolicy: BoardDispatcherPolicy;
+  revision: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type BoardComment = {
+  id: string;
+  taskId: string;
+  body: string;
+  actor: BoardTaskActor;
+  createdAt: string;
+};
+
+export type BoardAttachment = {
+  id: string;
+  taskId: string;
+  contentHash: string;
+  storagePath: string;
+  originalName: string;
+  mediaType?: string;
+  sizeBytes: number;
+  createdAt: string;
+  actor: BoardTaskActor;
+};
+
+export type BoardClaim = {
+  taskId: string;
+  owner: string;
+  leaseToken: string;
+  expiresAt: string;
+  heartbeatAt: string;
+  createdAt: string;
+};
+
+export type BoardEvent = {
+  sequence: number;
+  boardSlug: string;
+  taskId?: string;
+  runId?: string;
+  eventType: string;
+  actor?: BoardTaskActor;
+  payload: Record<string, unknown>;
+  idempotencyKey?: string;
+  createdAt: string;
+};
+
+export type BoardSubscription = {
+  id: string;
+  boardSlug: string;
+  conversationKey: string;
+  eventFilter: string[];
+  createdAt: string;
 };
 export type BoardStoreState = {
   nextTaskId: number;

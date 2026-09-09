@@ -10,9 +10,14 @@ For this repository, "commit and release" means all of the following have comple
 
 1. The intended changes are committed, with no unrelated runtime state or secrets staged.
 2. The version/tag and GitHub Release are created or updated with accurate release notes.
-3. The local fleet is restarted and verified across Telegram and Lark.
+3. Every enabled local channel fleet is restarted and verified. A channel that
+   the operator explicitly disabled must remain stopped and be verified stopped.
 
-Do not call a release complete until GitHub Release and Telegram and Lark restart verification have all succeeded. Keep `package.json` private and do not treat external package-registry publishing as a release step.
+Telegram and Lark are evaluated independently under this enabled/disabled rule.
+
+Do not call a release complete until the GitHub Release exists, enabled channel
+fleets have restarted successfully, and intentionally disabled fleets have
+been verified stopped. Keep `package.json` private and do not treat external package-registry publishing as a release step.
 
 For Lark service restarts, use the single fleet command:
 
@@ -69,7 +74,7 @@ Prefer at least one real smoke check when behavior changed materially.
 
 Recommended:
 
-- send one normal Telegram message
+- if Telegram is enabled, send one normal Telegram message
 - run one local command such as `/status` or `/usage`
 - if bus is enabled, run one delegation flow like `/ask`
 - if file delivery changed, send one response that delivers a real workspace file

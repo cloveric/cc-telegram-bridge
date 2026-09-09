@@ -601,6 +601,15 @@ sandbox rules as outbound delivery. MIME type is evidence, not trust.
 
 ## Delivery Plan
 
+Implementation status as of 2026-09-09:
+
+- Phases 0 and 1 shipped in `v0.1.320` and `v0.1.321`.
+- Phase 2 ships in `v0.1.322`. Its domain and persistence APIs are available to
+  existing internal callers, while the existing `/board` and `/kanban`
+  commands keep their current behavior.
+- Phases 3 and 4 remain pending. In particular, the expanded channel command
+  set, Web Kanban, SSE, and per-engine Kanban MCP tools are not part of Phase 2.
+
 ### Phase 0: correctness hotfix
 
 - Fix block/run closure and recovery invariants in the current store.

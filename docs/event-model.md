@@ -155,7 +155,7 @@ Board command audit metadata commonly includes:
 - `review`
 - `checklistItemId`
 
-Board commands currently use the shared `command.handled` timeline event. The authoritative task state lives in the instance-local `kanban.sqlite`; audit/timeline entries remain cross-system evidence, not the source of truth. The SQLite `events` table is reserved for authoritative Board-domain events introduced by later parity phases.
+Board commands continue to use the shared `command.handled` timeline event for cross-system observability. The authoritative task projection and append-only Board-domain event stream both live in the instance-local `kanban.sqlite`; Phase 2 mutations update the projection and append their Board event in one SQLite transaction. Audit/timeline entries remain best-effort cross-system evidence and are not the Board source of truth. Board events carry a monotonic sequence, board/task/run correlation, a credential-redacted payload, a hashed idempotency key when supplied, and an optional source actor. Default exports remove actor identifiers, detailed logs, and workspace paths.
 
 ### Bus
 

@@ -1066,6 +1066,16 @@ In any bot's Telegram chat:
 
 This is not a hidden autonomous dispatcher. It gives the bridge durable planning state first: model-assisted task graph creation, richer task cards, WIP limits, workspace metadata, run heartbeats, stale-run recovery, dependency promotion, review gates, and explicit one-task execution with `/board run <id>`. Lark `/board show <id>` renders an interactive task card with safe state-transition buttons; card actions route back through the same `/board` command path and access checks.
 
+The Phase 2 domain layer additionally supports multiple instance-local boards,
+triage and schedules, parent/child tasks, comments and owned attachments,
+revision-checked/idempotent mutations, expiring claims, opt-in automatic
+dispatch with retries/timeouts/circuit breaking, richer run evidence,
+authoritative events and subscriptions, archive/restore/delete, statistics,
+redacted import/export, diagnostics, repair, and asset GC. These APIs currently
+serve internal callers and preserve all commands above. The expanded channel
+commands, Web Kanban/SSE, and five-engine Kanban MCP surface are Phases 3 and 4
+and are not exposed by `v0.1.322`.
+
 ### Mini Bus: topic/thread-to-topic/thread workflows
 
 Inside an allowed Telegram group/forum or Lark group thread, `/mini` lets one bot treat different topics/threads as lightweight peers. Each peer keeps its own session, uses the same instance config and `agent.md`, and can be asked directly, queried in parallel, or chained sequentially. This is useful for temporary planning/review threads without creating new bot instances.

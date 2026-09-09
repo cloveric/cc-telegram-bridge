@@ -236,7 +236,7 @@ Each instance has a private state root under `~/.cctb/<instance>/`.
 
 - some operational files remain best-effort rather than transactional
 - malformed optional config may still trigger fallback behavior instead of hard failure
-- durable planning state in `kanban.sqlite`, its retained `board.json` migration backups, and `kanban-assets/` may contain task intent, summaries, chat IDs, user IDs, topic IDs, and local paths even though it does not contain credentials
+- durable planning state in `kanban.sqlite`, its retained `board.json` migration backups, exports, and `kanban-assets/` may contain task intent, summaries, chat IDs, user IDs, topic IDs, and local paths; known credential patterns are redacted before Board persistence and export, but the entire boundary remains high sensitivity
 - state consistency bugs are more likely to be logic regressions than raw permission bugs now
 
 ### Design rule

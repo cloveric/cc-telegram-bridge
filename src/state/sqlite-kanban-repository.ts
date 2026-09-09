@@ -31,8 +31,8 @@ export const KANBAN_SCHEMA_VERSION = 1;
 const DEFAULT_BUSY_TIMEOUT_MS = 5_000;
 const MIGRATION_SENTINEL_SCHEMA_VERSION = Number.MAX_SAFE_INTEGER;
 
-type SqliteValue = string | number | bigint | Buffer | null;
-type SqliteParams = SqliteValue[] | Record<string, SqliteValue>;
+export type SqliteValue = string | number | bigint | Buffer | null;
+export type SqliteParams = SqliteValue[] | Record<string, SqliteValue>;
 
 export type BoardMigrationReceipt = {
   sourceSha256: string;
@@ -72,6 +72,8 @@ type ForeignKeyViolationRow = Record<string, unknown>;
 
 type TaskRow = {
   id: string;
+  board_slug: string;
+  parent_task_id: string | null;
   title: string;
   status: BoardTaskRecord["status"];
   created_at: string;
@@ -86,6 +88,13 @@ type TaskRow = {
   blocked_reason: string | null;
   assignee: string | null;
   workspace_json: string | null;
+  scheduled_at: string | null;
+  timezone: string | null;
+  engine: string | null;
+  model: string | null;
+  effort: string | null;
+  timeout_ms: number | null;
+  max_retries: number | null;
   created_by_json: string;
   revision: number;
   position: number;
@@ -123,6 +132,10 @@ type RunRow = {
   completed_at: string | null;
   summary: string | null;
   error: string | null;
+  log_text: string | null;
+  input_tokens: number | null;
+  output_tokens: number | null;
+  cost_usd: number | null;
   position: number;
   extensions_json: string;
 };
@@ -476,12 +489,14 @@ function objectWithoutKeys(value: object, keys: readonly string[]): Record<strin
 }
 
 const TASK_KEYS = [
-  "id", "title", "status", "createdAt", "updatedAt", "completedAt", "description",
+  "id", "boardSlug", "parentTaskId", "title", "status", "createdAt", "updatedAt", "completedAt", "description",
   "acceptanceCriteria", "priority", "labels", "checklist", "artifacts", "review",
-  "summary", "blockedReason", "assignee", "dependencies", "runs", "workspace", "createdBy",
+  "summary", "blockedReason", "assignee", "dependencies", "runs", "workspace", "scheduledAt", "timezone",
+  "execution", "revision", "createdBy",
 ] as const;
 const RUN_KEYS = [
   "id", "status", "startedAt", "lastHeartbeatAt", "heartbeatNote", "completedAt", "summary", "error",
+  "logText", "inputTokens", "outputTokens", "costUsd",
 ] as const;
 const CHECKLIST_KEYS = ["id", "text", "done", "createdAt", "completedAt"] as const;
 const ARTIFACT_KEYS = ["kind", "value", "createdAt"] as const;
@@ -494,7 +509,14 @@ function fromSqlRunStatus(status: string): BoardTaskRun["status"] {
   if (status === "succeeded") {
     return "done";
   }
-  if (status === "running" || status === "review_requested" || status === "failed") {
+  if (
+    status === "running"
+    || status === "review_requested"
+    || status === "failed"
+    || status === "blocked"
+    || status === "cancelled"
+    || status === "timed_out"
+  ) {
     return status;
   }
   throw new Error(`unsupported run status in current Board compatibility layer: ${status}`);
@@ -508,7 +530,12 @@ async function getMetaNumber(database: sqlite3.Database, key: string, fallback: 
 
 async function readStateFromDatabase(database: sqlite3.Database): Promise<BoardStoreState> {
   const [taskRows, dependencyRows, labelRows, checklistRows, artifactRows, runRows, boardRow] = await Promise.all([
-    all<TaskRow>(database, "SELECT * FROM tasks ORDER BY position, id"),
+    all<TaskRow>(database, `
+      SELECT tasks.*, boards.slug AS board_slug
+      FROM tasks
+      JOIN boards ON boards.id = tasks.board_id
+      ORDER BY tasks.position, tasks.id
+    `),
     all<DependencyRow>(database, "SELECT task_id, depends_on_task_id, position FROM task_dependencies ORDER BY task_id, position"),
     all<LabelRow>(database, "SELECT task_id, label, position FROM task_labels ORDER BY task_id, position"),
     all<ChecklistRow>(database, "SELECT * FROM checklist_items ORDER BY task_id, position"),
@@ -570,6 +597,10 @@ async function readStateFromDatabase(database: sqlite3.Database): Promise<BoardS
       ...(row.completed_at ? { completedAt: row.completed_at } : {}),
       ...(row.summary ? { summary: row.summary } : {}),
       ...(row.error ? { error: row.error } : {}),
+      ...(row.log_text ? { logText: row.log_text } : {}),
+      ...(row.input_tokens !== null ? { inputTokens: row.input_tokens } : {}),
+      ...(row.output_tokens !== null ? { outputTokens: row.output_tokens } : {}),
+      ...(row.cost_usd !== null ? { costUsd: row.cost_usd } : {}),
     } as BoardTaskRun;
     const list = runs.get(row.task_id) ?? [];
     list.push(runRecord);
@@ -581,6 +612,8 @@ async function readStateFromDatabase(database: sqlite3.Database): Promise<BoardS
     return {
       ...extension,
       id: row.id,
+      boardSlug: row.board_slug,
+      ...(row.parent_task_id ? { parentTaskId: row.parent_task_id } : {}),
       title: row.title,
       status: row.status,
       createdAt: row.created_at,
@@ -602,6 +635,16 @@ async function readStateFromDatabase(database: sqlite3.Database): Promise<BoardS
       dependencies: dependencies.get(row.id) ?? [],
       runs: runs.get(row.id) ?? [],
       ...(row.workspace_json ? { workspace: parseJson(row.workspace_json, `task ${row.id} workspace`) } : {}),
+      ...(row.scheduled_at ? { scheduledAt: row.scheduled_at } : {}),
+      ...(row.timezone ? { timezone: row.timezone } : {}),
+      execution: {
+        ...(row.engine ? { engine: row.engine } : {}),
+        ...(row.model ? { model: row.model } : {}),
+        ...(row.effort ? { effort: row.effort } : {}),
+        ...(row.timeout_ms !== null ? { timeoutMs: row.timeout_ms } : {}),
+        ...(row.max_retries !== null ? { maxRetries: row.max_retries } : {}),
+      },
+      revision: row.revision,
       createdBy: parseJson(row.created_by_json, `task ${row.id} actor`),
     } as BoardTaskRecord;
   });
@@ -632,30 +675,73 @@ async function readStateFromDatabase(database: sqlite3.Database): Promise<BoardS
 
 async function replaceStateInDatabase(database: sqlite3.Database, state: BoardStoreState): Promise<void> {
   const timestamp = new Date().toISOString();
+  const existingMain = await get<{ settings_json: string }>(database, "SELECT settings_json FROM boards WHERE slug = 'main'");
+  const existingMainSettings = existingMain
+    ? parseJson<Record<string, unknown>>(existingMain.settings_json, "main board settings")
+    : {};
   await run(database, `
     INSERT INTO boards (id, slug, name, settings_json, dispatcher_policy, created_at, updated_at)
     VALUES (1, 'main', 'Main', ?, 'manual', ?, ?)
     ON CONFLICT(slug) DO UPDATE SET settings_json = excluded.settings_json, updated_at = excluded.updated_at
-  `, [JSON.stringify(state.limits), timestamp, timestamp]);
+  `, [JSON.stringify({
+    ...existingMainSettings,
+    ...state.limits,
+    limits: {
+      ...(typeof existingMainSettings.limits === "object" && existingMainSettings.limits !== null
+        ? existingMainSettings.limits as Record<string, unknown>
+        : {}),
+      ...state.limits,
+    },
+  }), timestamp, timestamp]);
   await run(database, "INSERT INTO meta (key, value) VALUES ('next_task_id', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [String(state.nextTaskId)]);
   await run(database, "INSERT INTO meta (key, value) VALUES ('next_run_id', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [String(state.nextRunId)]);
 
-  await run(database, "DELETE FROM tasks");
+  const boardRows = await all<{ id: number; slug: string }>(database, "SELECT id, slug FROM boards");
+  const boardIds = new Map(boardRows.map((row) => [row.slug, row.id]));
   for (let taskPosition = 0; taskPosition < state.tasks.length; taskPosition++) {
     const task = state.tasks[taskPosition]!;
+    const boardId = boardIds.get(task.boardSlug || "main");
+    if (!boardId) {
+      throw new Error(`board not found for task ${task.id}: ${task.boardSlug}`);
+    }
     const extension = objectWithoutKeys(task, TASK_KEYS);
-    const revision = typeof extension.revision === "number" && Number.isInteger(extension.revision) && extension.revision > 0
-      ? extension.revision
-      : 1;
-    delete extension.revision;
     await run(database, `
       INSERT INTO tasks (
-        id, board_id, title, status, created_at, updated_at, completed_at, description,
+        id, board_id, parent_task_id, title, status, created_at, updated_at, completed_at, description,
         acceptance_criteria_json, priority, review_required, reviewer, summary, blocked_reason,
-        assignee, workspace_json, created_by_json, revision, position, extensions_json
-      ) VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        assignee, workspace_json, scheduled_at, timezone, engine, model, effort, timeout_ms, max_retries,
+        created_by_json, revision, position, extensions_json
+      ) VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        board_id = excluded.board_id,
+        title = excluded.title,
+        status = excluded.status,
+        created_at = excluded.created_at,
+        updated_at = excluded.updated_at,
+        completed_at = excluded.completed_at,
+        description = excluded.description,
+        acceptance_criteria_json = excluded.acceptance_criteria_json,
+        priority = excluded.priority,
+        review_required = excluded.review_required,
+        reviewer = excluded.reviewer,
+        summary = excluded.summary,
+        blocked_reason = excluded.blocked_reason,
+        assignee = excluded.assignee,
+        workspace_json = excluded.workspace_json,
+        scheduled_at = excluded.scheduled_at,
+        timezone = excluded.timezone,
+        engine = excluded.engine,
+        model = excluded.model,
+        effort = excluded.effort,
+        timeout_ms = excluded.timeout_ms,
+        max_retries = excluded.max_retries,
+        created_by_json = excluded.created_by_json,
+        revision = excluded.revision,
+        position = excluded.position,
+        extensions_json = excluded.extensions_json
     `, [
       task.id,
+      boardId,
       task.title,
       task.status,
       task.createdAt,
@@ -670,14 +756,41 @@ async function replaceStateInDatabase(database: sqlite3.Database, state: BoardSt
       task.blockedReason ?? null,
       task.assignee ?? null,
       task.workspace ? JSON.stringify(task.workspace) : null,
+      task.scheduledAt ?? null,
+      task.timezone ?? null,
+      task.execution.engine ?? null,
+      task.execution.model ?? null,
+      task.execution.effort ?? null,
+      task.execution.timeoutMs ?? null,
+      task.execution.maxRetries ?? null,
       JSON.stringify(task.createdBy),
-      revision,
+      task.revision,
       taskPosition,
       JSON.stringify(extension),
     ]);
   }
 
+  const retainedTaskIds = new Set(state.tasks.map((task) => task.id));
+  const existingTaskIds = await all<{ id: string }>(database, "SELECT id FROM tasks");
+  for (const row of existingTaskIds) {
+    if (!retainedTaskIds.has(row.id)) {
+      await run(database, "DELETE FROM tasks WHERE id = ?", [row.id]);
+    }
+  }
+
   for (const task of state.tasks) {
+    if (task.parentTaskId) {
+      await run(database, "UPDATE tasks SET parent_task_id = ? WHERE id = ?", [task.parentTaskId, task.id]);
+    } else {
+      await run(database, "UPDATE tasks SET parent_task_id = NULL WHERE id = ?", [task.id]);
+    }
+  }
+
+  for (const task of state.tasks) {
+    await run(database, "DELETE FROM task_dependencies WHERE task_id = ?", [task.id]);
+    await run(database, "DELETE FROM task_labels WHERE task_id = ?", [task.id]);
+    await run(database, "DELETE FROM checklist_items WHERE task_id = ?", [task.id]);
+    await run(database, "DELETE FROM artifacts WHERE task_id = ?", [task.id]);
     for (let position = 0; position < task.dependencies.length; position++) {
       await run(database, "INSERT INTO task_dependencies (task_id, depends_on_task_id, position) VALUES (?, ?, ?)", [
         task.id,
@@ -723,13 +836,30 @@ async function replaceStateInDatabase(database: sqlite3.Database, state: BoardSt
         JSON.stringify(objectWithoutKeys(artifact, ARTIFACT_KEYS)),
       ]);
     }
+    const retainedRunIds = new Set(task.runs.map((taskRun) => taskRun.id));
     for (let position = 0; position < task.runs.length; position++) {
       const taskRun = task.runs[position]!;
       await run(database, `
         INSERT INTO runs (
           id, task_id, status, started_at, last_heartbeat_at, heartbeat_note,
-          completed_at, summary, error, position, extensions_json
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          completed_at, summary, error, log_text, input_tokens, output_tokens, cost_usd,
+          position, extensions_json
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          task_id = excluded.task_id,
+          status = excluded.status,
+          started_at = excluded.started_at,
+          last_heartbeat_at = excluded.last_heartbeat_at,
+          heartbeat_note = excluded.heartbeat_note,
+          completed_at = excluded.completed_at,
+          summary = excluded.summary,
+          error = excluded.error,
+          log_text = excluded.log_text,
+          input_tokens = excluded.input_tokens,
+          output_tokens = excluded.output_tokens,
+          cost_usd = excluded.cost_usd,
+          position = excluded.position,
+          extensions_json = excluded.extensions_json
       `, [
         taskRun.id,
         task.id,
@@ -740,9 +870,19 @@ async function replaceStateInDatabase(database: sqlite3.Database, state: BoardSt
         taskRun.completedAt ?? null,
         taskRun.summary ?? null,
         taskRun.error ?? null,
+        taskRun.logText ?? null,
+        taskRun.inputTokens ?? null,
+        taskRun.outputTokens ?? null,
+        taskRun.costUsd ?? null,
         position,
         JSON.stringify(objectWithoutKeys(taskRun, RUN_KEYS)),
       ]);
+    }
+    const existingRunIds = await all<{ id: string }>(database, "SELECT id FROM runs WHERE task_id = ?", [task.id]);
+    for (const row of existingRunIds) {
+      if (!retainedRunIds.has(row.id)) {
+        await run(database, "DELETE FROM runs WHERE id = ?", [row.id]);
+      }
     }
   }
 }
@@ -991,6 +1131,65 @@ export class SqliteKanbanRepository {
       throw new Error("Kanban state writes require a repository transaction");
     }
     await replaceStateInDatabase(database, this.options.parseState(state));
+  }
+
+  async queryOne<T>(sql: string, params: SqliteParams = []): Promise<T | undefined> {
+    await this.ensureReady();
+    const activeDatabase = this.transactionContext.getStore();
+    if (activeDatabase) {
+      return await get<T>(activeDatabase, sql, params);
+    }
+    const database = await openDatabase(this.databasePath, sqlite3.OPEN_READONLY | sqlite3.OPEN_FULLMUTEX);
+    try {
+      await configureDatabase(database, false);
+      return await get<T>(database, sql, params);
+    } finally {
+      await closeDatabase(database);
+    }
+  }
+
+  async queryAll<T>(sql: string, params: SqliteParams = []): Promise<T[]> {
+    await this.ensureReady();
+    const activeDatabase = this.transactionContext.getStore();
+    if (activeDatabase) {
+      return await all<T>(activeDatabase, sql, params);
+    }
+    const database = await openDatabase(this.databasePath, sqlite3.OPEN_READONLY | sqlite3.OPEN_FULLMUTEX);
+    try {
+      await configureDatabase(database, false);
+      return await all<T>(database, sql, params);
+    } finally {
+      await closeDatabase(database);
+    }
+  }
+
+  async execute(sql: string, params: SqliteParams = []): Promise<{ changes: number; lastID: number }> {
+    const database = this.transactionContext.getStore();
+    if (!database) {
+      throw new Error("Kanban SQL mutations require a repository transaction");
+    }
+    return await run(database, sql, params);
+  }
+
+  async backupTo(targetPath: string): Promise<string> {
+    await this.ensureReady();
+    const resolvedTarget = path.resolve(targetPath);
+    if (await pathExists(resolvedTarget)) {
+      throw new Error(`Kanban backup target already exists: ${resolvedTarget}`);
+    }
+    await mkdir(path.dirname(resolvedTarget), { recursive: true, mode: STATE_DIR_MODE });
+    const database = await openDatabase(this.databasePath, sqlite3.OPEN_READONLY | sqlite3.OPEN_FULLMUTEX);
+    try {
+      await configureDatabase(database, false);
+      await run(database, "VACUUM INTO ?", [resolvedTarget]);
+      await chmod(resolvedTarget, STATE_FILE_MODE);
+      return resolvedTarget;
+    } catch (error) {
+      await rm(resolvedTarget, { force: true }).catch(() => undefined);
+      throw error;
+    } finally {
+      await closeDatabase(database);
+    }
   }
 
   async transaction<T>(operation: () => Promise<T>): Promise<T> {
