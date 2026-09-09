@@ -52,8 +52,10 @@ npm test -- tests/bus.test.ts tests/bus-handler.test.ts tests/service.test.ts
 ### State / Schema
 
 ```bash
-npm test -- tests/access-store.test.ts tests/session-store.test.ts tests/usage-store.test.ts tests/runtime-state.test.ts tests/file-workflow-store.test.ts tests/cron-store.test.ts tests/audit-log.test.ts tests/instance-lock.test.ts
+npm test -- tests/access-store.test.ts tests/session-store.test.ts tests/usage-store.test.ts tests/runtime-state.test.ts tests/file-workflow-store.test.ts tests/cron-store.test.ts tests/board-store.test.ts tests/board-service.test.ts tests/board-sqlite-repository.test.ts tests/audit-log.test.ts tests/instance-lock.test.ts
 ```
+
+When the SQLite dependency or persistence layer changes, also run `npm run verify:sqlite-driver` locally and require the cross-platform SQLite driver matrix to pass before release.
 
 ### Scheduled Tasks / Cron
 

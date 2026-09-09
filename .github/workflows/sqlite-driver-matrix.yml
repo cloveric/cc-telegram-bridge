@@ -1,0 +1,38 @@
+name: SQLite driver matrix
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - package.json
+      - package-lock.json
+      - scripts/verify-sqlite-driver.mjs
+      - .github/workflows/sqlite-driver-matrix.yml
+  push:
+    branches:
+      - main
+    paths:
+      - package.json
+      - package-lock.json
+      - scripts/verify-sqlite-driver.mjs
+      - .github/workflows/sqlite-driver-matrix.yml
+
+permissions:
+  contents: read
+
+jobs:
+  sqlite-smoke:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-14, windows-latest]
+        node: [20.17.0, 22, 24, 26.7.0]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci --foreground-scripts
+      - run: node scripts/verify-sqlite-driver.mjs

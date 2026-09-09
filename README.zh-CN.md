@@ -9,7 +9,7 @@
 <p align="center">
   <a href="https://github.com/cloveric/tarocub/blob/main/LICENSE"><img src="https://img.shields.io/github/license/cloveric/tarocub?style=flat-square&color=818cf8" alt="License"></a>
   <img src="https://img.shields.io/badge/TypeScript-5.9-3178c6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript">
-  <img src="https://img.shields.io/badge/Node.js-%3E%3D20-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node.js">
+  <img src="https://img.shields.io/badge/Node.js-%3E%3D20.17-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node.js >= 20.17">
   <img src="https://img.shields.io/badge/%E5%B9%B3%E5%8F%B0-Windows%20%7C%20macOS%20%7C%20Linux-0078D4?style=flat-square&logo=node.js&logoColor=white" alt="Windows | macOS | Linux">
   <img src="https://img.shields.io/badge/%E5%BC%95%E6%93%8E-Codex%20%7C%20Claude%20%7C%20Kimi%20%7C%20DeepSeek%20%7C%20Antigravity-F97316?style=flat-square" alt="Codex | Claude | Kimi | DeepSeek Harness | Antigravity">
   <img src="https://img.shields.io/badge/DeepSeek%20Harness-%E5%8E%9F%E7%94%9F%E6%8F%92%E4%BB%B6-0f766e?style=flat-square" alt="DeepSeek Harness 原生插件">
@@ -145,7 +145,7 @@ export LARK_APP_SECRET="..."
 - 通过 `lark.doc.create` 创建飞书文档，适合长 specs/docs 和可评论反馈的材料；默认用 app/bot 身份创建，确实需要本机 `lark-cli` 用户身份时可显式 `as:"user"`；
 - 飞书云文档评论 @bot：bridge 会拉取评论上下文，跑同一套 engine，并回复到评论线程；评论里可以执行 `lark.doc.create`，但聊天投递/定时任务类工具会明确提示不支持，不再静默吞掉；
 - 通过 `/cron` 创建飞书/Lark 侧定时提醒和定时任务，每条任务保存 raw Lark chat 路由，scheduler 触发后能回到正确的 Lark 会话；
-- 通过 `/board` 管理持久 Kanban 任务，复用 Telegram 的 `board.json` 状态模型，同时 timeline 记为 `channel=lark`；
+- 通过 `/board` 管理持久 Kanban 任务，复用同一实例隔离的 `kanban.sqlite` 状态模型，同时 timeline 记为 `channel=lark`；
 - 通过 `/mini` 把飞书群 thread 注册成具名 peer，支持 ask/fan/chain/verify/crew 这类 thread-to-thread 协作；
 - 通过 `/fan`、`/chain`、`/verify` 调用 Agent Bus，复用 Telegram 同一套 `bus.parallel`、`bus.chain` 和 `bus.verifier` 配置；
 - 飞书合并转发消息会保留为 `<forwarded_lark_messages>` 任务上下文，方便“一键转发给 bot 处理”；
@@ -854,7 +854,7 @@ npm run dev -- telegram restore ./bak.cctb.gz --instance work --force  # 覆盖�
 
 ### Board：持久化 Kanban 任务板
 
-`/board` 是一个借鉴 Hermes Kanban 的轻量任务板。它优先解决"状态不能只放在对话里"的问题：任务、依赖、负责人、阻塞原因和完成总结都会写入 `board.json`，不会只靠模型记忆。这样它可以先服务 Mini Bus / Agent Bus 协作，后续再接自动执行。
+`/board` 是一个借鉴 Hermes Kanban 的轻量任务板。它优先解决"状态不能只放在对话里"的问题：任务、依赖、负责人、阻塞原因和完成总结都会写入实例私有的 `kanban.sqlite`，不会只靠模型记忆。旧 `board.json` 会在首次访问时校验、备份并一次性迁移，随后替换为防止旧版本误写的哨兵。这样它可以先服务 Mini Bus / Agent Bus 协作，后续再接自动执行。
 
 ```
 /board add 写 launch plan
@@ -1114,7 +1114,7 @@ coordinator 实例上的配置示例：
 
 ### 环境要求
 
-- **Node.js** >= 20
+- **Node.js** >= 20.17
 - **OpenAI Codex CLI**、**Claude Code CLI**、**Kimi Code CLI**、**DeepSeek Harness** 和/或 **Antigravity CLI** 已安装并认证
 - 一个 **Telegram 账号**（手机）
 

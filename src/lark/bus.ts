@@ -1,7 +1,8 @@
 import type { EngineApprovalDecision, EngineApprovalRequest, EngineStreamEvent } from "../codex/adapter.js";
 import { engineEventTimelineMetadata } from "../runtime/timeline-events.js";
+import { BoardService } from "../state/board-service.js";
 import { handleBoardTelegramCommand, type BoardCommandContext } from "../telegram/board-commands.js";
-import { BoardStore, normalizeBoardTaskId } from "../state/board-store.js";
+import { normalizeBoardTaskId } from "../state/board-store.js";
 import {
   handleCrewTelegramWorkflow,
   type CrewWorkflowContext,
@@ -262,7 +263,7 @@ async function sendLarkBoardReply(input: {
   const showMatch = input.commandText.trim().match(/^\/(?:board|kanban)(?:@\w+)?\s+(?:show|view)\s+(\S+)/i);
   const taskId = showMatch ? normalizeBoardTaskId(showMatch[1]!) : null;
   if (taskId) {
-    const task = await new BoardStore(input.stateDir).getTask(taskId);
+    const task = await new BoardService(input.stateDir).getTask(taskId);
     if (task) {
       await sendLarkCardWithFallback({
         channel: input.channel,

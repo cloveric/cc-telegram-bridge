@@ -155,7 +155,7 @@ Board command audit metadata commonly includes:
 - `review`
 - `checklistItemId`
 
-Board commands currently use the shared `command.handled` timeline event. The authoritative task state lives in `board.json`; audit/timeline entries are evidence, not the source of truth.
+Board commands currently use the shared `command.handled` timeline event. The authoritative task state lives in the instance-local `kanban.sqlite`; audit/timeline entries remain cross-system evidence, not the source of truth. The SQLite `events` table is reserved for authoritative Board-domain events introduced by later parity phases.
 
 ### Bus
 

@@ -35,7 +35,8 @@ usage.json
 usage.last-good.json
 file-workflow.json
 cron-jobs.json
-board.json
+kanban.sqlite
+kanban-assets/
 mini-bus.json
 delivery-obligations.json
 restart-loop.json
@@ -72,7 +73,7 @@ These files define how the instance should run.
 - `usage.json`
 - `file-workflow.json`
 - `cron-jobs.json`
-- `board.json`
+- `kanban.sqlite`
 - `mini-bus.json`
 - `delivery-obligations.json`
 
@@ -520,21 +521,29 @@ High sensitivity.
 
 It can contain durable prompts, chat IDs, user IDs, schedule intent, and last error details.
 
-## `board.json`
+## `kanban.sqlite`
 
 ### Path
 
-`<stateDir>/board.json`
+`<stateDir>/kanban.sqlite`
+
+Related migration and asset paths:
+
+- `<stateDir>/board.json` becomes a fail-closed sentinel after migration
+- `<stateDir>/board.json.migration-<timestamp>-<id>.bak` retains the exact legacy source
+- `<stateDir>/kanban-assets/` is the private owned-attachment root
 
 ### Owner
 
-[src/state/board-store.ts](../src/state/board-store.ts:1)
+[src/state/board-service.ts](../src/state/board-service.ts:1) owns the shared use-case boundary and typed errors. [src/state/sqlite-kanban-repository.ts](../src/state/sqlite-kanban-repository.ts:1) owns schema, transactions, migration, permissions, and diagnostics. [src/state/board-store.ts](../src/state/board-store.ts:1) remains the current domain-behavior and compatibility facade behind the service.
 
 ### Purpose
 
-Stores durable Kanban task state for `/board` commands. It is intentionally separate from Mini Bus and Agent Bus topology: the board tracks work, while bus layers decide who can execute work.
+Stores durable, instance-isolated Kanban task state for `/board` commands. It is intentionally separate from Mini Bus and Agent Bus topology: the board tracks work, while bus layers decide who can execute work. There is no cross-instance global board.
 
-Schema:
+Schema version 1 creates `meta`, `boards`, `board_contexts`, `tasks`, `task_dependencies`, `task_labels`, `checklist_items`, `artifacts`, `attachments`, `comments`, `runs`, `claims`, `events`, `notification_subscriptions`, and `migration_history`. Phase 1 uses the `main` board and current task projection; later parity phases activate the reserved richer surfaces through the same repository.
+
+Current `BoardService` compatibility projection (stored across normalized tables):
 
 - `nextTaskId`
 - `nextRunId`
@@ -587,7 +596,7 @@ Schema:
 
 ### Authoritative data
 
-This file is authoritative for Board task ids, task status, dependencies, assignees, blocked reasons, completion summaries, and lightweight run history.
+This database is authoritative for Board task ids, task status, dependencies, assignees, blocked reasons, completion summaries, and lightweight run history.
 
 It is also authoritative for card metadata used by planner/dispatcher flows: description, acceptance criteria, priority, labels, checklist, artifacts, review requirement, optional workspace metadata, run heartbeat evidence, and WIP limits.
 
@@ -595,8 +604,10 @@ It is not authoritative for access control, Mini Bus peers, or Agent Bus peer co
 
 ### Write rules
 
-- built on `JsonStore`
-- writes are serialized with a file mutex so concurrent command handlers and processes do not lose tasks
+- all production channel operations enter through `BoardService`
+- each state transition uses a short SQLite `BEGIN IMMEDIATE` transaction
+- foreign keys, WAL mode, a bounded busy timeout, full synchronization, and owner-only permissions are enabled
+- normalized tables and constraints protect task ids, dependency edges, run ids, and the one-active-run-per-task invariant
 - task ids are normalized as `B<number>`
 - dependency completion promotes waiting `todo` tasks to `ready` when all dependencies are done
 - WIP limits are enforced before a task can start a new run
@@ -617,16 +628,21 @@ It is not authoritative for access control, Mini Bus peers, or Agent Bus peer co
 
 ### Recovery rules
 
-- missing file -> empty board
-- invalid file throws and prevents `/board` command handling from using stale or partial task state
+- neither database nor legacy file -> initialize a private empty `main` board
+- valid legacy `board.json` -> validate it, copy an exact owner-only backup, import into a temporary database, reconcile counts/integrity/foreign keys/cycles/active runs, atomically publish, then replace the legacy path with a fail-closed sentinel
+- invalid legacy JSON -> abort before database creation and leave the source unchanged
+- failed relational import -> leave `board.json` authoritative and unchanged; retain any backup already taken
+- existing empty, corrupt, newer-schema, or conflicting database/legacy state -> fail closed with an actionable error; never reset to an empty board
+- a published database with the matching unswapped legacy source -> finish the interrupted sentinel step using the recorded migration receipt
 - old/missing counters are normalized from the maximum stored task/run ids
 - stale-run recovery scans active runs directly, so it also repairs legacy task/run status drift
+- migration backups are never deleted automatically
 
 ### Sensitivity
 
 High sensitivity.
 
-It can contain durable task titles, operator intent, summaries, chat IDs, user IDs, topic IDs, and workflow topology hints.
+The database, WAL/SHM files, retained migration backups, and asset directory can contain durable task titles, operator intent, summaries, chat IDs, user IDs, topic IDs, local paths, and workflow topology hints. They are mode `0600` (files) or `0700` (directories).
 
 ## `mini-bus.json`
 

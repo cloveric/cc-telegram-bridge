@@ -7,13 +7,13 @@ import type {
   EngineStreamEvent,
 } from "../codex/adapter.js";
 import {
-  BoardStore,
   normalizeBoardTaskId,
   type BoardTaskPriority,
   type BoardTaskRecord,
   type BoardTaskStatus,
   type BoardTaskWorkspace,
 } from "../state/board-store.js";
+import { BoardService, type BoardOperations } from "../state/board-service.js";
 import { MiniBusStore, type MiniBusPeerRecord } from "../state/mini-bus-store.js";
 import {
   appendUpdateHandleAuditEventBestEffort,
@@ -509,7 +509,7 @@ function assertBoardRunReady(task: BoardTaskRecord): void {
 
 async function runBoardTask(input: {
   stateDir: string;
-  store: BoardStore;
+  store: BoardOperations;
   miniBusStore: Pick<MiniBusStore, "getPeer">;
   normalized: NormalizedTelegramMessage;
   context: BoardCommandContext;
@@ -680,7 +680,7 @@ export async function handleBoardTelegramCommand(input: {
   locale: Locale;
   normalized: NormalizedTelegramMessage;
   context: BoardCommandContext;
-  store?: BoardStore;
+  store?: BoardOperations;
   miniBusStore?: Pick<MiniBusStore, "getPeer">;
 }): Promise<boolean> {
   const action = parseBoardCommand(input.normalized.text);
@@ -689,7 +689,7 @@ export async function handleBoardTelegramCommand(input: {
   }
 
   const { stateDir, startedAt, locale, normalized, context } = input;
-  const store = input.store ?? new BoardStore(stateDir);
+  const store = input.store ?? new BoardService(stateDir);
   const miniBusStore = input.miniBusStore ?? new MiniBusStore(stateDir);
 
   try {

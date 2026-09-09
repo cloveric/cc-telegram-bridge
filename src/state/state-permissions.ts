@@ -1,4 +1,4 @@
-import { chmod, readdir, stat } from "node:fs/promises";
+import { chmod, lstat, readdir } from "node:fs/promises";
 import path from "node:path";
 
 // Instance state under `~/.cctb/<instance>/` holds bot tokens (.env, lark.env),
@@ -22,13 +22,16 @@ const SENSITIVE_STATE_FILES = [
   "lark-chat-id-map.json",
   "usage.json",
   "board.json",
+  "kanban.sqlite",
+  "kanban.sqlite-wal",
+  "kanban.sqlite-shm",
   "file-workflow.json",
   path.join("cron", "jobs.json"),
   path.join("timers", "jobs.json"),
 ];
 
 /** Whole subtrees whose contents are sensitive (dirs 0700, files 0600). */
-const SENSITIVE_STATE_TREES = ["asr-jobs"];
+const SENSITIVE_STATE_TREES = ["asr-jobs", "kanban-assets"];
 
 /** Any log file: service.stderr.log is raw, unredacted engine stderr. */
 const LOG_FILE_PATTERN = /\.log(?:\.jsonl)?(?:\.\d+)?$/i;
@@ -48,6 +51,10 @@ function warnOnce(stateDir: string, error: unknown): void {
 
 async function chmodIfExists(targetPath: string, mode: number): Promise<void> {
   try {
+    const stats = await lstat(targetPath);
+    if (stats.isSymbolicLink()) {
+      return;
+    }
     await chmod(targetPath, mode);
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code;
@@ -59,6 +66,18 @@ async function chmodIfExists(targetPath: string, mode: number): Promise<void> {
 }
 
 async function tightenTree(rootPath: string): Promise<void> {
+  try {
+    const rootStats = await lstat(rootPath);
+    if (rootStats.isSymbolicLink() || !rootStats.isDirectory()) {
+      return;
+    }
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === "ENOENT" || code === "ENOTDIR") {
+      return;
+    }
+    throw error;
+  }
   let entries;
   try {
     entries = await readdir(rootPath, { withFileTypes: true });
@@ -105,8 +124,8 @@ export async function ensureStateTreePermissions(rootPath: string): Promise<void
  */
 export async function ensureStateDirPermissions(stateDir: string): Promise<void> {
   try {
-    const stats = await stat(stateDir).catch(() => null);
-    if (!stats?.isDirectory()) {
+    const stats = await lstat(stateDir).catch(() => null);
+    if (!stats?.isDirectory() || stats.isSymbolicLink()) {
       return;
     }
 

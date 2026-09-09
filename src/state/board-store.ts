@@ -1,7 +1,5 @@
 import path from "node:path";
 
-import { withFileMutex } from "./file-mutex.js";
-import { JsonStore } from "./json-store.js";
 import {
   BoardStoreStateSchema,
   type BoardArtifact,
@@ -15,6 +13,10 @@ import {
   type BoardTaskWorkspace,
   type BoardWipLimits,
 } from "./board-store-schema.js";
+import {
+  SqliteKanbanRepository,
+  type BoardDiagnostics,
+} from "./sqlite-kanban-repository.js";
 
 export type {
   BoardStoreState,
@@ -234,7 +236,7 @@ function normalizeWorkspace(
   };
 }
 
-function parseBoardStoreState(value: unknown): BoardStoreState {
+export function parseBoardStoreState(value: unknown): BoardStoreState {
   const result = BoardStoreStateSchema.safeParse(value);
   if (!result.success) {
     throw new Error(`invalid board store state: ${result.error.message}`);
@@ -349,13 +351,22 @@ function findTask(tasks: BoardTaskRecord[], id: string): BoardTaskRecord {
 }
 
 export class BoardStore {
-  private readonly store: JsonStore<BoardStoreState>;
-  private readonly filePath: string;
+  private readonly repository: SqliteKanbanRepository;
+  private readonly store: {
+    read(defaultValue: BoardStoreState): Promise<BoardStoreState>;
+    write(value: BoardStoreState): Promise<void>;
+  };
   private pendingWrite: Promise<void> = Promise.resolve();
 
   constructor(stateDir: string) {
-    this.filePath = resolveBoardStorePath(stateDir);
-    this.store = new JsonStore(this.filePath, parseBoardStoreState);
+    this.repository = new SqliteKanbanRepository(stateDir, {
+      parseState: parseBoardStoreState,
+      createDefaultState: defaultState,
+    });
+    this.store = {
+      read: async () => await this.repository.readState(),
+      write: async (value) => await this.repository.writeState(value),
+    };
   }
 
   async listTasks(status?: BoardTaskStatus): Promise<BoardTaskRecord[]> {
@@ -1003,14 +1014,18 @@ export class BoardStore {
 
   private async enqueueWrite<T>(operation: () => Promise<T>): Promise<T> {
     const run = this.pendingWrite.then(
-      () => withFileMutex(this.filePath, operation),
-      () => withFileMutex(this.filePath, operation),
+      () => this.repository.transaction(operation),
+      () => this.repository.transaction(operation),
     );
     this.pendingWrite = run.then(
       () => undefined,
       () => undefined,
     );
     return await run;
+  }
+
+  async diagnostics(): Promise<BoardDiagnostics> {
+    return await this.repository.diagnostics();
   }
 }
 

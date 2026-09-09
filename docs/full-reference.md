@@ -11,7 +11,7 @@
 <p align="center">
   <a href="https://github.com/cloveric/tarocub/blob/main/LICENSE"><img src="https://img.shields.io/github/license/cloveric/tarocub?style=flat-square&color=818cf8" alt="License"></a>
   <img src="https://img.shields.io/badge/TypeScript-5.9-3178c6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript">
-  <img src="https://img.shields.io/badge/Node.js-%3E%3D20-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node.js">
+  <img src="https://img.shields.io/badge/Node.js-%3E%3D20.17-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node.js >= 20.17">
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-0078D4?style=flat-square&logo=node.js&logoColor=white" alt="Windows | macOS | Linux">
   <img src="https://img.shields.io/badge/engines-Codex%20%7C%20Claude%20%7C%20Kimi%20%7C%20DeepSeek%20%7C%20Antigravity-F97316?style=flat-square" alt="Codex | Claude | Kimi | DeepSeek | Antigravity">
   <img src="https://img.shields.io/badge/tests-Vitest-6E9F18?style=flat-square&logo=vitest&logoColor=white" alt="Vitest">
@@ -128,7 +128,7 @@ The Lark channel currently supports:
 - Feishu Docs comment mentions: when a cloud-doc comment @mentions the bot, the bridge fetches comment context, marks the triggering reply with a temporary Typing reaction when possible, runs the same engine, replies in-thread or falls back to a top-level comment when the document does not allow thread replies, and can execute `lark.doc.create`; chat-only delivery/reminder tools are reported as unsupported instead of being silently swallowed;
 - Lark-delivered scheduled reminders/tasks through `/cron` or `cron.add` tool tags, with raw Lark chat/thread routing stored on each job so scheduler fires can return to the correct Lark conversation;
 - archive summaries with a Lark `Continue Analysis` card button and `/continue` fallback, matching Telegram's pause-then-continue archive workflow;
-- durable Kanban task state through `/board`, backed by the same `board.json` model as Telegram while writing timeline entries with `channel=lark`;
+- durable Kanban task state through `/board`, backed by the same instance-local `kanban.sqlite` model as Telegram while writing timeline entries with `channel=lark`;
 - thread-to-thread Mini Bus workflows through `/mini`, so Lark group threads can be registered as named peers for ask/fan/chain/verify/crew flows;
 - Agent Bus delegation through `/fan`, `/chain`, and `/verify`, reusing the same configured `bus.parallel`, `bus.chain`, and `bus.verifier` peers as Telegram;
 - merged forwarded Feishu messages are expanded through the Lark message API and preserved as `<forwarded_lark_messages>` task context for one-click handoff workflows, so the engine sees the forwarded child messages instead of only Feishu's `Merged and Forwarded Message` placeholder;
@@ -1008,7 +1008,7 @@ In any bot's Telegram chat:
 
 ### Board: durable Kanban tasks
 
-`/board` adds a small Hermes-inspired Kanban layer on top of Telegram. It is intentionally state-first: tasks, dependencies, assignees, blocked reasons, and completion summaries are stored in `board.json`, not only in the model conversation. This makes it useful for coordinating Mini Bus or Agent Bus work without relying on "remember what we were doing".
+`/board` adds a small Hermes-inspired Kanban layer on top of Telegram. It is intentionally state-first: tasks, dependencies, assignees, blocked reasons, and completion summaries are stored in the instance-local `kanban.sqlite`, not only in the model conversation. A valid legacy `board.json` is backed up and migrated once; the original path then becomes a fail-closed sentinel so an older build cannot silently create an empty board. This makes it useful for coordinating Mini Bus or Agent Bus work without relying on "remember what we were doing".
 
 ```
 /board add Draft launch plan
@@ -1268,7 +1268,7 @@ All bots can talk to all bots. Simplest config, best for small teams (3-5 bots).
 
 ### Prerequisites
 
-- **Node.js** >= 20
+- **Node.js** >= 20.17
 - **OpenAI Codex CLI**, **Claude Code CLI**, **Kimi Code CLI**, **DeepSeek Harness**, and/or **Antigravity CLI** installed and authenticated
 - A **Telegram account** (phone)
 

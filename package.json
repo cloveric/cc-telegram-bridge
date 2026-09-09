@@ -1,6 +1,6 @@
 {
   "name": "tarocub",
-  "version": "0.1.320",
+  "version": "0.1.321",
   "description": "Feishu/Lark-first local AI agent gateway for Codex, Claude Code, Kimi Code, DeepSeek Harness, and Antigravity.",
   "private": true,
   "license": "MIT",
@@ -25,6 +25,9 @@
     "typescript"
   ],
   "type": "module",
+  "engines": {
+    "node": ">=20.17.0"
+  },
   "scripts": {
     "postinstall": "node scripts/patch-lark-sdk-card-frames.mjs",
     "build": "tsc -p tsconfig.json",
@@ -34,6 +37,7 @@
     "smoke:claude-auth": "bash scripts/smoke-claude-auth.sh",
     "test": "vitest run",
     "test:watch": "vitest",
+    "verify:sqlite-driver": "node scripts/verify-sqlite-driver.mjs",
     "verify:deepseek-plugin": "npm --prefix deepseek-harness-plugin run verify",
     "publish:deepseek-plugin": "bash scripts/publish-deepseek-harness-plugin.sh"
   },
@@ -46,6 +50,7 @@
     "https-proxy-agent": "^9.0.0",
     "pdf-parse": "^2.4.5",
     "qrcode-terminal": "^0.12.0",
+    "sqlite3": "6.0.1",
     "ws": "^8.21.3",
     "zod": "^4.1.5"
   },

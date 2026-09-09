@@ -150,6 +150,13 @@ The Telegram path is now intentionally layered.
 
 ## State And Config
 
+- `src/state/board-service.ts`
+  Shared Board application boundary and typed domain errors used by channel handlers.
+- `src/state/sqlite-kanban-repository.ts`
+  Instance-local SQLite schema, transactional state persistence, legacy `board.json`
+  migration, fail-closed sentinel, permissions, and diagnostics.
+- `src/state/board-store.ts`
+  Current Board domain behavior and compatibility facade behind `BoardService`.
 - `src/telegram/instance-config.ts`
   Telegram-side `config.json` read/write and normalization.
 - `src/state/session-store.ts`

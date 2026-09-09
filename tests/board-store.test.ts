@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { removeTempRoot } from "./helpers/temp-files.js";
@@ -294,19 +294,24 @@ describe("BoardStore", () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "telegram-board-store-"));
 
     try {
-      const actor = { chatId: -100123, userId: 42, conversationKey: "chat:-100123" };
-      const store = new BoardStore(root);
-      await store.createTask({ title: "Drifted worker", createdBy: actor });
-      await store.startTask("B1");
-
       const filePath = path.join(root, "board.json");
-      const state = JSON.parse(await readFile(filePath, "utf8")) as {
-        tasks: Array<{ status: string; runs: Array<{ startedAt: string; lastHeartbeatAt?: string }> }>;
-      };
-      state.tasks[0]!.status = "ready";
-      state.tasks[0]!.runs[0]!.startedAt = "2026-06-01T00:00:00.000Z";
-      delete state.tasks[0]!.runs[0]!.lastHeartbeatAt;
-      await writeFile(filePath, `${JSON.stringify(state, null, 2)}\n`, "utf8");
+      await writeFile(filePath, JSON.stringify({
+        nextTaskId: 2,
+        nextRunId: 2,
+        tasks: [{
+          id: "B1",
+          title: "Drifted worker",
+          status: "ready",
+          createdAt: "2026-06-01T00:00:00.000Z",
+          updatedAt: "2026-06-01T00:00:00.000Z",
+          createdBy: { chatId: -100123, userId: 42, conversationKey: "chat:-100123" },
+          runs: [{
+            id: "R1",
+            status: "running",
+            startedAt: "2026-06-01T00:00:00.000Z",
+          }],
+        }],
+      }, null, 2), { encoding: "utf8", mode: 0o600 });
 
       const recovered = await new BoardStore(root).recoverStaleRuns({
         olderThanMs: 15 * 60 * 1000,
