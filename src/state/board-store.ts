@@ -626,9 +626,6 @@ export class BoardStore {
       const state = await this.store.read(defaultState());
       const recovered: BoardTaskRecord[] = [];
       for (const task of state.tasks) {
-        if (task.status !== "running") {
-          continue;
-        }
         const activeRun = [...task.runs].reverse().find((run) => run.status === "running");
         if (!activeRun) {
           continue;
@@ -822,11 +819,21 @@ export class BoardStore {
       throw new Error("board block reason is required");
     }
 
-    return await this.updateTask(normalizedId, (_state, task) => {
+    return await this.enqueueWrite(async () => {
+      const state = await this.store.read(defaultState());
+      const task = findTask(state.tasks, normalizedId);
+      const timestamp = nowIso();
+      const activeRun = [...task.runs].reverse().find((run) => run.status === "running");
+      if (activeRun) {
+        activeRun.status = "failed";
+        activeRun.completedAt = timestamp;
+        activeRun.error = normalizedReason;
+      }
       task.status = "blocked";
       task.blockedReason = normalizedReason;
-      task.updatedAt = nowIso();
-      return task;
+      task.updatedAt = timestamp;
+      await this.store.write(state);
+      return cloneTask(task);
     });
   }
 
@@ -872,7 +879,7 @@ export class BoardStore {
       delete task.blockedReason;
       const activeRun = [...task.runs].reverse().find((run) => run.status === "running");
       if (activeRun) {
-        activeRun.status = "done";
+        activeRun.status = shouldReview ? "review_requested" : "done";
         activeRun.completedAt = timestamp;
         if (task.summary) {
           activeRun.summary = task.summary;
@@ -918,7 +925,7 @@ export class BoardStore {
         task.summary = normalizedSummary;
       }
       delete task.blockedReason;
-      activeRun.status = "done";
+      activeRun.status = shouldReview ? "review_requested" : "done";
       activeRun.completedAt = timestamp;
       if (task.summary) {
         activeRun.summary = task.summary;

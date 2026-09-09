@@ -516,7 +516,12 @@ describe("handleBoardTelegramCommand", () => {
         },
       });
 
-      await expect(store.getTask("B1")).resolves.toMatchObject({ status: "review" });
+      expect(api.sendMessage).toHaveBeenLastCalledWith(-100123, "Submitted B1 for review");
+      expect(api.sendMessage).not.toHaveBeenCalledWith(-100123, expect.stringContaining("Done B1"));
+      await expect(store.getTask("B1")).resolves.toMatchObject({
+        status: "review",
+        runs: [expect.objectContaining({ id: "R1", status: "review_requested" })],
+      });
 
       await handleBoardTelegramCommand({
         stateDir: root,
@@ -530,6 +535,38 @@ describe("handleBoardTelegramCommand", () => {
       });
 
       await expect(store.getTask("B1")).resolves.toMatchObject({ status: "done" });
+    } finally {
+      await removeTempRoot(root);
+    }
+  });
+
+  it("reports review-gated completion accurately in Chinese", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "telegram-board-commands-"));
+    const api = {
+      sendMessage: vi.fn().mockResolvedValue({ message_id: 11 }),
+    };
+    const store = new BoardStore(root);
+    await store.createTask({
+      title: "复核任务",
+      createdBy: { chatId: -100123, userId: 42, conversationKey: "chat:-100123" },
+      review: { required: true },
+    });
+    await store.startTask("B1");
+
+    try {
+      await handleBoardTelegramCommand({
+        stateDir: root,
+        startedAt: Date.now() - 10,
+        locale: "zh",
+        normalized: normalized("/board done B1 等待复核"),
+        context: {
+          api: api as never,
+          instanceName: "default",
+        },
+      });
+
+      expect(api.sendMessage).toHaveBeenLastCalledWith(-100123, "已提交复核 B1");
+      expect(api.sendMessage).not.toHaveBeenCalledWith(-100123, expect.stringContaining("已完成 B1"));
     } finally {
       await removeTempRoot(root);
     }

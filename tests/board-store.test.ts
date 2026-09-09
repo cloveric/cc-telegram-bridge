@@ -1,4 +1,4 @@
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { removeTempRoot } from "./helpers/temp-files.js";
@@ -208,6 +208,42 @@ describe("BoardStore", () => {
     }
   });
 
+  it("closes the active run when blocking work so the task can restart after unblock", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "telegram-board-store-"));
+
+    try {
+      const actor = { chatId: -100123, userId: 42, conversationKey: "chat:-100123" };
+      const store = new BoardStore(root);
+      await store.createTask({ title: "Long worker", createdBy: actor });
+      await store.startTask("B1");
+
+      const blocked = await store.blockTask("B1", "waiting on API");
+      expect(blocked).toMatchObject({
+        status: "blocked",
+        blockedReason: "waiting on API",
+        runs: [
+          expect.objectContaining({
+            id: "R1",
+            status: "failed",
+            completedAt: expect.any(String),
+            error: "waiting on API",
+          }),
+        ],
+      });
+
+      await store.unblockTask("B1");
+      await expect(store.startTask("B1")).resolves.toMatchObject({
+        status: "running",
+        runs: [
+          expect.objectContaining({ id: "R1", status: "failed" }),
+          expect.objectContaining({ id: "R2", status: "running" }),
+        ],
+      });
+    } finally {
+      await removeTempRoot(root);
+    }
+  });
+
   it("records worker heartbeats and recovers stale running tasks", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "telegram-board-store-"));
 
@@ -248,6 +284,39 @@ describe("BoardStore", () => {
             error: expect.stringContaining("stale board run recovered"),
           }),
         ],
+      });
+    } finally {
+      await removeTempRoot(root);
+    }
+  });
+
+  it("recovers a stale active run even when legacy task status drifted away from running", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "telegram-board-store-"));
+
+    try {
+      const actor = { chatId: -100123, userId: 42, conversationKey: "chat:-100123" };
+      const store = new BoardStore(root);
+      await store.createTask({ title: "Drifted worker", createdBy: actor });
+      await store.startTask("B1");
+
+      const filePath = path.join(root, "board.json");
+      const state = JSON.parse(await readFile(filePath, "utf8")) as {
+        tasks: Array<{ status: string; runs: Array<{ startedAt: string; lastHeartbeatAt?: string }> }>;
+      };
+      state.tasks[0]!.status = "ready";
+      state.tasks[0]!.runs[0]!.startedAt = "2026-06-01T00:00:00.000Z";
+      delete state.tasks[0]!.runs[0]!.lastHeartbeatAt;
+      await writeFile(filePath, `${JSON.stringify(state, null, 2)}\n`, "utf8");
+
+      const recovered = await new BoardStore(root).recoverStaleRuns({
+        olderThanMs: 15 * 60 * 1000,
+        now: new Date("2026-06-01T00:16:00.000Z"),
+      });
+
+      expect(recovered.map((task) => task.id)).toEqual(["B1"]);
+      await expect(new BoardStore(root).getTask("B1")).resolves.toMatchObject({
+        status: "blocked",
+        runs: [expect.objectContaining({ id: "R1", status: "failed" })],
       });
     } finally {
       await removeTempRoot(root);
@@ -465,7 +534,7 @@ describe("BoardStore", () => {
       await expect(store.startTask("B2")).rejects.toThrow("cannot be started from review");
       await expect(store.getTask("B2")).resolves.toMatchObject({
         status: "review",
-        runs: [expect.objectContaining({ id: "R1", status: "done" })],
+        runs: [expect.objectContaining({ id: "R1", status: "review_requested" })],
       });
     } finally {
       await removeTempRoot(root);
@@ -490,12 +559,16 @@ describe("BoardStore", () => {
         status: "review",
         summary: "worker implemented",
         review: { required: true, reviewer: "reviewer" },
+        runs: [expect.objectContaining({ id: "R1", status: "review_requested" })],
       });
       await expect(store.getTask("B2")).resolves.toMatchObject({ status: "todo" });
 
       const approved = await store.approveTask("B1");
       expect(approved.promotedTaskIds).toEqual(["B2"]);
-      await expect(store.getTask("B1")).resolves.toMatchObject({ status: "done" });
+      await expect(store.getTask("B1")).resolves.toMatchObject({
+        status: "done",
+        runs: [expect.objectContaining({ id: "R1", status: "review_requested" })],
+      });
       await expect(store.getTask("B2")).resolves.toMatchObject({ status: "ready" });
     } finally {
       await removeTempRoot(root);

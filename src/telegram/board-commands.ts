@@ -1038,15 +1038,18 @@ export async function handleBoardTelegramCommand(input: {
     if (action.kind === "done") {
       const result = await store.completeTask(action.id, action.summary);
       const promotedText = renderPromoted(result.promotedTaskIds, locale);
+      const completionText = result.task.status === "review"
+        ? locale === "zh" ? `已提交复核 ${result.task.id}` : `Submitted ${result.task.id} for review`
+        : locale === "zh" ? `已完成 ${result.task.id}` : `Done ${result.task.id}`;
       await replyAndAudit({
         stateDir,
         startedAt,
         locale,
         normalized,
         context,
-        text: [locale === "zh" ? `已完成 ${result.task.id}` : `Done ${result.task.id}`, promotedText].filter(Boolean).join("\n"),
+        text: [completionText, promotedText].filter(Boolean).join("\n"),
         action: "done",
-        metadata: { boardTaskId: result.task.id, promotedTaskIds: result.promotedTaskIds },
+        metadata: { boardTaskId: result.task.id, boardTaskStatus: result.task.status, promotedTaskIds: result.promotedTaskIds },
       });
       return true;
     }

@@ -101,6 +101,7 @@ export default function App() {
   const [instances, setInstances] = useState<InstanceSummary[] | null>(null);
   const [listError, setListError] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [toast, setToast] = useState<Toast | null>(null);
 
   const loadInstances = useCallback(async () => {
@@ -128,6 +129,15 @@ export default function App() {
     return () => window.clearTimeout(id);
   }, [toast]);
 
+  useEffect(() => {
+    if (!sidebarOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setSidebarOpen(false);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [sidebarOpen]);
+
   const onSaved = useCallback(
     (text: string) => {
       setToast({ kind: "success", text });
@@ -144,13 +154,32 @@ export default function App() {
           <span className="brand-name">TaroCub</span>
           <span className="brand-sub">Config Console</span>
         </div>
-        <button className="btn ghost" onClick={() => void loadInstances()} title="Refresh instances">
-          Refresh
-        </button>
+        <div className="topbar-actions">
+          <button
+            className="btn ghost mobile-nav-toggle"
+            type="button"
+            aria-expanded={sidebarOpen}
+            aria-controls="instance-sidebar"
+            onClick={() => setSidebarOpen((open) => !open)}
+          >
+            Instances
+          </button>
+          <button className="btn ghost" onClick={() => void loadInstances()} title="Refresh instances">
+            Refresh
+          </button>
+        </div>
       </header>
 
       <div className="layout">
-        <aside className="sidebar">
+        {sidebarOpen && (
+          <button
+            type="button"
+            className="sidebar-backdrop"
+            aria-label="Close instance list"
+            onClick={() => setSidebarOpen(false)}
+          />
+        )}
+        <aside id="instance-sidebar" className={`sidebar${sidebarOpen ? " open" : ""}`}>
           <div className="sidebar-head">
             <span>Instances</span>
             {instances && <span className="count">{instances.length}</span>}
@@ -159,7 +188,10 @@ export default function App() {
             instances={instances}
             error={listError}
             selected={selected}
-            onSelect={setSelected}
+            onSelect={(name) => {
+              setSelected(name);
+              setSidebarOpen(false);
+            }}
           />
         </aside>
 

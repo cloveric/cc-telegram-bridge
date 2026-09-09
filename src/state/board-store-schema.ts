@@ -12,7 +12,7 @@ export const BoardTaskActorSchema = z.object({
 
 export const BoardTaskRunSchema = z.object({
   id: z.string().min(1),
-  status: z.enum(["running", "done", "failed"]),
+  status: z.enum(["running", "review_requested", "done", "failed"]),
   startedAt: z.string(),
   lastHeartbeatAt: z.string().optional(),
   heartbeatNote: z.string().optional(),

@@ -577,7 +577,7 @@ Schema:
     - `conversationKey`
   - `runs[]`
     - `id`
-    - `status`
+    - `status`: `running`, `review_requested`, `done`, or `failed`
     - `startedAt`
     - `lastHeartbeatAt?`
     - `heartbeatNote?`
@@ -611,7 +611,8 @@ It is not authoritative for access control, Mini Bus peers, or Agent Bus peer co
 - `/board run <id>` starts one ready task, sends the task card to its assignee, then closes the run as done or failed
 - `/board run <id>` resolves assignees by preferring Mini Bus peers in the current group, then falling back to Agent Bus instance names
 - `fail` closes the active run as failed and moves the task to `blocked`
-- tasks with `review.required` move to `review` after completion; dependents are promoted only after approval
+- blocking a running task closes its active run as failed before moving the task to `blocked`
+- tasks with `review.required` move to `review` after completion and record the run as `review_requested`; dependents are promoted only after approval
 - completed tasks retain their original source chat/topic metadata for auditability
 
 ### Recovery rules
@@ -619,6 +620,7 @@ It is not authoritative for access control, Mini Bus peers, or Agent Bus peer co
 - missing file -> empty board
 - invalid file throws and prevents `/board` command handling from using stale or partial task state
 - old/missing counters are normalized from the maximum stored task/run ids
+- stale-run recovery scans active runs directly, so it also repairs legacy task/run status drift
 
 ### Sensitivity
 
