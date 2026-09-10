@@ -198,12 +198,15 @@ override that retains Kimi's `${base_prompt}` and `${plugin_sections}`. It also
 exposes local Codex skills to bridge-owned Kimi workspaces and injects the
 built-in Search MCP alongside Kimi's native MCP/plugins.
 
-The current compatibility baseline is **Kimi Code 0.41.0**. A live, no-prompt
-ACP probe verified that both `session/new` and `session/load` accept the
-schema-valid stdio Search MCP and actually start its child process. TaroCub
-therefore always supplies the complete configured MCP list and fails closed if
-Kimi rejects session initialization; it no longer retries by silently removing
-stdio search. Native Kimi user/project MCP files and plugins remain independent.
+The current compatibility baseline is **Kimi Code 0.42.0**. A live ACP probe
+verified `session/new` and cross-process `session/load`, structured questions,
+Search MCP execution, cancellation followed by worker reuse, and exactly-once
+background Agent completion. TaroCub always supplies the complete configured
+MCP list and fails closed if Kimi rejects session initialization; it does not
+retry by silently removing stdio search. Native Kimi user/project MCP files and
+plugins remain independent. Kimi 0.42 always enables its secondary-model pool,
+but without a `[secondary_model]` section subagents inherit the caller's model,
+so existing TaroCub instances do not need a new model setting.
 Kimi `full-auto` maps to ACP `yolo`; delegated terminal working directories are
 kept inside the real workspace, but this is not an OS sandbox. Explicit
 `bypass` maps to ACP `auto`. Starting with Kimi 0.41.0, `auto` is true Never Ask
@@ -288,7 +291,10 @@ flow applies when an engine such as Claude supplies it.
 Select DeepSeek in either channel with `/engine deepseek` (or use
 `telegram engine deepseek --instance <name>`). Install and authenticate `dsh`
 first; TaroCub resolves `DSH_EXECUTABLE` and otherwise uses `dsh` from `PATH`.
-The verified compatibility baseline is **DeepSeek Harness 0.1.2-rc.1**.
+The verified compatibility baseline is **DeepSeek Harness 0.1.2-rc.1**. This is
+also the npm `latest` version at the 2026-09-10 verification point. Newer alpha
+builds use breaking session and plugin APIs and are not a supported baseline
+until they receive a separate protocol probe.
 
 Install the standalone native Harness bundle:
 

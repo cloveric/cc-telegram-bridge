@@ -4,6 +4,27 @@ This document is the release contract for TaroCub's `deepseek` engine. It
 describes behavior verified against **DeepSeek Harness 0.1.2-rc.1**, not a
 prompt-level approximation of another engine.
 
+## Version Policy
+
+At the 2026-09-10 verification point, `0.1.2-rc.1` is both the locally installed
+version and the npm `latest`/`next` release. TaroCub's authenticated
+`/api/remote.mux` transport matches that version's APIProxy-to-Remote migration.
+The npm `alpha` tag currently points to `0.1.5-alpha.2` and is intentionally
+outside this compatibility contract: `0.1.3-alpha.1` introduces
+`SessionHandle`, session locking, and session format v2, while the 0.1.5 alpha
+line advances the session format and plugin APIs again. Adopting those builds
+requires a pinned migration and fresh live probes; they must not be treated as
+a drop-in update to the verified Host protocol.
+
+The rc.1 package line has an
+[upstream compatibility report](https://github.com/deepseek-ai/deepseek-harness/discussions/5854)
+about the removed `@deepseek-ai/dsh-llm` re-export of `assertNever`. TaroCub and its bundled search
+plugin do not import that symbol. The installed Web bundle also includes the
+`subagent-model-selection-settings` row required by the managed `web` profile.
+The bridge Host smoke probe and standalone plugin verification both pass; a
+custom third-party profile that imports the removed re-export remains an
+upstream compatibility concern rather than a TaroCub fallback target.
+
 ## Native Web Search Plugin
 
 The package in `deepseek-harness-plugin/` is the canonical source for a genuine

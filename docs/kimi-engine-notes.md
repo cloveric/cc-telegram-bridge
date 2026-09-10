@@ -44,6 +44,32 @@ ACP was verified to provide:
 This is sufficient to build the adapter without simulating unavailable Kimi
 features.
 
+## Kimi 0.42.0 Compatibility Re-probe
+
+- Probe date: 2026-09-10
+- Binary: `~/.kimi-code/bin/kimi`
+- Version: `0.42.0`
+- Integration protocol: persistent `kimi acp`
+
+A live end-to-end probe used TaroCub's real adapter and installed binary. It
+verified a new session, cross-process `session/list` plus `session/load`, a
+structured `AskUserQuestion` permission request, Search MCP tool execution with
+an object result, cancellation of a running turn, a successful next turn on the
+same worker, and one terminal notification from a background Agent task. The
+0.41-to-0.42 upstream diff did not change the ACP surface used by TaroCub, so no
+runtime compatibility shim is required.
+
+Kimi 0.42 always enables its secondary-model pool. When `[secondary_model]` is
+absent, subagents inherit the caller's model, which preserves existing TaroCub
+instance behavior. The release also preserves distinct MCP
+`structuredContent`; the adapter already accepts object-valued tool results and
+normalizes them without string coercion loss. Kimi may now choose a cloud-
+recommended default thinking level, but TaroCub explicitly applies its stored
+effort (or bridge default `high`) through ACP, so that upstream default does not
+silently change a bot. The experimental update panel requires a UI capability
+that TaroCub does not advertise. See the
+[0.42.0 release](https://github.com/MoonshotAI/kimi-code/releases/tag/%40moonshot-ai/kimi-code%400.42.0).
+
 ## Kimi 0.41.0 Compatibility Re-probe
 
 - Probe date: 2026-09-05
@@ -114,10 +140,11 @@ a fresh ACP process with the same MCP configuration. Both `session/new` and
 child process actually started each time. No stdio runtime-identity error or
 fallback path was observed.
 
-The compatibility baseline is therefore 0.39.1. TaroCub always sends the full
-configured MCP list and surfaces session-initialization errors instead of
-silently retrying without stdio search. This makes MCP regressions visible and
-prevents a Bot from appearing healthy after its search capability disappeared.
+At that probe point, the compatibility baseline advanced to 0.39.1. TaroCub
+always sends the full configured MCP list and surfaces session-initialization
+errors instead of silently retrying without stdio search. This makes MCP
+regressions visible and prevents a Bot from appearing healthy after its search
+capability disappeared.
 
 The earlier 0.37.2 probe established Kimi's delegated ACP terminal behavior and
 also exposed the now-fixed stdio runtime-identity regression. TaroCub continues
