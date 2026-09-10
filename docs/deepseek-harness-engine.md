@@ -1,7 +1,7 @@
 # DeepSeek Harness Engine
 
 This document is the release contract for TaroCub's `deepseek` engine. It
-describes behavior verified against **DeepSeek Harness 0.1.1-rc.2**, not a
+describes behavior verified against **DeepSeek Harness 0.1.2-rc.1**, not a
 prompt-level approximation of another engine.
 
 ## Native Web Search Plugin
@@ -39,8 +39,10 @@ Each TaroCub instance owns one private Harness host:
 ```text
 TaroCub instance
   -> dsh web --no-open --host 127.0.0.1 --port 0
-  -> official HTTP RPC (/api/*)
-  -> mux + host WebSocket downlinks
+  -> launch-token exchange for a loopback-only browser session cookie
+  -> official slash-separated HTTP RPC (/api/*)
+  -> one multiplexed Remote WebSocket (/api/remote.mux)
+  -> session follow/control streams plus forwarded Host events
   -> DeepSeek provider selected by the Harness profile
 ```
 
@@ -57,8 +59,8 @@ and emits a diagnostic for a damaged claim. A bot can therefore reuse
 authentication and native profiles without
 letting model selection or bridge instructions overwrite desktop settings.
 
-The host binds only to loopback and uses an ephemeral port. Both event
-downlinks have a 15-second connection deadline. TaroCub drains its stdio,
+The host binds only to loopback and uses an ephemeral port. The authenticated
+Remote event stream has a 15-second readiness deadline. TaroCub drains its stdio,
 detects process/socket failure, reconnects with backoff, replays only
 unseen ordered history, merges projections by `asOfSeq`, re-arms active Goals
 after a process restart, and fails active work closed when recovery is
@@ -126,8 +128,9 @@ The adapter enforces these invariants with regression tests:
 8. Turn, approval, question, and background-job routing is bound to a unique
    task claim. A cancelled turn's late terminal frame or job update cannot
    cancel, approve for, or settle a replacement turn in the same session.
-9. Closing the protocol client while either downlink is still connecting
-   rejects the pending connection instead of leaving startup blocked forever.
+9. Closing the protocol client while the Remote mux is connecting or waiting
+   for its forwarded-event readiness frame rejects the pending connection
+   instead of leaving startup blocked forever.
 10. Frames from a superseded WebSocket generation are discarded before they
     can enter the adapter's event queues.
 11. An abort received during session creation/configuration is checked again

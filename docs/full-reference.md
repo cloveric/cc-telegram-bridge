@@ -360,7 +360,7 @@ Selecting Antigravity automatically sets that instance to YOLO/full-auto unless 
 | Working directory | Instance or validated thread workspace | Instance or resumed project | Native session cwd | Native session cwd; conflicting workspace claims fail closed | Instance workspace |
 | Process lifecycle | Warm app-server | 2h idle reap | 2h idle reap unless background work remains | Per-instance host; crash restart and ordered recovery | Persistent per conversation; 2h idle reap; UUID resume after crash/config change |
 
-DeepSeek is verified against **Harness 0.1.1-rc.2**. Image payload transport is
+DeepSeek is verified against **Harness 0.1.2-rc.1**. Image payload transport is
 implemented, but model support is provider-dependent; the tested default
 `deepseek-v4-flash` rejects images. Harness does not report per-turn USD cost,
 and Claude's `/ultrareview` remains Claude-only. See

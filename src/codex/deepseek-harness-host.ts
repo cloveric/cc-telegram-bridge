@@ -773,19 +773,39 @@ async function waitForStartupUrl(
       const value = decodeChunk(stdoutDecoder, chunk);
       stdout = `${stdout}${value}`.slice(-MAX_DIAGNOSTIC_CHARS);
       appendDiagnostic(value);
-      const match = stdout.match(/dsh web:\s*(https?:\/\/127\.0\.0\.1:\d{1,5})(?=\s|$)/i);
+      // Wait for trailing whitespace so a chunk ending midway through the URL
+      // cannot be mistaken for a complete (and unsafe) startup address.
+      const match = stdout.match(/dsh web:\s*(https?:\/\/[^\s]+)(?=\s)/i);
       if (!match?.[1]) {
         return;
       }
       try {
         const url = new URL(match[1]);
-        if (url.protocol !== "http:" || url.hostname !== "127.0.0.1" || !url.port) {
-          finish(new Error(`DeepSeek Harness published an unsafe startup URL: ${match[1]}`));
+        const launchTokens = url.searchParams.getAll("token");
+        const hasUnexpectedQuery = [...url.searchParams.keys()].some((key) => key !== "token");
+        const port = Number(url.port);
+        if (
+          url.protocol !== "http:"
+          || url.hostname !== "127.0.0.1"
+          || !Number.isInteger(port)
+          || port < 1
+          || port > 65_535
+          || url.username !== ""
+          || url.password !== ""
+          || url.pathname !== "/"
+          || url.hash !== ""
+          || hasUnexpectedQuery
+          || launchTokens.length > 1
+          || (launchTokens.length === 1 && launchTokens[0] === "")
+        ) {
+          finish(new Error(
+            `DeepSeek Harness published an unsafe startup URL: ${redactStartupCredentials(match[1])}`,
+          ));
           return;
         }
-        finish(undefined, url.origin);
-      } catch (error) {
-        finish(new Error(`DeepSeek Harness published an invalid startup URL: ${String(error)}`));
+        finish(undefined, launchTokens.length === 1 ? url.href : url.origin);
+      } catch {
+        finish(new Error("DeepSeek Harness published an invalid startup URL"));
       }
     };
     const onStderr = (chunk: Buffer | string) => {
@@ -870,7 +890,11 @@ function decodeChunk(decoder: StringDecoder, chunk: Buffer | string): string {
 }
 
 function cleanDiagnostic(value: string): string {
-  return value.replace(/\s+/g, " ").trim().slice(-1_000);
+  return redactStartupCredentials(value).replace(/\s+/g, " ").trim().slice(-1_000);
+}
+
+function redactStartupCredentials(value: string): string {
+  return value.replace(/([?&]token=)[^&#\s]+/gi, "$1[REDACTED]");
 }
 
 function formatDiagnosticError(error: unknown): string {

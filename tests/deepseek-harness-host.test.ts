@@ -622,6 +622,67 @@ describe("DeepSeekHarnessHost", () => {
     expect(child.killCalls).toEqual(["SIGTERM"]);
   });
 
+  it("passes the authenticated startup URL from current Harness releases to the protocol", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "deepseek-harness-auth-url-"));
+    roots.push(root);
+    const sharedHome = path.join(root, "shared");
+    const stateDir = path.join(root, "instance");
+    await mkdir(path.join(sharedHome, "profiles"), { recursive: true });
+    await writeFile(path.join(sharedHome, "settings.yaml"), "{}\n", "utf8");
+    await writeFile(path.join(sharedHome, ".credentials.yaml"), "{}\n", "utf8");
+    const child = new FakeChild();
+    const protocolFactory = vi.fn(() => new FakeProtocol());
+    const host = new DeepSeekHarnessHost({
+      executable: "dsh",
+      sharedHome,
+      stateDir,
+      workspacePath: "/workspace",
+      spawnDsh: () => child,
+      protocolFactory,
+      startupTimeoutMs: 50,
+    });
+    const launchToken = "temporary-launch-token-123";
+
+    const connecting = host.connect({ onMuxFrame: () => {}, onHostFrame: () => {} });
+    await vi.waitFor(() => expect(child.stdout.listenerCount("data")).toBeGreaterThan(0));
+    child.stdout.emitData(`dsh web: http://127.0.0.1:43125/?token=${launchToken}\n`);
+    await connecting;
+
+    expect(protocolFactory).toHaveBeenCalledWith(
+      `http://127.0.0.1:43125/?token=${launchToken}`,
+    );
+    await host.close();
+  });
+
+  it("never includes a Harness launch token in startup diagnostics", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "deepseek-harness-auth-redaction-"));
+    roots.push(root);
+    const sharedHome = path.join(root, "shared");
+    const stateDir = path.join(root, "instance");
+    await mkdir(path.join(sharedHome, "profiles"), { recursive: true });
+    await writeFile(path.join(sharedHome, "settings.yaml"), "{}\n", "utf8");
+    await writeFile(path.join(sharedHome, ".credentials.yaml"), "{}\n", "utf8");
+    const child = new FakeChild();
+    const host = new DeepSeekHarnessHost({
+      executable: "dsh",
+      sharedHome,
+      stateDir,
+      workspacePath: "/workspace",
+      spawnDsh: () => child,
+      protocolFactory: () => new FakeProtocol(),
+      startupTimeoutMs: 50,
+    });
+    const launchToken = "do-not-log-this-launch-token";
+
+    const connecting = host.connect({ onMuxFrame: () => {}, onHostFrame: () => {} });
+    await vi.waitFor(() => expect(child.stdout.listenerCount("data")).toBeGreaterThan(0));
+    child.stdout.emitData(`dsh web: http://localhost:43125/?token=${launchToken}\n`);
+
+    await expect(connecting).rejects.toThrow("unsafe startup URL");
+    await expect(connecting).rejects.not.toThrow(launchToken);
+    await host.close();
+  });
+
   it("rejects startup immediately when dsh exits before publishing its URL", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "deepseek-harness-start-fail-"));
     roots.push(root);

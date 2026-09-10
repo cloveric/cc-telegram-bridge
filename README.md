@@ -288,7 +288,7 @@ flow applies when an engine such as Claude supplies it.
 Select DeepSeek in either channel with `/engine deepseek` (or use
 `telegram engine deepseek --instance <name>`). Install and authenticate `dsh`
 first; TaroCub resolves `DSH_EXECUTABLE` and otherwise uses `dsh` from `PATH`.
-The verified compatibility baseline is **DeepSeek Harness 0.1.1-rc.2**.
+The verified compatibility baseline is **DeepSeek Harness 0.1.2-rc.1**.
 
 Install the standalone native Harness bundle:
 
@@ -306,11 +306,11 @@ from installing, configuring, or starting the Feishu/Lark bridge.
 
 TaroCub owns a private loopback-only `dsh web --no-open --host 127.0.0.1
 --port 0` process per bot instance and uses Harness's official HTTP RPC plus
-event WebSockets. Credentials and profiles are linked from the configured
-`DSH_HOME`, while mutable settings and bridge instructions remain isolated in
-the instance state directory. Both event downlinks must open within 15 seconds,
-so a half-open WebSocket upgrade cannot block startup forever. A crashed host
-is restarted and active sessions
+the authenticated `remote.mux` WebSocket. Credentials and profiles are linked
+from the configured `DSH_HOME`, while mutable settings and bridge instructions
+remain isolated in the instance state directory. The forwarded event stream
+must become ready within 15 seconds, so a half-open or unauthenticated WebSocket
+cannot block startup forever. A crashed host is restarted and active sessions
 recover from ordered history/projection watermarks; incomplete or malformed
 recovery fails closed rather than silently skipping events.
 

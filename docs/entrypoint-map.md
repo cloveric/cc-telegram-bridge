@@ -206,8 +206,9 @@ See `docs/state-model.md` before changing on-disk semantics.
 - `src/codex/kimi-workspace.ts`
   Atomic managed-block synchronization for Kimi workspace instructions.
 - `src/codex/deepseek-harness-protocol.ts`
-  Official Harness HTTP RPC and dual-WebSocket downlink client, schema validation,
-  handler-error containment, reconnect generations, and request timeouts.
+  Official Harness HTTP RPC and authenticated Remote-mux client, session
+  follow/control compatibility mapping, schema validation, handler-error
+  containment, reconnect generations, and request timeouts.
 - `src/codex/deepseek-harness-host.ts`
   Private per-instance `dsh web` lifecycle, isolated `DSH_HOME`, permissions,
   crash diagnostics, backoff, and safe process shutdown.
