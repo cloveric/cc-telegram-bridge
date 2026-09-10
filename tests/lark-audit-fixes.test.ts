@@ -24,6 +24,32 @@ import {
 import { parseTimelineEvents } from "../src/state/timeline-log.js";
 
 describe("lark audit fixes", () => {
+  it("renders Codex file citations without exposing local paths or uploading the source", async () => {
+    const stateDir = await mkdtemp(path.join(os.tmpdir(), "cctb-lark-codex-citation-"));
+    const channel = fakeChannel();
+    const citation = ':codex-file-citation{path="/Users/example/.cctb/bot/workspace/report.xlsx" purpose="source" artifact_kind="workbook" sheet="PE_Comps" range="A4:F25"}';
+
+    try {
+      await deliverLarkResponse({
+        channel,
+        runtime: createLarkServiceRuntime(),
+        chatId: "oc_chat",
+        text: `依据：${citation}`,
+        stateDir,
+      });
+
+      const delivered = JSON.stringify(channel.send.mock.calls);
+      expect(delivered).toContain("来源");
+      expect(delivered).toContain("report.xlsx");
+      expect(delivered).toContain("PE_Comps!A4:F25");
+      expect(delivered).not.toContain(":codex-file-citation");
+      expect(delivered).not.toContain("/Users/example");
+      expect(delivered).not.toContain('"file"');
+    } finally {
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  });
+
   // Finding 1: one rejected delivery tag must not suppress the whole answer text.
   it("still delivers the answer text alongside the rejection notice when a send-file tag is rejected", async () => {
     const stateDir = await mkdtemp(path.join(os.tmpdir(), "cctb-lark-audit-rejected-tag-"));

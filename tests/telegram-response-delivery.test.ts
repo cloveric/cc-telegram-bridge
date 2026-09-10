@@ -23,6 +23,42 @@ describe("sendFileOrPhoto", () => {
 });
 
 describe("deliverTelegramResponse", () => {
+  it("renders Codex file citations as text without treating them as attachments", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "telegram-codex-citation-"));
+    const inboxDir = path.join(root, "instance", "inbox");
+    const citation = ':codex-file-citation{path="/Users/example/.cctb/bot/workspace/report.xlsx" purpose="source" artifact_kind="workbook" sheet="PE_Comps" range="A4:F25"}';
+    const api = {
+      sendMessage: vi.fn().mockResolvedValue({ message_id: 1 }),
+      sendDocument: vi.fn().mockResolvedValue({ message_id: 2 }),
+      sendPhoto: vi.fn().mockResolvedValue({ message_id: 3 }),
+      sendVoice: vi.fn().mockResolvedValue({ message_id: 4 }),
+    };
+
+    try {
+      const filesSent = await deliverTelegramResponse(
+        api as never,
+        123,
+        `依据：${citation}`,
+        inboxDir,
+        undefined,
+        undefined,
+        "zh",
+      );
+
+      expect(filesSent).toBe(0);
+      expect(api.sendDocument).not.toHaveBeenCalled();
+      expect(api.sendPhoto).not.toHaveBeenCalled();
+      const delivered = JSON.stringify(api.sendMessage.mock.calls);
+      expect(delivered).toContain("来源");
+      expect(delivered).toContain("report.xlsx");
+      expect(delivered).toContain("PE_Comps!A4:F25");
+      expect(delivered).not.toContain(":codex-file-citation");
+      expect(delivered).not.toContain("/Users/example");
+    } finally {
+      await removeTempRoot(root);
+    }
+  });
+
   it("sends cleaned text plus workspace files referenced via send-file tags", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "telegram-response-"));
     const realRoot = await realpath(root);

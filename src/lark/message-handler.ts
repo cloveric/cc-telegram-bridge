@@ -1897,17 +1897,17 @@ async function runNormalizedLarkMessage(
 
         const headerText = renderLarkBackgroundTaskHeader(locale, event.status);
         const notificationText = [headerText, event.text.trim()].filter(Boolean).join("\n");
-        const notificationFallbackText = [headerText, cleanCardText(event.text)].filter(Boolean).join("\n");
+        const notificationFallbackText = [headerText, cleanCardText(event.text, locale)].filter(Boolean).join("\n");
         // Render the out-of-band background-task notification as a card to match
         // the bot's card-based UX. An oversize body spills into continuation cards —
         // the same card 1 + "↪ 接上" flow as a long main answer — instead of dropping
         // to a plain-text dump; only a document-sized body (over the overflow-card
         // budget) or a file-block directive still takes the plain-text path. Within
         // the card path, sendLarkCardWithFallback drops to plain text per card.
-        const notificationCard = renderLarkNotificationCard(headerText, event.text);
+        const notificationCard = renderLarkNotificationCard(headerText, event.text, locale);
         let notificationChunks: string[] | undefined;
         if (!notificationCard && !hasLarkFileBlockDirective(event.text)) {
-          const cleanedNotification = cleanCardText(event.text);
+          const cleanedNotification = cleanCardText(event.text, locale);
           const chunks = cleanedNotification ? splitLarkAnswerIntoCardChunks(cleanedNotification) : [];
           if (chunks.length > 1 && chunks.length <= LARK_MAX_OVERFLOW_CARDS) {
             notificationChunks = chunks;
@@ -2376,7 +2376,7 @@ async function runNormalizedLarkMessage(
         // a tag-heavy reply isn't over-split into near-empty cards, and continuation cards
         // render consistently with the run card. deliverLarkResponse still gets the raw
         // result.text below so file/image tags are actually processed.
-        const cardDisplayText = runCard !== undefined ? cleanCardText(result.text) : result.text;
+        const cardDisplayText = runCard !== undefined ? cleanCardText(result.text, locale) : result.text;
         const answerChunks = runCard !== undefined
           ? splitLarkAnswerIntoCardChunks(cardDisplayText)
           : [cardDisplayText];
@@ -3211,7 +3211,7 @@ export async function createLarkRunCardController(input: {
       state.blocks.forEach((block, index) => {
         if (block.kind === "tool") {
           lastToolIndex = index;
-        } else if (cleanCardText(block.content).trim().length > 0) {
+        } else if (cleanCardText(block.content, input.locale).trim().length > 0) {
           lastTextIndex = index;
         }
       });

@@ -197,7 +197,7 @@ export function buildLarkCronExecutor(input: {
           return;
         }
         const finalText = result.text || renderLarkEmptyCronAgentReply(job);
-        const cardDisplayText = runCard ? cleanCardText(finalText) : finalText;
+        const cardDisplayText = runCard ? cleanCardText(finalText, locale) : finalText;
         const answerChunks = runCard ? splitLarkAnswerIntoCardChunks(cardDisplayText) : [cardDisplayText];
         const spillToContinuationCards = Boolean(runCard)
           && answerChunks.length > 1

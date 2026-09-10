@@ -1,4 +1,5 @@
 import type { EngineStreamEvent } from "../codex/adapter.js";
+import { renderCodexFileCitations } from "../runtime/codex-file-citations.js";
 import type { Locale } from "../telegram/message-renderer.js";
 import { stripDeliveryTags } from "../telegram/delivery-tags.js";
 import { stripCronAddTags } from "../telegram/cron-tags.js";
@@ -378,7 +379,7 @@ export function renderLarkRunCard(state: LarkRunState, locale: Locale = "zh"): R
     let streamTextIndex = 0;
     for (const group of groupBlocks(state.blocks)) {
       if (group.kind === "text") {
-        const cleaned = cleanCardText(group.content);
+        const cleaned = cleanCardText(group.content, locale);
         if (cleaned) {
           // Cap each streamed text element — a long answer would otherwise
           // overflow Feishu's per-element limit and fail every card update.
@@ -407,7 +408,7 @@ export function renderLarkRunCard(state: LarkRunState, locale: Locale = "zh"): R
     // Once engine output is final, condense: show the answer prominently and fold the
     // whole process (thinking + every tool call) into one collapsed panel, so
     // the card doesn't become a giant scroll of intermediate steps.
-    const answer = cleanCardText(finalAnswerText(state));
+    const answer = cleanCardText(finalAnswerText(state), locale);
     if (answer) {
       elements.push(markdownElement(truncate(answer, COMPACT_ANSWER_MAX)));
     }
@@ -415,7 +416,7 @@ export function renderLarkRunCard(state: LarkRunState, locale: Locale = "zh"): R
     if (donePlan) {
       elements.push(donePlan);
     }
-    const processPanel = condensedProcessPanel(state, labels);
+    const processPanel = condensedProcessPanel(state, labels, locale);
     if (processPanel) {
       elements.push(processPanel);
     }
@@ -555,11 +556,11 @@ export function liveRunCardStreamElement(
   }
   let textIndex = -1;
   for (const group of groups) {
-    if (group.kind === "text" && cleanCardText(group.content)) {
+    if (group.kind === "text" && cleanCardText(group.content, locale)) {
       textIndex += 1;
     }
   }
-  const cleaned = cleanCardText(last.content);
+  const cleaned = cleanCardText(last.content, locale);
   if (!cleaned || textIndex < 0) {
     return null;
   }
@@ -736,11 +737,15 @@ export function hasLarkFileBlockDirective(text: string): boolean {
   return /```file:[^\n`]+\n[\s\S]*?```/.test(text);
 }
 
-export function renderLarkNotificationCard(headerText: string, bodyText: string): Record<string, unknown> | null {
+export function renderLarkNotificationCard(
+  headerText: string,
+  bodyText: string,
+  locale: Locale = "zh",
+): Record<string, unknown> | null {
   if (hasLarkFileBlockDirective(bodyText)) {
     return null;
   }
-  const cleaned = cleanCardText(bodyText);
+  const cleaned = cleanCardText(bodyText, locale);
   if (!cleaned) {
     return null;
   }
@@ -770,14 +775,15 @@ export function renderLarkNotificationCard(headerText: string, bodyText: string)
 function condensedProcessPanel(
   state: LarkRunState,
   labels: ReturnType<typeof runCardLabels>,
+  locale: Locale,
 ): Record<string, unknown> | undefined {
-  const answer = cleanCardText(finalAnswerText(state)).trim();
+  const answer = cleanCardText(finalAnswerText(state), locale).trim();
   const parts: string[] = [];
   if (state.reasoning.content.trim()) {
     parts.push(`🧠 ${truncate(state.reasoning.content.trim(), 600)}`);
   }
   let toolCount = 0;
-  const finalTextBlockIndex = findFinalAnswerBlockIndex(state.blocks, answer);
+  const finalTextBlockIndex = findFinalAnswerBlockIndex(state.blocks, answer, locale);
   for (const [blockIndex, block] of state.blocks.entries()) {
     if (block.kind === "tool") {
       // TodoWrite shows as the dedicated plan panel, not in the process list.
@@ -788,7 +794,7 @@ function condensedProcessPanel(
       parts.push(`- ${toolHeaderText(block.tool)}`);
       continue;
     }
-    const text = cleanCardText(block.content).trim();
+    const text = cleanCardText(block.content, locale).trim();
     if (!text) {
       continue;
     }
@@ -816,7 +822,7 @@ function condensedProcessPanel(
   });
 }
 
-function findFinalAnswerBlockIndex(blocks: LarkRunBlock[], answer: string): number {
+function findFinalAnswerBlockIndex(blocks: LarkRunBlock[], answer: string, locale: Locale): number {
   if (!answer) {
     return -1;
   }
@@ -825,7 +831,7 @@ function findFinalAnswerBlockIndex(blocks: LarkRunBlock[], answer: string): numb
     if (block?.kind !== "text") {
       continue;
     }
-    const text = cleanCardText(block.content).trim();
+    const text = cleanCardText(block.content, locale).trim();
     if (text && finalAnswerOverlapLength(text, answer) > 0) {
       return index;
     }
@@ -882,7 +888,7 @@ export function renderLarkRunCardCompact(state: LarkRunState, locale: Locale = "
         : `🎯 **目标:** ${truncate(state.goalObjective.trim(), 120)}`,
     ));
   }
-  const answer = cleanCardText(finalAnswerText(state));
+  const answer = cleanCardText(finalAnswerText(state), locale);
   if (answer) {
     // Degrade commonly hits MID-RUN on exactly the long, tool-heavy turns the
     // rolling tail shipped for (their full card breaches Feishu's 30KB
@@ -1260,9 +1266,9 @@ function renderToolInput(tool: LarkToolEntry): string {
   }
 }
 
-export function cleanCardText(content: string): string {
+export function cleanCardText(content: string, locale: Locale = "zh"): string {
   const stripped = stripCronAddTags(stripTelegramToolTags(stripDeliveryTags(content)));
-  return transformLarkCardMarkdown(stripped).trim();
+  return transformLarkCardMarkdown(renderCodexFileCitations(stripped, locale)).trim();
 }
 
 const LARK_INLINE_MATH_SYMBOLS: Readonly<Record<string, string>> = {
@@ -1931,7 +1937,7 @@ export function renderLarkContinuationCard(
   // markdown headings): without it a chunk starting with "## " would render as a giant
   // Feishu title and any [send-file:]/tool/cron tag would leak as literal text — making
   // continuation cards inconsistent with the run card that carries chunk 1.
-  const cleaned = cleanCardText(body);
+  const cleaned = cleanCardText(body, locale);
   return {
     schema: "2.0",
     config: {
@@ -1972,6 +1978,6 @@ function cardSummary(state: LarkRunState, locale: Locale): string {
   if (state.status === "idle_timeout") {
     return locale === "en" ? "Auto-stopped" : "无响应已终止";
   }
-  const text = cleanCardText(finalAnswerText(state));
+  const text = cleanCardText(finalAnswerText(state), locale);
   return text.trim().slice(0, 80) || (locale === "en" ? "Done" : "已完成");
 }

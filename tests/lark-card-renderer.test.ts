@@ -644,6 +644,39 @@ describe("lark card renderer", () => {
     expect(body).toContain("正文内容");
   });
 
+  it("renders Codex file citations without leaking their internal token or absolute path", () => {
+    const citation = ':codex-file-citation{path="/Users/example/.cctb/bot/workspace/report.xlsx" purpose="source" artifact_kind="workbook" sheet="PE_Comps" range="A4:F25"}';
+    let state = initialLarkRunState("lark:oc_chat");
+    state = applyLarkEngineEvent(state, { type: "assistant_text", text: `依据：${citation}` });
+
+    const running = JSON.stringify(renderLarkRunCard(state, "zh"));
+    expect(running).toContain("来源");
+    expect(running).toContain("report.xlsx");
+    expect(running).toContain("PE_Comps!A4:F25");
+    expect(running).not.toContain(":codex-file-citation");
+    expect(running).not.toContain("/Users/example");
+
+    state = applyLarkEngineEvent(state, { type: "result", text: `依据：${citation}` });
+    const done = JSON.stringify(renderLarkRunCard(state, "en"));
+    expect(done).toContain("Source");
+    expect(done).not.toContain(":codex-file-citation");
+    expect(done).not.toContain("/Users/example");
+  });
+
+  it("does not expose an incomplete Codex citation during a streaming card update", () => {
+    let state = initialLarkRunState("lark:oc_chat");
+    state = applyLarkEngineEvent(state, {
+      type: "assistant_text",
+      text: 'Answer\n:codex-file-citation{path="/Users/example/private/report.xlsx"',
+      delta: true,
+    });
+
+    const card = JSON.stringify(renderLarkRunCard(state, "en"));
+    expect(card).toContain("Answer");
+    expect(card).not.toContain(":codex-file-citation");
+    expect(card).not.toContain("/Users/example");
+  });
+
   it("does not downgrade heading-like lines inside fenced code blocks", () => {
     expect(cleanCardText([
       "```markdown",

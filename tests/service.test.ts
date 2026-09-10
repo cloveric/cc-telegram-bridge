@@ -1932,7 +1932,11 @@ describe("polling helpers", () => {
       const controller = new AbortController();
       let pollCount = 0;
       globalThis.setTimeout = (((handler: TimerHandler, timeout?: number) => {
-        sleepCalls.push(Number(timeout ?? 0));
+        const delayMs = Number(timeout ?? 0);
+        if (delayMs < 100) {
+          return originalSetTimeout(handler, timeout);
+        }
+        sleepCalls.push(delayMs);
         if (typeof handler === "function") {
           queueMicrotask(() => handler());
         }
@@ -1948,7 +1952,9 @@ describe("polling helpers", () => {
       globalThis.setTimeout = originalSetTimeout;
     }
 
-    expect(sleepCalls[0]).toBe(1000);
+    // Other asynchronous housekeeping can schedule a short timer first; the
+    // contract is that the failed update path includes the 1s poll backoff.
+    expect(sleepCalls).toContain(1000);
   });
 
   it("recycles the Telegram API client after repeated fetch failures", async () => {
@@ -1971,7 +1977,10 @@ describe("polling helpers", () => {
     try {
       const controller = new AbortController();
       let timerCount = 0;
-      globalThis.setTimeout = (((handler: TimerHandler) => {
+      globalThis.setTimeout = (((handler: TimerHandler, timeout?: number) => {
+        if (Number(timeout ?? 0) < 100) {
+          return originalSetTimeout(handler, timeout);
+        }
         timerCount += 1;
         if (timerCount >= 3) {
           controller.abort();

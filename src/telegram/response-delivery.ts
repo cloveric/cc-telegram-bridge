@@ -2,6 +2,7 @@ import { lstat, readFile, realpath } from "node:fs/promises";
 import path from "node:path";
 
 import { appendTimelineEventBestEffort } from "../runtime/timeline-events.js";
+import { renderCodexFileCitations } from "../runtime/codex-file-citations.js";
 import { isCredentialStylePath } from "../runtime/credential-files.js";
 import type { TelegramApi } from "./api.js";
 import { extractDeliveryTagMatches, stripDeliveryTags } from "./delivery-tags.js";
@@ -206,6 +207,7 @@ export async function deliverTelegramResponse(
   if (fileCandidates.length > 0 || deliveryTags.length > 0) {
     cleanedText = stripDeliveryTags(cleanedText);
   }
+  cleanedText = renderCodexFileCitations(cleanedText, locale);
 
   if (cleanedText) {
     const chunks = chunkTelegramMessage(cleanedText);

@@ -2,6 +2,7 @@ import { readFile, realpath, stat } from "node:fs/promises";
 import path from "node:path";
 
 import { appendTimelineEventBestEffort } from "../runtime/timeline-events.js";
+import { renderCodexFileCitations } from "../runtime/codex-file-citations.js";
 import {
   extractDeliveryTagMatches,
   stripDeliveryTags,
@@ -238,7 +239,10 @@ export async function deliverLarkResponse(input: {
   const toolMatches = extractTelegramToolTagMatches(input.text);
   const cronAddMatches = extractCronAddTagMatches(input.text);
   const matches = extractDeliveryTagMatches(input.text);
-  const cleanedText = stripCronAddTags(stripTelegramToolTags(stripDeliveryTags(input.text)));
+  const cleanedText = renderCodexFileCitations(
+    stripCronAddTags(stripTelegramToolTags(stripDeliveryTags(input.text))),
+    locale,
+  );
   const replyOptions = larkReplyOptions(input.replyTo, input.replyInThread);
   // Structured and legacy send directives are alternative spellings of the
   // same operation. Claim paths across both before sending so a model cannot

@@ -1,0 +1,159 @@
+import path from "node:path";
+
+export type CitationLocale = "en" | "zh";
+
+const CODEX_FILE_CITATION_MARKER = ":codex-file-citation{";
+const PARTIAL_MARKER_MIN_LENGTH = ":codex-".length;
+
+/**
+ * Convert Codex's UI-only file citation tokens into channel-safe prose.
+ * Absolute source paths are intentionally reduced to a basename: a citation
+ * is provenance, not an instruction to upload the referenced local file.
+ */
+export function renderCodexFileCitations(
+  text: string,
+  locale: CitationLocale = "en",
+): string {
+  if (!text.includes(":codex-file")) {
+    return text;
+  }
+
+  let output = "";
+  let cursor = 0;
+  while (cursor < text.length) {
+    const markerStart = text.indexOf(CODEX_FILE_CITATION_MARKER, cursor);
+    if (markerStart === -1) {
+      output += stripTrailingPartialMarker(text.slice(cursor));
+      break;
+    }
+
+    output += text.slice(cursor, markerStart);
+    const markerEnd = findCitationEnd(text, markerStart + CODEX_FILE_CITATION_MARKER.length);
+    if (markerEnd === -1) {
+      // Streaming can stop midway through the token. Hide the unfinished
+      // suffix until a later card update supplies the closing brace.
+      break;
+    }
+
+    const body = text.slice(markerStart + CODEX_FILE_CITATION_MARKER.length, markerEnd);
+    output += renderCitationBody(body, locale);
+    cursor = markerEnd + 1;
+  }
+
+  return output;
+}
+
+function findCitationEnd(text: string, start: number): number {
+  let quoted = false;
+  let escaped = false;
+  for (let index = start; index < text.length; index += 1) {
+    const char = text[index];
+    if (quoted) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === "\\") {
+        escaped = true;
+      } else if (char === "\"") {
+        quoted = false;
+      }
+      continue;
+    }
+    if (char === "\"") {
+      quoted = true;
+    } else if (char === "}") {
+      return index;
+    }
+  }
+  return -1;
+}
+
+function renderCitationBody(body: string, locale: CitationLocale): string {
+  const attributes = parseCitationAttributes(body);
+  const fileName = attributes ? citationBasename(attributes.path) : "";
+  if (!attributes || !fileName) {
+    return locale === "zh" ? "（文件引用不可用）" : "(File reference unavailable)";
+  }
+
+  const sheet = sanitizeInlineCode(attributes.sheet);
+  const range = sanitizeInlineCode(attributes.range);
+  const location = sheet && range ? `${sheet}!${range}` : sheet || range;
+  const source = locale === "zh" ? "来源" : "Source";
+  const renderedFile = inlineCode(fileName);
+  return location
+    ? locale === "zh"
+      ? `（${source}：${renderedFile} · ${inlineCode(location)}）`
+      : `(${source}: ${renderedFile} · ${inlineCode(location)})`
+    : locale === "zh"
+      ? `（${source}：${renderedFile}）`
+      : `(${source}: ${renderedFile})`;
+}
+
+function parseCitationAttributes(body: string): Record<string, string> | null {
+  const attributes: Record<string, string> = {};
+  const attribute = /([A-Za-z_][A-Za-z0-9_-]*)\s*=\s*"((?:\\.|[^"\\])*)"/y;
+  let cursor = 0;
+
+  while (cursor < body.length) {
+    const whitespace = /^\s+/u.exec(body.slice(cursor));
+    if (whitespace) {
+      cursor += whitespace[0].length;
+    }
+    if (cursor >= body.length) {
+      break;
+    }
+
+    attribute.lastIndex = cursor;
+    const match = attribute.exec(body);
+    if (!match) {
+      return null;
+    }
+    const key = match[1]!;
+    attributes[key] = decodeAttributeValue(match[2] ?? "");
+    cursor = attribute.lastIndex;
+  }
+
+  return attributes;
+}
+
+function decodeAttributeValue(value: string): string {
+  try {
+    return JSON.parse(`"${value}"`) as string;
+  } catch {
+    // Be tolerant of producers that emit an unescaped Windows path while still
+    // reducing it to a basename before anything becomes user-visible.
+    return value.replace(/\\"/g, "\"").replace(/\\\\/g, "\\");
+  }
+}
+
+function citationBasename(value: string | undefined): string {
+  if (!value) {
+    return "";
+  }
+  const base = path.posix.basename(value.replace(/\\/g, "/"));
+  if (!base || base === "." || base === "..") {
+    return "";
+  }
+  return sanitizeInlineCode(base);
+}
+
+function inlineCode(value: string): string {
+  return `\`${sanitizeInlineCode(value)}\``;
+}
+
+function sanitizeInlineCode(value: string | undefined): string {
+  const sanitized = (value ?? "")
+    .replace(/[\u0000-\u001f\u007f]+/gu, " ")
+    .replace(/`/g, "'")
+    .trim();
+  return Array.from(sanitized).slice(0, 240).join("");
+}
+
+function stripTrailingPartialMarker(text: string): string {
+  const maxLength = Math.min(CODEX_FILE_CITATION_MARKER.length - 1, text.length);
+  for (let length = maxLength; length >= PARTIAL_MARKER_MIN_LENGTH; length -= 1) {
+    if (text.endsWith(CODEX_FILE_CITATION_MARKER.slice(0, length))) {
+      return text.slice(0, -length);
+    }
+  }
+  return text;
+}
